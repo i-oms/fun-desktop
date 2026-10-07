@@ -1,0 +1,17 @@
+# Build output (rebuild with build.cmd)
+IdleWalker.exe
+*.exe
+*.pdb
+*.obj
+
+# Visual Studio / .NET SDK leftovers, if you open the file in an IDE
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.csproj.user
+
+# Windows
+Thumbs.db
+desktop.ini
