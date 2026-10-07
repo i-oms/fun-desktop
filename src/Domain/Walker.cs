@@ -5,9 +5,10 @@ using System.Drawing;
 namespace IdleWalker.Domain
 {
     /// <summary>
-    /// The character: where it is, what it is doing and how it moves. Pure
+    /// One character: where it is, what it is doing and how it moves. Pure
     /// simulation - it knows nothing about windows or pixels on screen beyond
-    /// what <see cref="IWorld"/> tells it.
+    /// what <see cref="IWorld"/> tells it. Walkers only meet each other
+    /// through the <see cref="Troupe"/>.
     /// </summary>
     sealed class Walker
     {
@@ -15,11 +16,24 @@ namespace IdleWalker.Domain
         const int HalfBodyCells = 9;
         const int HiddenDepthCells = 20;  // feet this far underground hides everything
         const int PeekDepthCells = 10;    // feet this far underground shows the eyes
+        const double GreetSeconds = 1.3;
+        const double GloatSeconds = 0.7;
+        const double FleeSeconds = 1.4;
+        const double ChargeSpeedFactor = 2.0;
+        const double FleeSpeedFactor = 1.6;
 
-        enum Mode { Hidden, PeekRise, PeekLook, PeekDuck, Air, Walk, Crouch, Turn, Look, Wave, Rest, Exit }
+        enum Mode
+        {
+            Hidden, PeekRise, PeekLook, PeekDuck, Air, Walk, Crouch, Turn, Look, Wave, Rest, Exit,
+            Greet,   // stopped to wave or nod at another walker
+            Charge,  // running at another walker to shove it
+            Gloat,   // standing over a shoved walker
+            Flee     // running away after being shoved
+        }
 
         readonly IWorld world;
         readonly Random rng;
+        readonly Personality personality;
         readonly List<Puff> puffs = new List<Puff>();
 
         Mode mode = Mode.Hidden;
@@ -30,6 +44,8 @@ namespace IdleWalker.Domain
         double sizeFactor = 1;      // scale relative to 100% display scaling
         int worldLeft, worldRight;  // outer edges of the whole desktop
         int cursorX;
+        bool companyNearby;         // another walker is close
+        double companyX;
 
         double cx;                  // centre of the character, screen pixels
         double feetY;               // where its feet are
@@ -50,33 +66,80 @@ namespace IdleWalker.Domain
         double blinkTimer, blinkLeft;
         bool startled;
 
-        public Walker(IWorld world, Random rng)
+        int greetFacing;
+        bool greetWave;
+        bool knocked;               // airborne because somebody shoved it
+        double fleeTime;
+        Walker chargeTarget;
+
+        public Walker(IWorld world, Random rng, Personality personality)
         {
             this.world = world;
             this.rng = rng;
+            this.personality = personality;
         }
 
-        // ---- What the renderer needs to know ------------------------------------
+        // ---- What others need to know ----------------------------------------------
+
+        public Personality Personality { get { return personality; } }
+        public Temperament Temperament { get { return personality.Temperament; } }
 
         public bool IsHidden { get { return mode == Mode.Hidden; } }
+        public bool IsVisible { get { return mode != Mode.Hidden; } }
+        public bool IsLeaving { get { return mode == Mode.Exit; } }
         public int Scale { get { return scale; } }
         public double CentreX { get { return cx; } }
         public double FeetY { get { return feetY; } }
+        public int Facing { get { return facing; } }
         public bool FacesLeft { get { return facing < 0; } }
+        public double BodyWidth { get { return 2 * HalfBodyCells * scale; } }
         public IList<Puff> Puffs { get { return puffs; } }
 
         /// <summary>The ground line under the character; nothing shows below it.</summary>
         public double GroundLine { get { return clipY; } }
 
-        // ---- Commands -----------------------------------------------------------
+        /// <summary>Feet on the ground (not underground, airborne or leaving).</summary>
+        public bool IsGrounded
+        {
+            get
+            {
+                switch (mode)
+                {
+                    case Mode.Walk: case Mode.Crouch: case Mode.Turn: case Mode.Look: case Mode.Wave:
+                    case Mode.Rest: case Mode.Greet: case Mode.Charge: case Mode.Gloat: case Mode.Flee:
+                        return true;
+                    default:
+                        return false;
+                }
+            }
+        }
 
-        /// <summary>Come up on the monitor the cursor is resting on, at a random spot.</summary>
-        public void Spawn(Point cursor)
+        /// <summary>Walking along at speed (as opposed to stopping or standing).</summary>
+        public bool IsWalking
+        {
+            get { return mode == Mode.Walk && !braking && Math.Abs(vx) > 6 * sizeFactor; }
+        }
+
+        /// <summary>Free to stop and say hello.</summary>
+        public bool CanGreet
+        {
+            get { return (mode == Mode.Walk && !braking) || mode == Mode.Rest || mode == Mode.Look; }
+        }
+
+        public bool IsCharging { get { return mode == Mode.Charge; } }
+        public Walker ChargeTarget { get { return chargeTarget; } }
+
+        /// <summary>Seconds before this walker will greet or charge again.</summary>
+        public double GreetCooldown { get; set; }
+        public double ChargeCooldown { get; set; }
+
+        // ---- Commands ---------------------------------------------------------------
+
+        /// <summary>Come up out of the ground at x.</summary>
+        public void Spawn(Point cursor, double x)
         {
             cursorX = cursor.X;
-            Rectangle bounds = world.MonitorBoundsAt(cursor);
-            double margin = Math.Min(bounds.Width / 4.0, 120);
-            cx = bounds.Left + margin + rng.NextDouble() * (bounds.Width - 2 * margin);
+            cx = x;
             UpdateWorld();
 
             facing = rng.Next(2) == 0 ? -1 : 1;
@@ -87,10 +150,14 @@ namespace IdleWalker.Domain
             walkPhase = 0;
             landPause = 0;
             startled = false;
+            knocked = false;
+            chargeTarget = null;
             afterTurn = Mode.Walk;
             idleTimer = Between(4, 9);
             hopTimer = Between(3, 8);
             blinkTimer = Between(1, 3);
+            GreetCooldown = 2;
+            ChargeCooldown = 3;
             puffs.Clear();
             Enter(Mode.PeekRise);
         }
@@ -98,13 +165,70 @@ namespace IdleWalker.Domain
         /// <summary>The mouse moved: jump in fright, then drop out of sight.</summary>
         public void Startle()
         {
+            BeginExit(true);
+        }
+
+        /// <summary>Asked to go (the count was lowered): hop and drop out of sight.</summary>
+        public void Leave()
+        {
+            BeginExit(false);
+        }
+
+        void BeginExit(bool withBubble)
+        {
             if (mode == Mode.Hidden || mode == Mode.Exit) return;
             bool underground = mode == Mode.PeekRise || mode == Mode.PeekLook || mode == Mode.PeekDuck;
-            startled = !underground;
+            startled = withBubble && !underground;
             if (underground) vy = 0;
             else if (mode != Mode.Air) vy = -Settings.StartleSpeed * sizeFactor;
             vx = 0;
             Enter(Mode.Exit);
+        }
+
+        /// <summary>Another walker is near: tells this one where, for waving at.</summary>
+        public void SetCompany(bool present, double x)
+        {
+            companyNearby = present;
+            companyX = x;
+        }
+
+        /// <summary>Stop and face `direction` to wave (friendly) or nod (calm) at someone.</summary>
+        public void Greet(int direction, bool wave)
+        {
+            if (!CanGreet) return;
+            greetFacing = direction;
+            greetWave = wave;
+            if (mode == Mode.Walk) Brake(Mode.Greet);
+            else Enter(Mode.Greet);
+        }
+
+        /// <summary>Run at another walker.</summary>
+        public void StartCharge(Walker target)
+        {
+            if (mode != Mode.Walk || braking) return;
+            chargeTarget = target;
+            Enter(Mode.Charge);
+        }
+
+        /// <summary>Shoved: fly off in `direction`, land, run away.</summary>
+        public void Knock(int direction)
+        {
+            if (!IsVisible || mode == Mode.Exit) return;
+            if (IsGrounded) EmitDust(cx, feetY, 3, 0.8);
+            vx = direction * 240 * sizeFactor;
+            vy = -200 * sizeFactor;
+            knocked = true;
+            chargeTarget = null;
+            Enter(Mode.Air);
+        }
+
+        /// <summary>Stand proud for a moment after a successful shove.</summary>
+        public void Gloat()
+        {
+            chargeTarget = null;
+            ChargeCooldown = 10;
+            vx = 0;
+            Enter(Mode.Gloat);
         }
 
         /// <summary>Advances the simulation by dt seconds.</summary>
@@ -114,6 +238,8 @@ namespace IdleWalker.Domain
             time += dt;
             modeTime += dt;
             squash = Math.Max(0, squash - dt / 0.18);
+            GreetCooldown -= dt;
+            ChargeCooldown -= dt;
             UpdateWorld();
 
             blinkTimer -= dt;
@@ -171,7 +297,7 @@ namespace IdleWalker.Domain
                 }
 
                 case Mode.Walk:
-                    StepWalk(dt);
+                    StepWalk(dt, 1, true);
                     break;
 
                 case Mode.Crouch:
@@ -222,6 +348,39 @@ namespace IdleWalker.Domain
                     if (modeTime >= restDuration) Enter(Mode.Walk);
                     break;
 
+                case Mode.Greet:
+                    if (!StayOnGround()) break;
+                    facing = greetFacing;
+                    if (modeTime >= GreetSeconds) Enter(Mode.Walk);
+                    break;
+
+                case Mode.Charge:
+                {
+                    if (!StayOnGround()) break;
+                    Walker target = chargeTarget;
+                    if (target == null || !target.IsVisible || target.IsLeaving ||
+                        Math.Abs(target.CentreX - cx) > 520 * sizeFactor || modeTime > 3)
+                    {
+                        AbortCharge();
+                        break;
+                    }
+                    if (!braking) facing = target.CentreX >= cx ? 1 : -1;
+                    StepWalk(dt, ChargeSpeedFactor, false);
+                    break;
+                }
+
+                case Mode.Gloat:
+                    if (!StayOnGround()) break;
+                    if (modeTime >= GloatSeconds) Enter(Mode.Walk);
+                    break;
+
+                case Mode.Flee:
+                    if (!StayOnGround()) break;
+                    fleeTime -= dt;
+                    StepWalk(dt, FleeSpeedFactor, false);
+                    if (fleeTime <= 0 && mode == Mode.Flee) Enter(Mode.Walk);
+                    break;
+
                 case Mode.Exit:
                 {
                     vy += Settings.ExitGravity * sizeFactor * dt;
@@ -242,21 +401,21 @@ namespace IdleWalker.Domain
         /// <summary>Which body parts to show right now.</summary>
         public Pose CurrentPose()
         {
-            Pose pose = Pose.Standing();
+            Art.Faces faces = personality.Faces;
+            Pose pose = Pose.Standing(faces);
             int step = Math.Max(1, scale / Settings.BasePixelSize);
             bool breathe = false;
 
             switch (mode)
             {
                 case Mode.Walk:
-                    if (Math.Abs(vx) > 6 * sizeFactor)
-                    {
-                        int frame = (int)(walkPhase * 6) % 6;
-                        pose.Legs = Art.WalkLegs[frame];
-                        pose.Torso = Art.WalkArms[frame];
-                        pose.Tail = frame < 3 ? Art.TailA : Art.TailB;
-                        pose.BodyDy = Art.WalkBob[frame] * step;
-                    }
+                case Mode.Charge:
+                    ApplyWalkCycle(ref pose, step);
+                    break;
+
+                case Mode.Flee:
+                    ApplyWalkCycle(ref pose, step);
+                    pose.Head = faces.Surprised;
                     break;
 
                 case Mode.Crouch:
@@ -276,8 +435,13 @@ namespace IdleWalker.Domain
                     pose.StretchX = 1 - stretch * 0.7;
                     if (mode == Mode.Exit)
                     {
-                        pose.Head = Art.HeadSurprised;
+                        pose.Head = faces.Surprised;
                         pose.Bubble = startled;
+                    }
+                    else if (knocked)
+                    {
+                        pose.Head = faces.Surprised;
+                        pose.Bubble = true;
                     }
                     break;
                 }
@@ -285,6 +449,24 @@ namespace IdleWalker.Domain
                 case Mode.Wave:
                     pose.Torso = Art.TorsoPlain;
                     pose.Overlay = (int)(modeTime / 0.15) % 2 == 0 ? Art.WaveA : Art.WaveB;
+                    break;
+
+                case Mode.Greet:
+                    if (greetWave)
+                    {
+                        pose.Torso = Art.TorsoPlain;
+                        pose.Overlay = (int)(modeTime / 0.15) % 2 == 0 ? Art.WaveA : Art.WaveB;
+                    }
+                    else if (modeTime % 0.5 < 0.25)
+                    {
+                        pose.BodyDy = step; // a nod
+                    }
+                    break;
+
+                case Mode.Gloat:
+                    pose.Torso = Art.ArmBack;
+                    pose.StretchY = 1.04;
+                    pose.StretchX = 1.03;
                     break;
 
                 case Mode.Turn:
@@ -298,8 +480,18 @@ namespace IdleWalker.Domain
             pose.HeadTurned = headTurned;
             pose.StretchY *= 1 - 0.22 * squash;
             pose.StretchX *= 1 + 0.16 * squash;
-            if (blinkLeft > 0 && pose.Head == Art.HeadNormal) pose.Head = Art.HeadBlink;
+            if (blinkLeft > 0 && pose.Head == faces.Normal) pose.Head = faces.Blink;
             return pose;
+        }
+
+        void ApplyWalkCycle(ref Pose pose, int step)
+        {
+            if (Math.Abs(vx) <= 6 * sizeFactor) return;
+            int frame = (int)(walkPhase * 6) % 6;
+            pose.Legs = Art.WalkLegs[frame];
+            pose.Torso = Art.WalkArms[frame];
+            pose.Tail = frame < 3 ? Art.TailA : Art.TailB;
+            pose.BodyDy = Art.WalkBob[frame] * step;
         }
 
         // ---- Terrain ------------------------------------------------------------
@@ -393,11 +585,21 @@ namespace IdleWalker.Domain
             afterBrake = next;
         }
 
-        void StepWalk(double dt)
+        void AbortCharge()
+        {
+            chargeTarget = null;
+            ChargeCooldown = 3;
+            Enter(Mode.Walk);
+        }
+
+        // Walking, charging and fleeing all share this: ease towards the
+        // target speed, turn at the ends of the desktop, jump up onto higher
+        // monitors. `antics` allows the random hops and idle stops.
+        void StepWalk(double dt, double speedFactor, bool antics)
         {
             if (!StayOnGround()) return;
 
-            double full = Settings.WalkSpeed * sizeFactor;
+            double full = Settings.WalkSpeed * sizeFactor * personality.SpeedFactor * speedFactor;
             double target = braking ? 0 : facing * full;
             vx = Approach(vx, target, (braking ? Settings.Braking : Settings.Acceleration) * sizeFactor * dt);
             bool blocked = !MoveX(vx * dt);
@@ -445,16 +647,18 @@ namespace IdleWalker.Domain
                 return;
             }
 
+            if (!antics) return;
+
             idleTimer -= dt;
             hopTimer -= dt;
             if (idleTimer <= 0)
             {
-                idleTimer = Between(5, 11);
+                idleTimer = Between(personality.IdleMin, personality.IdleMax);
                 PickIdle();
             }
             else if (hopTimer <= 0)
             {
-                hopTimer = Between(4, 9);
+                hopTimer = Between(personality.HopMin, personality.HopMax);
                 if (Math.Abs(vx) > 0.8 * full) StartJump(Settings.HopSpeed * sizeFactor, vx);
             }
         }
@@ -474,7 +678,16 @@ namespace IdleWalker.Domain
             squash = Math.Max(0.35, Math.Min(1, impact / (Settings.HopSpeed * sizeFactor)));
             if (impact > 0.5 * Settings.HopSpeed * sizeFactor) EmitDust(cx, ground, 4, squash);
 
-            if (landPause > 0)
+            if (knocked)
+            {
+                // Run away from whoever did that.
+                knocked = false;
+                if (vx != 0) facing = vx > 0 ? 1 : -1;
+                fleeTime = FleeSeconds;
+                GreetCooldown = Math.Max(GreetCooldown, FleeSeconds + 2);
+                Enter(Mode.Flee);
+            }
+            else if (landPause > 0)
             {
                 vx = 0;
                 restDuration = landPause;
@@ -487,18 +700,20 @@ namespace IdleWalker.Domain
             }
         }
 
-        // Every so often: stop and look around, wave at the cursor, or rest.
+        // Every so often: stop and look around, wave at someone, or rest.
         void PickIdle()
         {
             double roll = rng.NextDouble();
-            if (roll < 0.4)
+            if (roll < personality.LookWeight)
             {
                 Brake(Mode.Look);
             }
-            else if (roll < 0.75)
+            else if (roll < personality.LookWeight + personality.WaveWeight)
             {
-                bool cursorBehind = (cursorX - cx) * facing < -2 * HalfBodyCells * scale;
-                if (cursorBehind)
+                // Wave at a nearby walker if there is one, otherwise at the cursor.
+                double targetX = companyNearby ? companyX : cursorX;
+                bool targetBehind = (targetX - cx) * facing < -2 * HalfBodyCells * scale;
+                if (targetBehind)
                 {
                     afterTurn = Mode.Wave;
                     Brake(Mode.Turn);

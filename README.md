@@ -6,6 +6,10 @@ hops out, and strolls along the bottom of your monitors - all of them,
 including external ones. Move the mouse and it gets a fright and dives back
 down.
 
+You can have up to five of them out at once. Each has its own colours and
+temperament: the sociable ones stop to wave at each other, the aggressive
+ones charge at anyone nearby and shove them off their feet.
+
 It is plain C# with no dependencies beyond what ships with Windows: no
 runtime to install, no NuGet packages, no IDE needed.
 
@@ -18,23 +22,27 @@ fun/
 └── src/
     ├── Program.cs            entry point: single instance, DPI, message loop
     ├── Settings.cs           the tunable constants
-    ├── Domain/               the character - no Windows code in here
-    │   ├── Art.cs            pixel art parts and palette
+    ├── Domain/               the characters - no Windows code in here
+    │   ├── Art.cs            pixel art parts and the three faces
+    │   ├── Palette.cs        letter → colour maps, one per outfit
+    │   ├── Personality.cs    the cast: temperament, colours, speed, habits
     │   ├── Pose.cs           which parts to show in one frame
     │   ├── Puff.cs           a speck of dust
-    │   ├── IWorld.cs         what the walker needs to know about the terrain
-    │   └── Walker.cs         state machine, physics, idle behaviour
+    │   ├── IWorld.cs         what a walker needs to know about the terrain
+    │   ├── Walker.cs         one character: state machine, physics, antics
+    │   └── Troupe.cs         the group: staggered entrances, greetings, shoving
     ├── Rendering/            pixels
-    │   ├── Surface.cs        software canvas, outline pass
-    │   └── FrameRenderer.cs  lays out the canvas and draws a frame
+    │   ├── Surface.cs        software canvas, outline pass, dirty-region tracking
+    │   └── FrameRenderer.cs  lays out the canvas, draws a frame, skips unchanged ones
     ├── Platform/             Win32
     │   ├── Native.cs         P/Invoke declarations
-    │   ├── MonitorWorld.cs   IWorld backed by the real monitors
+    │   ├── MonitorWorld.cs   IWorld backed by the real monitors (cached per frame)
     │   ├── SpriteWindow.cs   layered click-through window
     │   ├── FramePump.cs      vsync-paced tick thread
-    │   └── StartupRegistration.cs   the "Start with Windows" registry entry
+    │   ├── StartupRegistration.cs   the "Start with Windows" registry entry
+    │   └── UserSettings.cs   remembers the walker count
     └── App/                  wiring
-        ├── WalkerApp.cs      the per-frame loop
+        ├── WalkerApp.cs      the per-frame loop, one window per walker
         ├── CursorWatcher.cs  idle detection
         └── TrayMenu.cs       notification-area icon and menu
 ```
@@ -136,11 +144,43 @@ arrow). Leave the mouse alone for two seconds and the character appears.
 
 | Item | Effect |
 |---|---|
+| Walkers: *n* → 1…5 | How many characters come out. Raising it brings the new ones out straight away (one at a time); lowering it sends the extras away. Remembered between runs. |
 | Start with Windows | Ticked: the program starts when you sign in. See below. |
-| Pause | Keeps the character hidden until unticked. If it is on screen, it leaves immediately. |
+| Pause | Keeps the characters hidden until unticked. If they are on screen, they leave immediately. |
 | Exit | Quits the program. |
 
 Only one instance can run at a time; starting a second one quietly exits.
+
+### The cast
+
+Walkers join in this order as you raise the count. The first one is the
+original character and behaves exactly as it always did.
+
+| # | Name | Temperament | Look | Habits |
+|---|---|---|---|---|
+| 1 | Teal | Calm | teal beanie, orange scarf, navy jacket | Normal pace. Looks around, waves at your cursor, rests. Nods at walkers it meets. |
+| 2 | Red | Aggressive | red beanie, dark scarf, brown jacket, heavy brows | 20% faster, hops twice as often, never waves. Charges at anyone within reach and shoves them. |
+| 3 | Pink | Friendly | pink beanie, yellow scarf, green jacket, smile | A little slower. Waves a lot - at nearby walkers in preference to the cursor. Stops to wave at anyone it meets. |
+| 4 | Blue | Friendly | sky-blue beanie, red scarf, purple jacket, smile | As Pink. |
+| 5 | Olive | Aggressive | olive beanie, teal scarf, maroon jacket, heavy brows | As Red. |
+
+**How they get on**
+
+- When two sociable walkers are about to pass each other they both stop and
+  face one another: a friendly one waves, a calm one nods. Then they carry
+  on. A pair won't greet again for several seconds.
+- An aggressive walker that spots someone within about 380 px ahead (or
+  120 px behind) breaks into a run. On contact the victim is knocked into the
+  air with a "!", lands in a puff of dust and runs away scared for a second
+  and a half; the bully stands proud for a moment, then walks on and leaves
+  people alone for ten seconds.
+- Two aggressive walkers that charge each other collide and both go flying.
+- Aggressive walkers ignore greetings; friendly ones wave at them anyway.
+- Interactions only happen between walkers on the same ground level (so not
+  across a step between monitors) and never while someone is in the air.
+
+The cast is defined in `src\Domain\Personality.cs`; the meeting rules are in
+`src\Domain\Troupe.cs`.
 
 ### Start automatically with Windows
 
@@ -220,6 +260,10 @@ Stop-Process -Name IdleWalker
    over its head, it does a small startled hop and drops through the ground
    line in about 0.4 seconds. The idle timer then starts again.
 
+With more than one walker, they come out one at a time, 0.7-1.4 s apart, each
+at its own random spot (kept at least 200 px from the others when possible),
+and they all leave together when the mouse moves.
+
 The character never takes focus, never appears in the taskbar or Alt-Tab,
 and mouse clicks pass straight through it to whatever is underneath.
 
@@ -233,6 +277,7 @@ running copy, rebuild.
 | `IdleSeconds` | `2.0` | How long the cursor must be still before it appears. |
 | `MoveTolerance` | `2` | Cursor movement (pixels) below this does not count as moving. |
 | `BasePixelSize` | `3` | Size in screen pixels of one art pixel at 100% display scaling. `4` makes it a third bigger. |
+| `MaxWalkers` | `5` | Upper limit of the Walkers menu. The cast in `Personality.Roster` must have at least this many entries. |
 | `WalkSpeed` | `90` | Walking speed, px/s at 100% scaling. |
 | `Acceleration` | `420` | How quickly it reaches walking speed. |
 | `Braking` | `520` | How quickly it stops. |
@@ -244,11 +289,13 @@ running copy, rebuild.
 Speeds are automatically multiplied by the monitor's display scaling, so the
 motion looks the same on a 100% and a 200% screen.
 
-Timings that live in the state machine (`src\Domain\Walker.cs`) rather than
-as constants, should you want them: idle stop every `Between(5, 11)` s and
-hop every `Between(4, 9)` s in `StepWalk`; blink every `Between(1.8, 4.5)` s
-in `Step`; peek/look/duck durations in the `PeekRise`/`PeekLook`/`PeekDuck`
-cases of `Step`.
+Per-character values (speed factor, hop and idle intervals, how often it
+looks around vs. waves vs. rests) are in `src\Domain\Personality.cs`.
+Timings that live in the state machine (`src\Domain\Walker.cs`): blink every
+`Between(1.8, 4.5)` s in `Step`; peek/look/duck durations in the
+`PeekRise`/`PeekLook`/`PeekDuck` cases; greet, gloat and flee durations at
+the top of the class. Meeting distances and cooldowns are at the top of
+`src\Domain\Troupe.cs`.
 
 ## Editing the character art
 
@@ -258,27 +305,33 @@ declare which row their first line sits on (`new Part(10, ...)` starts on
 row 10). The figure is drawn facing right and mirrored in code when it faces
 left.
 
-| Letter | Colour | Used for |
+Letters are turned into colours by a `Palette` (`src\Domain\Palette.cs`)
+at draw time. `Palette.Default` is the original outfit; each personality
+derives its own with `.With(letter, rgb)`:
+
+| Letter | Default colour | Used for |
 |---|---|---|
 | `.` | transparent | |
 | `Y` | `#FFD23F` | pom-pom |
 | `T` / `t` | `#1FA39A` / `#157A74` | beanie / brim |
 | `S` | `#F6C9A0` | skin |
 | `P` | `#EFA08A` | cheek |
-| `K` | `#2B2233` | eyes, mouth |
+| `K` | `#2B2233` | eyes, brows, mouth |
 | `O` | `#F2762E` | scarf |
 | `N` / `n` | `#34508F` / `#263A6B` | jacket / sleeve |
 | `G` / `g` | `#6B6F82` / `#4E5163` | near leg / far leg |
 | `B` / `b` | `#6B4226` / `#4F301B` | near boot / far boot |
 | `W` | `#FFFFFF` | the "!" |
 
-Add a letter in `Art.ColorOf` to introduce a colour. The dark outline is not
-drawn by hand - it is generated around whatever is opaque, so new art gets it
-automatically.
+Add a `.With(...)` to `Palette.Default` to introduce a letter. The dark
+outline is not drawn by hand - it is generated around whatever is opaque, so
+new art gets it automatically.
 
 The parts are:
 
-- `HeadNormal`, `HeadBlink`, `HeadSurprised` - rows 0-9 (hat + face).
+- `CalmFaces`, `FriendlyFaces`, `AngryFaces` - each a set of three heads
+  (normal, blinking, surprised), rows 0-9. Friendly has a smile; angry has
+  heavy brows.
 - `ArmMid`, `ArmForward`, `ArmBack`, `TorsoPlain` - rows 10-13 (scarf +
   jacket with the near arm in different positions).
 - `WaveA`, `WaveB` - a raised arm drawn over `TorsoPlain` and the head.
@@ -304,30 +357,33 @@ The code is split into four layers; dependencies point downwards only.
 │ App          WalkerApp · CursorWatcher · TrayMenu                │  the per-frame loop
 ├──────────────────────────────────────────────────────────────────┤
 │ Platform     SpriteWindow · MonitorWorld · FramePump             │  Win32: windows, monitors,
-│              StartupRegistration · Native                        │  registry, vsync
+│              StartupRegistration · UserSettings · Native         │  registry, vsync
 ├──────────────────────────────────────────────────────────────────┤
 │ Rendering    FrameRenderer · Surface                             │  pixels, no Win32
 ├──────────────────────────────────────────────────────────────────┤
-│ Domain       Walker · Pose · Art · Puff · IWorld                 │  the character; pure C#
+│ Domain       Troupe · Walker · Personality · Pose · Art          │  the characters; pure C#
+│              Palette · Puff · IWorld                             │
 └──────────────────────────────────────────────────────────────────┘
                               Settings (constants, used by all)
 ```
 
-- **Domain** is the character itself: the art, the state machine, the
-  physics. It depends on nothing Windows-specific. The terrain it walks on
-  is abstracted behind `IWorld` (ground height at an x position, monitor
-  edges, the cell size to draw at), so the whole simulation could be driven
-  from a unit test with a fake world.
+- **Domain** is the characters themselves: the art, each walker's state
+  machine and physics, and the `Troupe` that owns the group and decides when
+  two walkers greet or one shoves another. It depends on nothing
+  Windows-specific. The terrain is abstracted behind `IWorld` (ground height
+  at an x position, monitor edges, the cell size to draw at), so the whole
+  simulation runs headless against a fake world - that is how the group
+  behaviour was tested.
 - **Rendering** turns a `Walker` into an array of premultiplied ARGB pixels.
   It knows about the canvas layout and the outline pass but not about
-  windows.
+  windows. One `FrameRenderer` per walker.
 - **Platform** is the only place that touches Win32: the layered window, the
   real monitors (`MonitorWorld` implements `IWorld` on top of
-  `Screen.AllScreens` and `GetDpiForMonitor`), the vsync pump, the Run key.
+  `Screen.AllScreens` and `GetDpiForMonitor`), the vsync pump, the registry.
 - **App** wires it together. `WalkerApp.OnTick` is the whole frame:
 
   ```
-  poll cursor → spawn / startle → walker.Step(dt) → renderer.Render(walker) → window.Present(...)
+  refresh monitors → poll cursor → troupe.Step(dt) → for each walker: render if changed → present
   ```
 
 Everything is `internal` to the one assembly; there is no public API.
@@ -337,12 +393,18 @@ Everything is `internal` to the one assembly; there is no public API.
 ```
 FramePump (thread)   DwmFlush() ─▶ post tick ─┐
                                               ▼  UI thread
-WalkerApp.OnTick     CursorWatcher.Poll ─▶ Walker.Spawn / Startle / Step
+WalkerApp.OnTick     MonitorWorld.Refresh · CursorWatcher.Poll ─▶ Troupe.Step
                                               │
-FrameRenderer        Walker state ─▶ Pose ─▶ Surface (dust, parts, outline)
+Troupe               spawn next / startle all ─▶ Walker.Step ×n ─▶ Interact (greet, charge, shove)
                                               │
-SpriteWindow         Surface.Pixels ─▶ DIB section ─▶ UpdateLayeredWindow
+FrameRenderer ×n     Walker state ─▶ Pose ─▶ Surface (dust, parts, outline)   [skipped if unchanged]
+                                              │
+SpriteWindow ×n      Surface.Pixels (content rect only) ─▶ DIB section ─▶ UpdateLayeredWindow
 ```
+
+Each walker has its own small window rather than one desktop-wide window:
+five 120 x 144 px windows are far cheaper to update than one 3840 px wide
+one, and a walker that hasn't visibly changed costs nothing at all.
 
 ### The window
 
@@ -382,8 +444,9 @@ is what a 32-bpp `BI_RGB` DIB holds).
 
 1. Dust puffs are filled directly into the canvas as translucent squares.
 2. Character parts are drawn into a separate layer as solid rectangles - one
-   per art pixel - at `cell size x stretch`. Because every rectangle edge is
-   computed with the same rounding formula, stretched cells never leave gaps.
+   per art pixel - at `cell size x stretch`, with colours looked up in the
+   walker's `Palette`. Because every rectangle edge is computed with the same
+   rounding formula, stretched cells never leave gaps.
 3. **Outline pass:** a transparent layer pixel becomes outline if an opaque
    pixel lies within one cell of it along its row or its column. This is done
    in four linear sweeps (left, right, down, up) so it costs O(pixels), and it
@@ -393,6 +456,16 @@ is what a 32-bpp `BI_RGB` DIB holds).
    this is a copy).
 
 No GDI+ is involved in the per-frame path; it is all integer array writes.
+
+**Doing less work.** The canvas is 40 x 48 cells but the character is only
+about 18 x 20, so `Surface` tracks the rectangle that has actually been drawn
+on. Clearing, the outline sweeps, the compositing and the upload to the DIB
+all touch only that rectangle, and `UpdateLayeredWindow` is given just that
+sub-rectangle (the window shrinks to fit the content each frame). On top of
+that `FrameRenderer` compares the new pose, position, scale and facing with
+the previous frame and skips everything - including the `UpdateLayeredWindow`
+call - when nothing has changed, which is most frames while a walker is
+standing still.
 
 ### Frame pacing
 
@@ -453,16 +526,32 @@ assembly reference is needed. The stored command is the quoted
 `Application.ExecutablePath`; it is refreshed on every launch while the
 option is on.
 
+### Remembered settings
+
+`UserSettings` stores the walker count as a DWORD `WalkerCount` under
+`HKCU\Software\IdleWalker`. Reading or writing failures are swallowed - the
+worst case is the count resets to 1 next time.
+
 ### Adding things
 
-- A new idle antic: add a `Mode`, start it from `PickIdle` via `Brake(...)`,
-  step it in `Walker.Step`, and give it a pose in `CurrentPose`.
+- A new character: add an entry to `Personality.Roster` (name, temperament,
+  palette, faces, speed, hop/idle ranges, idle weights) and, if you want more
+  than five, raise `Settings.MaxWalkers`.
+- A new temperament: add it to the `Temperament` enum and teach
+  `Troupe.TryGreet` / `ConsiderCharging` how it behaves towards others.
+- A new idle antic: add a `Mode` to `Walker`, start it from `PickIdle` via
+  `Brake(...)`, step it in `Walker.Step`, and give it a pose in
+  `CurrentPose`.
 - New art: add a `Part` in `Art.cs` (16 columns wide, say which row it
-  starts on) and reference it from a pose.
+  starts on) and reference it from a pose. New colours are new letters in
+  `Palette.Default`.
 - A new menu item: `TrayMenu` owns the menu; expose state as a property or
-  an event like `Paused` / `ExitRequested`.
+  an event like `Paused` / `Count` / `ExitRequested`.
 - Anything needing a new Win32 call goes in `Native.cs` and is used only
   from the Platform layer.
+- Testing group behaviour: the Domain layer runs headless. A `Troupe` with a
+  fake `IWorld` (flat ground, one monitor) stepped at 1/60 s in a console
+  harness is enough to count greetings, charges and shoves.
 
 ## Multiple monitors
 
@@ -494,16 +583,42 @@ in or out while it runs is fine.
 
 ## Performance
 
-- Hidden: ten `GetCursorPos` calls a second; effectively zero CPU.
-- On screen: roughly 5% of one core at 60 Hz on a modern laptop, almost all
-  of it the per-frame `UpdateLayeredWindow`. Memory ~30 MB (mostly the .NET
-  runtime).
+Measured on a Windows 11 laptop with two 60 Hz monitors (12 logical cores):
+
+| State | CPU | Notes |
+|---|---|---|
+| Hidden (cursor moving, normal use) | ~0% | Ten `GetCursorPos` calls a second, nothing else. |
+| One walker out | < 5% of one core | 4.7% was measured before the dirty-rectangle optimisation; it is lower now. |
+| Five walkers out | 6-7% of one core | ≈ 0.5% of the machine (measured: 6.3% and 7.2% over two 8-second runs). |
+
+Memory is about 35 MB working set, almost all of it the .NET runtime.
+
+Note that the walkers are only ever on screen while the mouse has been idle
+for two seconds - i.e. while you are *not* using the computer - and they are
+gone within half a second of the cursor moving. While you work, the program
+is doing nothing but a cheap poll ten times a second.
+
+What keeps it cheap:
+
+- The simulation is trivial: stepping all five walkers plus their
+  interactions takes about 2 µs per frame.
+- Monitor layout and DPI are read once per frame (`MonitorWorld.Refresh`),
+  not once per query.
+- Rendering and `UpdateLayeredWindow` happen only for walkers whose picture
+  changed, and only for the rectangle that has content (see
+  [Rendering](#rendering)).
+- Each walker has its own small window; nothing is ever drawn desktop-wide.
+- Frames are paced by the compositor (`DwmFlush`), so there is never more
+  than one frame per screen refresh and no busy-waiting.
+- No timers fire and no hooks are installed while hidden.
 
 ## Troubleshooting
 
 | Symptom | Cause / fix |
 |---|---|
-| Nothing appears | Is the tray icon there? If not, the program is not running. Check **Pause** is unticked. The character spawns on the monitor the *cursor* is on. |
+| Nothing appears | Is the tray icon there? If not, the program is not running. Check **Pause** is unticked. The characters spawn on the monitor the *cursor* is on. |
+| Only one walker appears | Check **Walkers** in the tray menu; the count is remembered between runs and defaults to 1. |
+| Walkers overlap each other | They can walk through one another; only meetings (greeting, shoving) are physical. This is by design. |
 | Appears, but immediately dives away | Something is moving the cursor (a jittery mouse, a wobbling desk, some remote-control software). Raise `MoveTolerance`. |
 | Hidden behind a full-screen game | Exclusive full-screen apps bypass the compositor; nothing can draw over them. Borderless-windowed games are fine. |
 | Blurry or wrong size on one monitor | Check Windows' per-monitor scaling; the cell size follows it. If a monitor reports an odd DPI, `ScaleFor` is where to adjust. |

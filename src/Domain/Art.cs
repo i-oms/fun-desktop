@@ -2,7 +2,8 @@ namespace IdleWalker.Domain
 {
     /// <summary>
     /// The character's pixel art, split into parts so that the head, arms,
-    /// legs and scarf can be posed independently.
+    /// legs and scarf can be posed independently. Colours come from a
+    /// <see cref="Palette"/> at draw time.
     /// </summary>
     static class Art
     {
@@ -22,6 +23,19 @@ namespace IdleWalker.Domain
             }
         }
 
+        /// <summary>The three expressions a face needs.</summary>
+        public sealed class Faces
+        {
+            public readonly Part Normal, Blink, Surprised;
+
+            public Faces(Part normal, Part blink, Part surprised)
+            {
+                Normal = normal;
+                Blink = blink;
+                Surprised = surprised;
+            }
+        }
+
         // Everything is drawn facing right. '.' is transparent.
 
         static Part Head(string eyes, string lids, string cheeks, string chin)
@@ -36,23 +50,29 @@ namespace IdleWalker.Domain
                 eyes, lids, cheeks, chin);
         }
 
-        public static readonly Part HeadNormal = Head(
-            "..SSSSSSKSSKS...",
-            "..SSSSSSKSSKS...",
-            "..SSSSPPSSSSSS..",
-            "...SSSSSSSSSS...");
+        const string Eyes = "..SSSSSSKSSKS...";
+        const string EyesShut = "..SSSSSSSSSSS...";
+        const string Brows = "..SSSSSSKKSKKS..";
+        const string Cheeks = "..SSSSPPSSSSSS..";
+        const string Chin = "...SSSSSSSSSS...";
+        const string ChinSmile = "...SSSSSSSKKSS..";
+        const string ChinGasp = "...SSSSSSSKSS...";
 
-        public static readonly Part HeadBlink = Head(
-            "..SSSSSSSSSSS...",
-            "..SSSSSSKSSKS...",
-            "..SSSSPPSSSSSS..",
-            "...SSSSSSSSSS...");
+        public static readonly Faces CalmFaces = new Faces(
+            Head(Eyes, Eyes, Cheeks, Chin),
+            Head(EyesShut, Eyes, Cheeks, Chin),
+            Head(Eyes, Eyes, Cheeks, ChinGasp));
 
-        public static readonly Part HeadSurprised = Head(
-            "..SSSSSSKSSKS...",
-            "..SSSSSSKSSKS...",
-            "..SSSSPPSSSSSS..",
-            "...SSSSSSSKSS...");
+        public static readonly Faces FriendlyFaces = new Faces(
+            Head(Eyes, Eyes, Cheeks, ChinSmile),
+            Head(EyesShut, Eyes, Cheeks, ChinSmile),
+            Head(Eyes, Eyes, Cheeks, ChinGasp));
+
+        // Heavy brows over the eyes.
+        public static readonly Faces AngryFaces = new Faces(
+            Head(Brows, Eyes, Cheeks, Chin),
+            Head(Brows, EyesShut, Cheeks, Chin),
+            Head(Brows, Eyes, Cheeks, ChinGasp));
 
         // Scarf plus jacket, with the near arm in different positions.
         static Part Torso(string a, string b, string c)
@@ -156,35 +176,5 @@ namespace IdleWalker.Domain
             ".......WW.......",
             "................",
             ".......WW.......");
-
-        public static readonly int Outline = Rgb(0x1E1826);
-
-        static int Rgb(int rgb)
-        {
-            return unchecked((int)0xFF000000) | rgb;
-        }
-
-        /// <summary>Opaque ARGB for an art letter; 0 for transparent.</summary>
-        public static int ColorOf(char c)
-        {
-            switch (c)
-            {
-                case 'Y': return Rgb(0xFFD23F); // pom-pom
-                case 'T': return Rgb(0x1FA39A); // beanie
-                case 't': return Rgb(0x157A74); // beanie brim
-                case 'S': return Rgb(0xF6C9A0); // skin
-                case 'P': return Rgb(0xEFA08A); // cheek
-                case 'K': return Rgb(0x2B2233); // eyes
-                case 'O': return Rgb(0xF2762E); // scarf
-                case 'N': return Rgb(0x34508F); // jacket
-                case 'n': return Rgb(0x263A6B); // sleeve
-                case 'G': return Rgb(0x6B6F82); // near leg
-                case 'g': return Rgb(0x4E5163); // far leg
-                case 'B': return Rgb(0x6B4226); // near boot
-                case 'b': return Rgb(0x4F301B); // far boot
-                case 'W': return Rgb(0xFFFFFF); // "!"
-                default: return 0;
-            }
-        }
     }
 }

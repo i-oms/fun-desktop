@@ -1,4 +1,5 @@
 using System;
+using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using IdleWalker.Rendering;
@@ -28,16 +29,26 @@ namespace IdleWalker.Platform
             CreateHandle(cp);
         }
 
-        /// <summary>Shows the surface with its top-left corner at (x, y).</summary>
+        /// <summary>
+        /// Shows the surface with its top-left corner at (x, y). Only the
+        /// part of the surface that has content is uploaded and shown; the
+        /// window shrinks to fit it.
+        /// </summary>
         public void Present(Surface surface, int x, int y)
         {
             EnsureBitmap(surface.Width, surface.Height);
             if (dib == IntPtr.Zero) return;
-            Marshal.Copy(surface.Pixels, 0, dibBits, surface.Pixels.Length);
 
-            Native.POINT destination = new Native.POINT(x, y);
-            Native.POINT source = new Native.POINT(0, 0);
-            Native.SIZE size = new Native.SIZE(surface.Width, surface.Height);
+            Rectangle bounds = surface.Bounds;
+            if (bounds.IsEmpty) bounds = new Rectangle(0, 0, 1, 1); // a single transparent pixel
+
+            // Copy just the rows that matter into the DIB.
+            int start = bounds.Top * surface.Width;
+            Marshal.Copy(surface.Pixels, start, IntPtr.Add(dibBits, start * 4), bounds.Height * surface.Width);
+
+            Native.POINT destination = new Native.POINT(x + bounds.Left, y + bounds.Top);
+            Native.POINT source = new Native.POINT(bounds.Left, bounds.Top);
+            Native.SIZE size = new Native.SIZE(bounds.Width, bounds.Height);
             Native.BLENDFUNCTION blend = new Native.BLENDFUNCTION();
             blend.SourceConstantAlpha = 255;
             blend.AlphaFormat = Native.AC_SRC_ALPHA;
