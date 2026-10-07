@@ -5,8 +5,9 @@ namespace IdleWalker.Rendering
 {
     /// <summary>
     /// Turns one walker's state into pixels: decides where the canvas goes on
-    /// screen and draws the dust and the posed character into it. Skips the
-    /// work entirely when the picture would be identical to the last frame.
+    /// screen and draws the dust, the shadow and the posed character into it.
+    /// Skips the work entirely when the picture would be identical to the
+    /// last frame.
     /// </summary>
     sealed class FrameRenderer
     {
@@ -18,7 +19,7 @@ namespace IdleWalker.Rendering
 
         bool hasLast;
         Pose lastPose;
-        int lastLeft, lastTop, lastFeet, lastScale;
+        int lastLeft, lastTop, lastFeet, lastGround, lastScale;
         bool lastFaceLeft, lastHadDust;
 
         /// <summary>The rendered frame.</summary>
@@ -42,6 +43,7 @@ namespace IdleWalker.Rendering
             int scale = walker.Scale;
             int width = CanvasColumns * scale;
             int height = CanvasRows * scale;
+            int ground = Round(walker.GroundLine);
             int top = Round(Math.Min(walker.GroundLine, walker.FeetY + RowsBelowFeet * scale)) - height;
             int left = Round(walker.CentreX) - width / 2;
             int feet = Round(walker.FeetY);
@@ -49,8 +51,8 @@ namespace IdleWalker.Rendering
             Pose pose = walker.CurrentPose();
 
             bool unchanged = hasLast && !hasDust && !lastHadDust &&
-                             left == lastLeft && top == lastTop && feet == lastFeet && scale == lastScale &&
-                             walker.FacesLeft == lastFaceLeft && pose.SameAs(lastPose);
+                             left == lastLeft && top == lastTop && feet == lastFeet && ground == lastGround &&
+                             scale == lastScale && walker.FacesLeft == lastFaceLeft && pose.SameAs(lastPose);
             if (unchanged) return false;
 
             hasLast = true;
@@ -58,6 +60,7 @@ namespace IdleWalker.Rendering
             lastLeft = left;
             lastTop = top;
             lastFeet = feet;
+            lastGround = ground;
             lastScale = scale;
             lastFaceLeft = walker.FacesLeft;
             lastHadDust = hasDust;
@@ -65,6 +68,15 @@ namespace IdleWalker.Rendering
             Top = top;
 
             surface.Reset(width, height);
+
+            // The shadow stays on the ground and thins out as it jumps.
+            double lift = (walker.GroundLine - walker.FeetY) / (40.0 * scale);
+            if (lift >= 0 && lift < 1)
+            {
+                surface.Shadow(walker.CentreX - left, walker.GroundLine - top,
+                               (6.4 - 2.2 * lift) * scale * pose.StretchX, 1.4 * scale, 0.42 * (1 - lift));
+            }
+
             foreach (Puff puff in walker.Puffs)
             {
                 double age = puff.Age;
@@ -72,25 +84,20 @@ namespace IdleWalker.Rendering
                 surface.Puff(Round(puff.X) - left, Round(puff.Y) - top, size, (int)(190 * (1 - age)));
             }
 
-            // The soles sit one outline-width above the ground.
-            DrawPose(surface, pose, walker.Personality.Palette, walker.FacesLeft, width / 2, feet - top - scale, scale);
-            surface.CommitCharacter(scale);
+            // The soles sit just above the ground line, leaving room for the halo.
+            DrawPose(surface, pose, walker.Personality.Look, walker.FacesLeft, walker.CentreX - left, walker.FeetY - top - 1, scale);
             return true;
         }
 
         /// <summary>
-        /// Draws a pose with its soles resting on soleY, centred on centreX.
-        /// Also used for the tray icon.
+        /// Draws a pose with its soles resting on soleY, centred on centreX,
+        /// and commits it to the canvas. Also used for the tray icon.
         /// </summary>
-        public static void DrawPose(Surface surface, Pose pose, Palette palette, bool faceLeft,
-                                    double centreX, double soleY, int scale)
+        public static void DrawPose(Surface surface, Pose pose, Look look, bool faceLeft,
+                                    double centreX, double soleY, double scale)
         {
-            double w = scale * pose.StretchX, h = scale * pose.StretchY;
-            surface.DrawPart(pose.Legs, palette, faceLeft, centreX, soleY, w, h, 0);
-            surface.DrawPart(pose.Torso, palette, faceLeft, centreX, soleY, w, h, pose.BodyDy);
-            surface.DrawPart(pose.Head, palette, faceLeft != pose.HeadTurned, centreX, soleY, w, h, pose.BodyDy);
-            if (pose.Overlay != null) surface.DrawPart(pose.Overlay, palette, faceLeft, centreX, soleY, w, h, pose.BodyDy);
-            if (pose.Bubble) surface.DrawPart(Art.Bubble, palette, false, centreX, soleY, w, h, pose.BodyDy);
+            MinionPainter.Draw(surface, pose, look, faceLeft, centreX, soleY, scale);
+            surface.CommitCharacter(1);
         }
 
         static int Round(double value)

@@ -69,8 +69,7 @@ namespace IdleWalker.App
             Surface surface = new Surface();
             surface.Reset(size, size);
             Personality first = Personality.Roster[0];
-            FrameRenderer.DrawPose(surface, Pose.Standing(first.Faces), first.Palette, false, size / 2, size - 2, 2);
-            surface.CommitCharacter(2);
+            FrameRenderer.DrawPose(surface, Pose.Standing(), first.Look, false, size / 2.0, size - 2, 1.85);
 
             using (Bitmap bitmap = new Bitmap(size, size))
             {

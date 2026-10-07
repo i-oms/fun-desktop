@@ -17,8 +17,10 @@ namespace IdleWalker.Domain
     {
         public readonly string Name;
         public readonly Temperament Temperament;
-        public readonly Palette Palette;
-        public readonly Art.Faces Faces;
+        public readonly Look Look;
+
+        /// <summary>The face it wears when nothing in particular is happening.</summary>
+        public readonly Expression BaseFace;
 
         /// <summary>Multiplier on the base walking speed.</summary>
         public readonly double SpeedFactor;
@@ -32,14 +34,15 @@ namespace IdleWalker.Domain
         /// <summary>Chance an idle moment is spent looking around / waving; the rest is resting.</summary>
         public readonly double LookWeight, WaveWeight;
 
-        Personality(string name, Temperament temperament, Palette palette, Art.Faces faces,
+        Personality(string name, Temperament temperament, Look look,
                     double speedFactor, double hopMin, double hopMax, double idleMin, double idleMax,
                     double lookWeight, double waveWeight)
         {
             Name = name;
             Temperament = temperament;
-            Palette = palette;
-            Faces = faces;
+            Look = look;
+            BaseFace = temperament == Temperament.Friendly ? Expression.Happy :
+                       temperament == Temperament.Aggressive ? Expression.Grumpy : Expression.Neutral;
             SpeedFactor = speedFactor;
             HopMin = hopMin;
             HopMax = hopMax;
@@ -56,28 +59,23 @@ namespace IdleWalker.Domain
         public static readonly Personality[] Roster =
         {
             // Two eyes, a few sprouts of hair, keeps to himself.
-            new Personality("Kevin", Temperament.Calm, Palette.Default,
-                            Art.MakeFaces(Art.HairSprouts, false, Art.Mood.Calm),
+            new Personality("Kevin", Temperament.Calm, new Look(false, HairStyle.Sprouts),
                             1.0, 4, 9, 5, 11, 0.40, 0.35),
 
             // One eye, hair combed flat, the troublemaker.
-            new Personality("Stuart", Temperament.Aggressive, Palette.Default,
-                            Art.MakeFaces(Art.HairCombed, true, Art.Mood.Angry),
+            new Personality("Stuart", Temperament.Aggressive, new Look(true, HairStyle.Combed),
                             1.2, 2.5, 6, 6, 14, 0.50, 0.00),
 
             // Bald, one green eye and one brown, loves everybody.
-            new Personality("Bob", Temperament.Friendly, Palette.Default,
-                            Art.MakeFaces(Art.HairNone, false, Art.Mood.Friendly, 'E', 'I'),
+            new Personality("Bob", Temperament.Friendly, new Look(false, HairStyle.None, Look.Green, Look.Brown),
                             0.9, 4, 9, 5, 11, 0.25, 0.55),
 
             // Two eyes, hair parted in the middle, always waving.
-            new Personality("Dave", Temperament.Friendly, Palette.Default,
-                            Art.MakeFaces(Art.HairParted, false, Art.Mood.Friendly),
+            new Personality("Dave", Temperament.Friendly, new Look(false, HairStyle.Parted),
                             0.95, 4, 9, 5, 11, 0.25, 0.55),
 
             // Two eyes, crew cut, picks fights.
-            new Personality("Mel", Temperament.Aggressive, Palette.Default,
-                            Art.MakeFaces(Art.HairCrew, false, Art.Mood.Angry),
+            new Personality("Mel", Temperament.Aggressive, new Look(false, HairStyle.Crew),
                             1.15, 2.5, 6, 6, 14, 0.50, 0.00),
         };
     }

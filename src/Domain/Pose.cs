@@ -1,32 +1,44 @@
 namespace IdleWalker.Domain
 {
-    /// <summary>One frame's worth of body positions.</summary>
+    /// <summary>
+    /// One frame's worth of body positions. Angles are in degrees, lengths
+    /// in units (the figure is 18 units tall); the painter turns it all
+    /// into pixels.
+    /// </summary>
     struct Pose
     {
-        public Art.Part Legs, Torso, Head, Overlay;
-        public bool HeadTurned; // head looks the opposite way to the body
-        public bool Bubble;
-        public int BodyDy;      // upper-body offset in pixels (positive is down)
-        public double StretchX, StretchY;
+        public Expression Face;
+        public double GazeX, GazeY;       // where the pupils point, -1..1: +X ahead, +Y up
+        public double Yaw;                // degrees turned about the vertical axis: 0 facing the viewer, 90 side on, ahead
+        public bool Walking;              // legs and arms swing with WalkPhase
+        public double WalkPhase;          // in strides
+        public double LegTuck;            // 0 standing, 1 knees pulled up for a jump
+        public double ArmNear, ArmFar;    // upper arm: 0 hanging, 90 straight ahead, 180 straight up
+        public double ForeNear, ForeFar;  // forearm bend added to the upper arm
+        public double Lean;               // forward lean, -1..1
+        public double BodyDy;             // upper body offset in units, positive is down
+        public double StretchX, StretchY; // squash and stretch
+        public bool Bubble;               // the "!" overhead
 
-        public static Pose Standing(Art.Faces faces)
+        public static Pose Standing()
         {
             Pose pose = new Pose();
-            pose.Legs = Art.LegsStand;
-            pose.Torso = Art.ArmMid;
-            pose.Head = faces.Normal;
+            pose.Face = Expression.Neutral;
+            pose.GazeX = 0.5;
             pose.StretchX = 1;
             pose.StretchY = 1;
             return pose;
         }
 
         /// <summary>True if drawing this pose would give the same picture as drawing other.</summary>
-        public bool SameAs(Pose other)
+        public bool SameAs(Pose o)
         {
-            return Legs == other.Legs && Torso == other.Torso &&
-                   Head == other.Head && Overlay == other.Overlay &&
-                   HeadTurned == other.HeadTurned && Bubble == other.Bubble &&
-                   BodyDy == other.BodyDy && StretchX == other.StretchX && StretchY == other.StretchY;
+            return Face.SameAs(o.Face) &&
+                   GazeX == o.GazeX && GazeY == o.GazeY && Yaw == o.Yaw &&
+                   Walking == o.Walking && WalkPhase == o.WalkPhase && LegTuck == o.LegTuck &&
+                   ArmNear == o.ArmNear && ArmFar == o.ArmFar && ForeNear == o.ForeNear && ForeFar == o.ForeFar &&
+                   Lean == o.Lean && BodyDy == o.BodyDy && StretchX == o.StretchX && StretchY == o.StretchY &&
+                   Bubble == o.Bubble;
         }
     }
 }

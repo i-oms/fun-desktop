@@ -1,7 +1,7 @@
 # IdleWalker
 
 A tiny Windows desktop companion. When your mouse cursor has not moved for two
-seconds, a small pixel-art Minion peeks over the bottom edge of the screen,
+seconds, a small shaded, 3D-looking Minion peeks over the bottom edge of the screen,
 hops out, and strolls along the bottom of your monitors - all of them,
 including external ones. Move the mouse and it gets a fright and dives back
 down.
@@ -23,8 +23,8 @@ fun/
     ├── Program.cs            entry point: single instance, DPI, message loop
     ├── Settings.cs           the tunable constants
     ├── Domain/               the characters - no Windows code in here
-    │   ├── Art.cs            pixel art parts and the face builder
-    │   ├── Palette.cs        letter → colour map
+    │   ├── Expression.cs     a face as numbers, and the repertoire of moods
+    │   ├── Look.cs           eyes, eye colour and hair of one Minion
     │   ├── Personality.cs    the cast: temperament, face, speed, habits
     │   ├── Pose.cs           which parts to show in one frame
     │   ├── Puff.cs           a speck of dust
@@ -32,7 +32,8 @@ fun/
     │   ├── Walker.cs         one character: state machine, physics, antics
     │   └── Troupe.cs         the group: staggered entrances, greetings, shoving
     ├── Rendering/            pixels
-    │   ├── Surface.cs        software canvas, outline pass, dirty-region tracking
+    │   ├── MinionPainter.cs  draws a Minion from solids: distance fields, normals, lighting
+    │   ├── Surface.cs        software canvas, soft halo, shadow, dirty-region tracking
     │   └── FrameRenderer.cs  lays out the canvas, draws a frame, skips unchanged ones
     ├── Platform/             Win32
     │   ├── Native.cs         P/Invoke declarations
@@ -56,7 +57,7 @@ fun/
 3. [Running](#running)
 4. [What it does, step by step](#what-it-does-step-by-step)
 5. [Tuning](#tuning)
-6. [Editing the character art](#editing-the-character-art)
+6. [Editing the character](#editing-the-character)
 7. [How it works (technical)](#how-it-works-technical)
 8. [Multiple monitors](#multiple-monitors)
 9. [Performance](#performance)
@@ -297,54 +298,68 @@ Timings that live in the state machine (`src\Domain\Walker.cs`): blink every
 the top of the class. Meeting distances and cooldowns are at the top of
 `src\Domain\Troupe.cs`.
 
-## Editing the character art
+## Editing the character
 
-The art lives in `src\Domain\Art.cs` as strings, one character per pixel,
-16 columns wide. The soles of the shoes are the bottom of row 17; parts
-declare which row their first line sits on (`new Part(10, ...)` starts on
-row 10). The Minion is drawn facing right and mirrored in code when it faces
-left.
+There is no sprite sheet. `src\Rendering\MinionPainter.cs` builds the
+Minion out of solids every frame: a capsule for the body, cylinders for the
+arms and legs, a sphere behind glass for each eye, a torus for each goggle
+rim, ellipsoids for the shoes. For every pixel it works out the signed
+distance to each solid (which gives a smooth, anti-aliased edge) and the
+surface normal at that point (which gives the lighting), then composites the
+solids back to front. The light sits above and to the left of the viewer,
+so the body is brighter on that side, the goggles catch a highlight and the
+rims gleam. A soft shadow is painted on the ground under the feet and thins
+out when the Minion jumps.
 
-Letters are turned into colours by a `Palette` (`src\Domain\Palette.cs`)
-at draw time. `Palette.Default` is the Minion outfit; a personality can
-derive its own with `.With(letter, rgb)`:
+The figure is 18 units tall and is drawn at `scale` pixels per unit (3 at
+100% display scaling), exactly the height the old pixel art had. Model
+coordinates run across from the centre (`u`, positive towards where it
+faces) and up from the soles (`v`); the geometry constants at the top of the
+painter put the goggles at `v = 12.55`, the mouth at `9.0`, the hips at
+`4.3` and so on.
 
-| Letter | Default colour | Used for |
-|---|---|---|
-| `.` | transparent | |
-| `Y` / `y` | `#F9D71C` / `#E2BE16` | body / near arm |
-| `D` / `d` | `#2F5BB7` / `#23468F` | overalls and near leg / pocket and far leg |
-| `G` / `g` | `#A6ABB3` / `#5C6069` | goggle rims / goggle strap |
-| `W` | `#FFFFFF` | lenses and the "!" |
-| `I` / `E` | `#5C3A1E` / `#3E8E4B` | brown pupil / green pupil |
-| `K` | `#2B2233` | hair, brows, mouth, gloves |
-| `B` / `b` | `#34303D` / `#262230` | near shoe / far shoe |
+**Faces.** An `Expression` (`src\Domain\Expression.cs`) is a set of
+numbers: how far the lids are down, a squint, a wink, where the brows sit and
+how they tilt, pupil size and offset, cross-eyes, and the mouth's curve,
+opening, width, sideways shift, teeth and tremble. Named presets cover the
+repertoire:
 
-Add a `.With(...)` to `Palette.Default` to introduce a letter. The dark
-outline is not drawn by hand - it is generated around whatever is opaque, so
-new art gets it automatically.
+| Expression | Used when |
+|---|---|
+| `Neutral`, `Happy`, `Grumpy` | the resting face of a calm, friendly or aggressive Minion |
+| `Curious` | peeking out of the ground, looking around |
+| `Grin`, `Winking`, `Laugh` | waving at the cursor, greeting another Minion |
+| `Sleepy` | a long rest |
+| `Focused`, `Excited` | winding up for a jump; a big jump |
+| `Determined`, `Smug` | charging at someone; standing over them afterwards |
+| `Dizzy`, `Scared`, `Sad` | being shoved into the air; running away; slowing down after |
+| `Surprised` | the mouse moved |
+| `Sad` | sent away because the count was lowered |
 
-The parts are:
+The walker eases its face towards the current target expression every frame
+(`Expression.Towards`), so moods melt into one another over about a tenth of a
+second rather than snapping, and a blink is laid over whatever the face is
+doing. The body turns the same way: it swings round to face the way it is
+walking, turns to face you when it stops to rest or wave at the cursor, and
+towards the other Minion when greeting, charging or gloating
+(`Walker.YawTarget`). The pupils follow a gaze point: your cursor when it is near, another
+Minion when greeting or charging, ahead when walking, back over the shoulder
+when the head is turned.
 
-- Heads come from `Art.MakeFaces(hair, oneEye, mood, farPupil, nearPupil)`,
-  which returns the three expressions (normal, blinking, surprised) as rows
-  0-9: a hair row (`HairNone`, `HairSprouts`, `HairCombed`, `HairParted`,
-  `HairCrew`), the dome, one or two goggle lenses with the pupils looking
-  ahead (centred when surprised), and a mouth that follows the mood - flat
-  for calm, a smile for friendly, a frown with heavy brows for angry. The
-  pupil letters are what give Bob his odd-coloured eyes.
-- `ArmMid`, `ArmForward`, `ArmBack`, `TorsoPlain` - rows 10-13 (overall
-  straps, bib and pocket, with the near arm in different positions).
-- `WaveA`, `WaveB` - a raised arm drawn over `TorsoPlain` and the head.
-- `LegsStand`, `LegsJump`, `WalkLegs[0..5]` - rows 13-17. Row 13 is a hip
-  row normally hidden under the waist; it fills the gap when the upper body
-  bobs upward. `D/B` is the leg nearest the viewer, `d/b` the far one.
-- `Bubble` - the "!" (rows -7 to -3, i.e. above the head).
+**Looks.** A `Look` (`src\Domain\Look.cs`) is what a Minion is born with:
+one eye or two, the iris colour of each, and a hair style (`None`, `Sprouts`,
+`Combed`, `Parted`, `Crew`). Hair is a handful of tapering strands rooted on
+the dome.
 
-A `Pose` (`src\Domain\Pose.cs`) picks one of each and adds an upper-body
-bob (`BodyDy`), horizontal and vertical stretch factors, whether the head is
-turned and whether the bubble shows. `Walker.CurrentPose()` decides the pose
-for each frame; `FrameRenderer.DrawPose()` turns it into pixels.
+**Poses.** A `Pose` (`src\Domain\Pose.cs`) carries the expression, the gaze,
+the yaw (how far the body is turned about its axis: 0 faces you, 58 is the
+three-quarter view it walks in, negative is a glance back over the
+shoulder), whether it is walking and where in the stride it is (legs and
+arms swing continuously from that), how far the knees are tucked
+up, the angle of each upper arm and forearm, a forward lean, an upper-body
+bob and squash-and-stretch factors, and whether the "!" shows.
+`Walker.CurrentPose()` decides the pose for each frame;
+`FrameRenderer.DrawPose()` paints it.
 
 ## How it works (technical)
 
@@ -359,15 +374,15 @@ The code is split into four layers; dependencies point downwards only.
 │ Platform     SpriteWindow · MonitorWorld · FramePump             │  Win32: windows, monitors,
 │              StartupRegistration · UserSettings · Native         │  registry, vsync
 ├──────────────────────────────────────────────────────────────────┤
-│ Rendering    FrameRenderer · Surface                             │  pixels, no Win32
+│ Rendering    FrameRenderer · MinionPainter · Surface             │  pixels, no Win32
 ├──────────────────────────────────────────────────────────────────┤
-│ Domain       Troupe · Walker · Personality · Pose · Art          │  the characters; pure C#
-│              Palette · Puff · IWorld                             │
+│ Domain       Troupe · Walker · Personality · Pose · Expression   │  the characters; pure C#
+│              Look · Puff · IWorld                                │
 └──────────────────────────────────────────────────────────────────┘
                               Settings (constants, used by all)
 ```
 
-- **Domain** is the characters themselves: the art, each walker's state
+- **Domain** is the characters themselves: their looks and faces, each walker's state
   machine and physics, and the `Troupe` that owns the group and decides when
   two walkers greet or one shoves another. It depends on nothing
   Windows-specific. The terrain is abstracted behind `IWorld` (ground height
@@ -375,8 +390,8 @@ The code is split into four layers; dependencies point downwards only.
   simulation runs headless against a fake world - that is how the group
   behaviour was tested.
 - **Rendering** turns a `Walker` into an array of premultiplied ARGB pixels.
-  It knows about the canvas layout and the outline pass but not about
-  windows. One `FrameRenderer` per walker.
+  It knows about the canvas layout, the painter and the halo pass but not
+  about windows. One `FrameRenderer` per walker.
 - **Platform** is the only place that touches Win32: the layered window, the
   real monitors (`MonitorWorld` implements `IWorld` on top of
   `Screen.AllScreens` and `GetDpiForMonitor`), the vsync pump, the registry.
@@ -397,7 +412,7 @@ WalkerApp.OnTick     MonitorWorld.Refresh · CursorWatcher.Poll ─▶ Troupe.St
                                               │
 Troupe               spawn next / startle all ─▶ Walker.Step ×n ─▶ Interact (greet, charge, shove)
                                               │
-FrameRenderer ×n     Walker state ─▶ Pose ─▶ Surface (dust, parts, outline)   [skipped if unchanged]
+FrameRenderer ×n     Walker state ─▶ Pose ─▶ Surface (shadow, dust, painted Minion, halo)   [skipped if unchanged]
                                               │
 SpriteWindow ×n      Surface.Pixels (content rect only) ─▶ DIB section ─▶ UpdateLayeredWindow
 ```
@@ -442,30 +457,36 @@ leaves the window.
 `UpdateLayeredWindow` wants; `0xAARRGGBB` in memory is `B,G,R,A` bytes, which
 is what a 32-bpp `BI_RGB` DIB holds).
 
-1. Dust puffs are filled directly into the canvas as translucent squares.
-2. Character parts are drawn into a separate layer as solid rectangles - one
-   per art pixel - at `cell size x stretch`, with colours looked up in the
-   walker's `Palette`. Because every rectangle edge is computed with the same
-   rounding formula, stretched cells never leave gaps.
-3. **Outline pass:** a transparent layer pixel becomes outline if an opaque
-   pixel lies within one cell of it along its row or its column. This is done
-   in four linear sweeps (left, right, down, up) so it costs O(pixels), and it
-   reproduces the look of a hand-drawn 4-neighbour pixel outline while
-   working for stretched, bobbing and overlapping parts.
-4. The layer is laid over the canvas (character pixels are fully opaque, so
-   this is a copy).
+1. The shadow (a soft ellipse) and the dust puffs are drawn directly into
+   the canvas.
+2. `MinionPainter` shades the character into a separate layer, one pixel at
+   a time. Each pixel is mapped into model units (undoing squash, stretch
+   and facing), every solid contributes a coverage from its signed distance
+   (`0.5 - d / pixel`, clamped, which is a one-pixel anti-aliased edge) and a
+   colour from its lit normal, and the solids are composited back to front:
+   far leg, near leg, body with the overalls and goggle strap painted on,
+   eyes and rims, brows, mouth, hair, arms, the "!".
+3. **Halo pass:** a transparent layer pixel next to a character pixel (along
+   its row or column) gets a translucent dark halo, found with four linear
+   sweeps so it costs O(pixels). It keeps the figure legible on a pale or
+   busy desktop without looking like an inked outline.
+4. The layer is laid over the canvas with a premultiplied "over", so
+   anti-aliased edges blend with the shadow and dust behind them.
 
-No GDI+ is involved in the per-frame path; it is all integer array writes.
+No GDI+ is involved in the per-frame path; it is all array writes. Painting
+one Minion costs about 1 ms at 100% scaling (2 ms at 150%), and only
+happens for walkers whose picture changed.
 
-**Doing less work.** The canvas is 40 x 48 cells but the character is only
-about 18 x 20, so `Surface` tracks the rectangle that has actually been drawn
-on. Clearing, the outline sweeps, the compositing and the upload to the DIB
+**Doing less work.** The canvas is 40 x 48 units but the character is only
+about 12 x 21, so `Surface` tracks the rectangle that has actually been drawn
+on. Clearing, the halo sweeps, the compositing and the upload to the DIB
 all touch only that rectangle, and `UpdateLayeredWindow` is given just that
 sub-rectangle (the window shrinks to fit the content each frame). On top of
 that `FrameRenderer` compares the new pose, position, scale and facing with
 the previous frame and skips everything - including the `UpdateLayeredWindow`
 call - when nothing has changed, which is most frames while a walker is
-standing still.
+standing still. Slow motions such as breathing are stepped in eighths of a
+unit for the same reason.
 
 ### Frame pacing
 
@@ -535,16 +556,18 @@ worst case is the count resets to 1 next time.
 ### Adding things
 
 - A new character: add an entry to `Personality.Roster` (name, temperament,
-  palette, faces, speed, hop/idle ranges, idle weights) and, if you want more
-  than five, raise `Settings.MaxWalkers`.
+  look, speed, hop/idle ranges, idle weights) and, if you want more than
+  five, raise `Settings.MaxWalkers`.
 - A new temperament: add it to the `Temperament` enum and teach
   `Troupe.TryGreet` / `ConsiderCharging` how it behaves towards others.
 - A new idle antic: add a `Mode` to `Walker`, start it from `PickIdle` via
   `Brake(...)`, step it in `Walker.Step`, and give it a pose in
   `CurrentPose`.
-- New art: add a `Part` in `Art.cs` (16 columns wide, say which row it
-  starts on) and reference it from a pose. New colours are new letters in
-  `Palette.Default`.
+- A new expression: add a preset to `Expression` and pick it in
+  `Walker.UpdateFace` for the situation it belongs to. A new hair style is a
+  case in `MinionPainter.HairFor`. A new accessory is a solid in the painter:
+  a distance function, a normal, an albedo, and a place in the back-to-front
+  order.
 - A new menu item: `TrayMenu` owns the menu; expose state as a property or
   an event like `Paused` / `Count` / `ExitRequested`.
 - Anything needing a new Win32 call goes in `Native.cs` and is used only
@@ -636,5 +659,5 @@ What keeps it cheap:
   of the working area).
 - **Keyboard activity does not count** as "not idle" - only the cursor does,
   as requested. Switching to `GetLastInputInfo` would include the keyboard.
-- The art is 16 x 18 cells; details such as individual fingers are not going
-  to happen.
+- The figure is only about 36 x 54 pixels at 100% scaling; details such as
+  individual fingers are not going to happen.
