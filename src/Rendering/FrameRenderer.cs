@@ -86,7 +86,6 @@ namespace IdleWalker.Rendering
                                     double centreX, double soleY, int scale)
         {
             double w = scale * pose.StretchX, h = scale * pose.StretchY;
-            surface.DrawPart(pose.Tail, palette, faceLeft, centreX, soleY, w, h, pose.BodyDy);
             surface.DrawPart(pose.Legs, palette, faceLeft, centreX, soleY, w, h, 0);
             surface.DrawPart(pose.Torso, palette, faceLeft, centreX, soleY, w, h, pose.BodyDy);
             surface.DrawPart(pose.Head, palette, faceLeft != pose.HeadTurned, centreX, soleY, w, h, pose.BodyDy);

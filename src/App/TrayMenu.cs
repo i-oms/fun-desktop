@@ -62,13 +62,14 @@ namespace IdleWalker.App
             icon.Visible = true;
         }
 
-        // The character itself, standing, makes the icon.
+        // The first Minion, standing, makes the icon.
         static IntPtr RenderIcon()
         {
             const int size = 40;
             Surface surface = new Surface();
             surface.Reset(size, size);
-            FrameRenderer.DrawPose(surface, Pose.Standing(Art.CalmFaces), Palette.Default, false, size / 2, size - 2, 2);
+            Personality first = Personality.Roster[0];
+            FrameRenderer.DrawPose(surface, Pose.Standing(first.Faces), first.Palette, false, size / 2, size - 2, 2);
             surface.CommitCharacter(2);
 
             using (Bitmap bitmap = new Bitmap(size, size))

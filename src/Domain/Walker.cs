@@ -429,7 +429,6 @@ namespace IdleWalker.Domain
                     bool rising = vy < 0;
                     pose.Legs = rising ? Art.LegsJump : Art.LegsStand;
                     pose.Torso = rising ? Art.ArmBack : Art.ArmForward;
-                    pose.Tail = rising ? Art.TailDown : Art.TailUp;
                     double stretch = Math.Min(1, Math.Abs(vy) / (600 * sizeFactor)) * 0.1;
                     pose.StretchY = 1 + stretch;
                     pose.StretchX = 1 - stretch * 0.7;
@@ -490,7 +489,6 @@ namespace IdleWalker.Domain
             int frame = (int)(walkPhase * 6) % 6;
             pose.Legs = Art.WalkLegs[frame];
             pose.Torso = Art.WalkArms[frame];
-            pose.Tail = frame < 3 ? Art.TailA : Art.TailB;
             pose.BodyDy = Art.WalkBob[frame] * step;
         }
 

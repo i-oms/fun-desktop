@@ -36,21 +36,19 @@ namespace IdleWalker.Domain
             return unchecked((int)0xFF000000) | rgb;
         }
 
-        /// <summary>The original teal-and-orange outfit.</summary>
+        /// <summary>The Minion: yellow body, denim overalls, steel goggles.</summary>
         public static readonly Palette Default = new Palette()
-            .With('Y', 0xFFD23F)  // pom-pom
-            .With('T', 0x1FA39A)  // beanie
-            .With('t', 0x157A74)  // beanie brim
-            .With('S', 0xF6C9A0)  // skin
-            .With('P', 0xEFA08A)  // cheek
-            .With('K', 0x2B2233)  // eyes
-            .With('O', 0xF2762E)  // scarf
-            .With('N', 0x34508F)  // jacket
-            .With('n', 0x263A6B)  // sleeve
-            .With('G', 0x6B6F82)  // near leg
-            .With('g', 0x4E5163)  // far leg
-            .With('B', 0x6B4226)  // near boot
-            .With('b', 0x4F301B)  // far boot
-            .With('W', 0xFFFFFF); // "!"
+            .With('Y', 0xF9D71C)  // body
+            .With('y', 0xE2BE16)  // near arm
+            .With('D', 0x2F5BB7)  // overalls / near leg
+            .With('d', 0x23468F)  // pocket / far leg
+            .With('G', 0xA6ABB3)  // goggle rims
+            .With('g', 0x5C6069)  // goggle strap
+            .With('W', 0xFFFFFF)  // lenses and the "!"
+            .With('I', 0x5C3A1E)  // brown pupil
+            .With('E', 0x3E8E4B)  // green pupil
+            .With('K', 0x2B2233)  // hair, mouth, brows, gloves
+            .With('B', 0x34303D)  // near shoe
+            .With('b', 0x262230); // far shoe
     }
 }

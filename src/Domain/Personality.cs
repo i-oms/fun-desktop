@@ -50,36 +50,34 @@ namespace IdleWalker.Domain
         }
 
         /// <summary>
-        /// The cast, in the order they join as the count goes up. The first
-        /// is the original walker, exactly as it always behaved.
+        /// The Minions, in the order they join as the count goes up. Kevin is
+        /// the first out and behaves exactly as the original walker did.
         /// </summary>
         public static readonly Personality[] Roster =
         {
-            new Personality("Teal", Temperament.Calm, Palette.Default, Art.CalmFaces,
+            // Two eyes, a few sprouts of hair, keeps to himself.
+            new Personality("Kevin", Temperament.Calm, Palette.Default,
+                            Art.MakeFaces(Art.HairSprouts, false, Art.Mood.Calm),
                             1.0, 4, 9, 5, 11, 0.40, 0.35),
 
-            new Personality("Red", Temperament.Aggressive,
-                            Palette.Default.With('T', 0xD83A3A).With('t', 0x9C2727).With('Y', 0x5B5B66)
-                                           .With('O', 0x3B2A4A).With('N', 0x5C4B3B).With('n', 0x40332A),
-                            Art.AngryFaces,
+            // One eye, hair combed flat, the troublemaker.
+            new Personality("Stuart", Temperament.Aggressive, Palette.Default,
+                            Art.MakeFaces(Art.HairCombed, true, Art.Mood.Angry),
                             1.2, 2.5, 6, 6, 14, 0.50, 0.00),
 
-            new Personality("Pink", Temperament.Friendly,
-                            Palette.Default.With('T', 0xE0569B).With('t', 0xA83C73).With('Y', 0xFFF1C1)
-                                           .With('O', 0xFFD23F).With('N', 0x2F8F5B).With('n', 0x226841),
-                            Art.FriendlyFaces,
+            // Bald, one green eye and one brown, loves everybody.
+            new Personality("Bob", Temperament.Friendly, Palette.Default,
+                            Art.MakeFaces(Art.HairNone, false, Art.Mood.Friendly, 'E', 'I'),
                             0.9, 4, 9, 5, 11, 0.25, 0.55),
 
-            new Personality("Blue", Temperament.Friendly,
-                            Palette.Default.With('T', 0x3FA7E0).With('t', 0x2C78A6).With('Y', 0xFFD23F)
-                                           .With('O', 0xE04545).With('N', 0x6B4FA3).With('n', 0x4C3878),
-                            Art.FriendlyFaces,
+            // Two eyes, hair parted in the middle, always waving.
+            new Personality("Dave", Temperament.Friendly, Palette.Default,
+                            Art.MakeFaces(Art.HairParted, false, Art.Mood.Friendly),
                             0.95, 4, 9, 5, 11, 0.25, 0.55),
 
-            new Personality("Olive", Temperament.Aggressive,
-                            Palette.Default.With('T', 0x8A9A2E).With('t', 0x5F6B1F).With('Y', 0xF2762E)
-                                           .With('O', 0x1FA39A).With('N', 0x8B3A4A).With('n', 0x652834),
-                            Art.AngryFaces,
+            // Two eyes, crew cut, picks fights.
+            new Personality("Mel", Temperament.Aggressive, Palette.Default,
+                            Art.MakeFaces(Art.HairCrew, false, Art.Mood.Angry),
                             1.15, 2.5, 6, 6, 14, 0.50, 0.00),
         };
     }

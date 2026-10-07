@@ -1,12 +1,12 @@
 # IdleWalker
 
 A tiny Windows desktop companion. When your mouse cursor has not moved for two
-seconds, a small pixel-art character peeks over the bottom edge of the screen,
+seconds, a small pixel-art Minion peeks over the bottom edge of the screen,
 hops out, and strolls along the bottom of your monitors - all of them,
 including external ones. Move the mouse and it gets a fright and dives back
 down.
 
-You can have up to five of them out at once. Each has its own colours and
+You can have up to five of them out at once. Each has its own face and
 temperament: the sociable ones stop to wave at each other, the aggressive
 ones charge at anyone nearby and shove them off their feet.
 
@@ -23,9 +23,9 @@ fun/
     ├── Program.cs            entry point: single instance, DPI, message loop
     ├── Settings.cs           the tunable constants
     ├── Domain/               the characters - no Windows code in here
-    │   ├── Art.cs            pixel art parts and the three faces
-    │   ├── Palette.cs        letter → colour maps, one per outfit
-    │   ├── Personality.cs    the cast: temperament, colours, speed, habits
+    │   ├── Art.cs            pixel art parts and the face builder
+    │   ├── Palette.cs        letter → colour map
+    │   ├── Personality.cs    the cast: temperament, face, speed, habits
     │   ├── Pose.cs           which parts to show in one frame
     │   ├── Puff.cs           a speck of dust
     │   ├── IWorld.cs         what a walker needs to know about the terrain
@@ -138,13 +138,13 @@ is a convenience and is not checked in.)
 
 Start `IdleWalker.exe`. Nothing visible happens except a small icon in the
 notification area (near the clock; it may be hidden under the `^` overflow
-arrow). Leave the mouse alone for two seconds and the character appears.
+arrow). Leave the mouse alone for two seconds and a Minion appears.
 
 **Tray icon menu** (right-click):
 
 | Item | Effect |
 |---|---|
-| Walkers: *n* → 1…5 | How many characters come out. Raising it brings the new ones out straight away (one at a time); lowering it sends the extras away. Remembered between runs. |
+| Walkers: *n* → 1…5 | How many Minions come out. Raising it brings the new ones out straight away (one at a time); lowering it sends the extras away. Remembered between runs. |
 | Start with Windows | Ticked: the program starts when you sign in. See below. |
 | Pause | Keeps the characters hidden until unticked. If they are on screen, they leave immediately. |
 | Exit | Quits the program. |
@@ -153,16 +153,16 @@ Only one instance can run at a time; starting a second one quietly exits.
 
 ### The cast
 
-Walkers join in this order as you raise the count. The first one is the
-original character and behaves exactly as it always did.
+Minions join in this order as you raise the count. Kevin is the first one
+out and behaves exactly as the original walker always did.
 
 | # | Name | Temperament | Look | Habits |
 |---|---|---|---|---|
-| 1 | Teal | Calm | teal beanie, orange scarf, navy jacket | Normal pace. Looks around, waves at your cursor, rests. Nods at walkers it meets. |
-| 2 | Red | Aggressive | red beanie, dark scarf, brown jacket, heavy brows | 20% faster, hops twice as often, never waves. Charges at anyone within reach and shoves them. |
-| 3 | Pink | Friendly | pink beanie, yellow scarf, green jacket, smile | A little slower. Waves a lot - at nearby walkers in preference to the cursor. Stops to wave at anyone it meets. |
-| 4 | Blue | Friendly | sky-blue beanie, red scarf, purple jacket, smile | As Pink. |
-| 5 | Olive | Aggressive | olive beanie, teal scarf, maroon jacket, heavy brows | As Red. |
+| 1 | Kevin | Calm | two eyes, a few sprouts of hair | Normal pace. Looks around, waves at your cursor, rests. Nods at Minions it meets. |
+| 2 | Stuart | Aggressive | one eye, hair combed flat, heavy brow | 20% faster, hops twice as often, never waves. Charges at anyone within reach and shoves them. |
+| 3 | Bob | Friendly | bald, one green eye and one brown, big smile | A little slower. Waves a lot - at nearby Minions in preference to the cursor. Stops to wave at anyone it meets. |
+| 4 | Dave | Friendly | two eyes, hair parted in the middle, smile | As Bob. |
+| 5 | Mel | Aggressive | two eyes, crew cut, heavy brows | As Stuart. |
 
 **How they get on**
 
@@ -238,8 +238,8 @@ Stop-Process -Name IdleWalker
    a second. A move of more than 2 pixels (to ignore sensor jitter) resets the
    idle timer.
 2. **Peeking.** After 2 seconds of stillness it picks a random spot along the
-   bottom of the monitor the cursor is on. The top of the hat eases up over
-   the edge until the eyes are showing, the head turns to check both ways,
+   bottom of the monitor the cursor is on. The top of the head eases up over
+   the edge until the goggles are showing, the head turns to check both ways,
    then it ducks down a little...
 3. **Entrance.** ...and springs out of the ground with a burst of dust, lands
    with a squash, pauses for half a second and starts walking.
@@ -300,28 +300,25 @@ the top of the class. Meeting distances and cooldowns are at the top of
 ## Editing the character art
 
 The art lives in `src\Domain\Art.cs` as strings, one character per pixel,
-16 columns wide. The soles of the boots are the bottom of row 17; parts
+16 columns wide. The soles of the shoes are the bottom of row 17; parts
 declare which row their first line sits on (`new Part(10, ...)` starts on
-row 10). The figure is drawn facing right and mirrored in code when it faces
+row 10). The Minion is drawn facing right and mirrored in code when it faces
 left.
 
 Letters are turned into colours by a `Palette` (`src\Domain\Palette.cs`)
-at draw time. `Palette.Default` is the original outfit; each personality
-derives its own with `.With(letter, rgb)`:
+at draw time. `Palette.Default` is the Minion outfit; a personality can
+derive its own with `.With(letter, rgb)`:
 
 | Letter | Default colour | Used for |
 |---|---|---|
 | `.` | transparent | |
-| `Y` | `#FFD23F` | pom-pom |
-| `T` / `t` | `#1FA39A` / `#157A74` | beanie / brim |
-| `S` | `#F6C9A0` | skin |
-| `P` | `#EFA08A` | cheek |
-| `K` | `#2B2233` | eyes, brows, mouth |
-| `O` | `#F2762E` | scarf |
-| `N` / `n` | `#34508F` / `#263A6B` | jacket / sleeve |
-| `G` / `g` | `#6B6F82` / `#4E5163` | near leg / far leg |
-| `B` / `b` | `#6B4226` / `#4F301B` | near boot / far boot |
-| `W` | `#FFFFFF` | the "!" |
+| `Y` / `y` | `#F9D71C` / `#E2BE16` | body / near arm |
+| `D` / `d` | `#2F5BB7` / `#23468F` | overalls and near leg / pocket and far leg |
+| `G` / `g` | `#A6ABB3` / `#5C6069` | goggle rims / goggle strap |
+| `W` | `#FFFFFF` | lenses and the "!" |
+| `I` / `E` | `#5C3A1E` / `#3E8E4B` | brown pupil / green pupil |
+| `K` | `#2B2233` | hair, brows, mouth, gloves |
+| `B` / `b` | `#34303D` / `#262230` | near shoe / far shoe |
 
 Add a `.With(...)` to `Palette.Default` to introduce a letter. The dark
 outline is not drawn by hand - it is generated around whatever is opaque, so
@@ -329,16 +326,19 @@ new art gets it automatically.
 
 The parts are:
 
-- `CalmFaces`, `FriendlyFaces`, `AngryFaces` - each a set of three heads
-  (normal, blinking, surprised), rows 0-9. Friendly has a smile; angry has
-  heavy brows.
-- `ArmMid`, `ArmForward`, `ArmBack`, `TorsoPlain` - rows 10-13 (scarf +
-  jacket with the near arm in different positions).
+- Heads come from `Art.MakeFaces(hair, oneEye, mood, farPupil, nearPupil)`,
+  which returns the three expressions (normal, blinking, surprised) as rows
+  0-9: a hair row (`HairNone`, `HairSprouts`, `HairCombed`, `HairParted`,
+  `HairCrew`), the dome, one or two goggle lenses with the pupils looking
+  ahead (centred when surprised), and a mouth that follows the mood - flat
+  for calm, a smile for friendly, a frown with heavy brows for angry. The
+  pupil letters are what give Bob his odd-coloured eyes.
+- `ArmMid`, `ArmForward`, `ArmBack`, `TorsoPlain` - rows 10-13 (overall
+  straps, bib and pocket, with the near arm in different positions).
 - `WaveA`, `WaveB` - a raised arm drawn over `TorsoPlain` and the head.
 - `LegsStand`, `LegsJump`, `WalkLegs[0..5]` - rows 13-17. Row 13 is a hip
-  row normally hidden under the jacket; it fills the gap when the upper body
-  bobs upward. `G/B` is the leg nearest the viewer, `g/b` the far one.
-- `TailDown`, `TailA`, `TailB`, `TailUp` - the loose end of the scarf.
+  row normally hidden under the waist; it fills the gap when the upper body
+  bobs upward. `D/B` is the leg nearest the viewer, `d/b` the far one.
 - `Bubble` - the "!" (rows -7 to -3, i.e. above the head).
 
 A `Pose` (`src\Domain\Pose.cs`) picks one of each and adds an upper-body
