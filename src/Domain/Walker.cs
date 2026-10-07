@@ -586,7 +586,7 @@ namespace IdleWalker.Domain
                     Walk(ref pose);
                     pose.Lean = 0.4;
                     pose.ArmNear = 115 + 25 * Math.Sin(time * 22);
-                    pose.ArmFar = -115 + 25 * Math.Sin(time * 22);
+                    pose.ArmFar = -115 - 25 * Math.Sin(time * 22);
                     pose.ForeNear = 30;
                     pose.ForeFar = -30;
                     break;
@@ -606,8 +606,12 @@ namespace IdleWalker.Domain
                 {
                     bool rising = vy < 0;
                     pose.LegTuck = rising ? 1 : 0.3;
-                    pose.ArmNear = pose.ArmFar = rising ? -60 : 55;
-                    pose.ForeNear = pose.ForeFar = rising ? 25 : 30;
+                    // Mirrored (one ahead, one behind) so both hands don't end
+                    // up on the same side when jumping past sideways.
+                    pose.ArmNear = rising ? 60 : 55;
+                    pose.ArmFar = rising ? -60 : -55;
+                    pose.ForeNear = rising ? 25 : 30;
+                    pose.ForeFar = rising ? -25 : -30;
                     double stretch = Math.Min(1, Math.Abs(vy) / (600 * sizeFactor)) * 0.1;
                     pose.StretchY = 1 + stretch;
                     pose.StretchX = 1 - stretch * 0.7;
@@ -679,7 +683,11 @@ namespace IdleWalker.Domain
         void WaveArm(ref Pose pose)
         {
             // Arm up, forearm out to the side so the hand clears the goggles.
-            pose.ArmNear = 150 + 8 * Math.Sin(modeTime * 16);
+            // Turned sideways the goggles swing out to the edge, so open the
+            // arm up (more horizontal) to stay past them instead of waving
+            // over the face.
+            double widen = 1 - Math.Cos(yaw * Math.PI / 180);
+            pose.ArmNear = 150 + 8 * Math.Sin(modeTime * 16) - 130 * widen;
             pose.ForeNear = -25 + 25 * Math.Sin(modeTime * 16);
         }
 

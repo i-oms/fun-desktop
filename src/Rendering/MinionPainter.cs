@@ -41,7 +41,9 @@ namespace IdleWalker.Rendering
         const double GoggleOut = 0.4;                     // goggles stand this far off the body
 
         const double HipV = 4.3, HipX = 1.7, LegLen = 3.0, LegR = 0.95;
-        const double ShoulderX = 4.55, ShoulderV = 10.2, UpperArm = 1.75, Forearm = 1.85;
+        // Shoulders sit at the body surface so hanging hands rest at the
+        // sides instead of on the belly.
+        const double ShoulderX = 5.2, ShoulderV = 10.2, UpperArm = 1.75, Forearm = 1.85;
         const double ArmR = 0.72, ForeR = 0.66, GloveR = 0.95;
 
         const double Deg = Math.PI / 180;
@@ -115,9 +117,13 @@ namespace IdleWalker.Rendering
             toe = 0.3 + 0.7 * sinY;                      // and its toe points the way it is going
 
             // Arms: shoulders at the sides of the body, swung round likewise.
-            // They swing opposite to the leg on the same side.
+            // They swing opposite to the leg on the same side, but only when
+            // hanging. An explicitly raised arm (waving, flailing overhead,
+            // hands on hips, ...) stays where the pose puts it.
             double armSwing = pose.Walking ? 32 * Math.Sin(p) : 0;
             double foreSwing = pose.Walking ? 14 : 0;
+            if (pose.ArmNear != 0 || pose.ArmFar != 0) armSwing = 0;
+            if (pose.ForeNear != 0 || pose.ForeFar != 0) foreSwing = 0;
             PlaceArm(0, -ShoulderX, pose.ArmFar + armSwing, pose.ForeFar + foreSwing);
             PlaceArm(1, ShoulderX, pose.ArmNear - armSwing, pose.ForeNear + foreSwing);
 
@@ -155,9 +161,10 @@ namespace IdleWalker.Rendering
             shU[i] = x * cosY;
             armZ[i] = -x * sinY;
             armK[i] = 0.78 + 0.22 * (1 + armZ[i] / ShoulderX) / 2;
-            // An arm the turn has put behind the body stays there unless it
-            // is raised or thrown forward, which brings it round the front.
-            armFront[i] = armZ[i] >= -0.05 || Math.Abs(upper) > 60;
+            // An arm the turn has put behind the body stays there: a raised
+            // hand waves from its own side (sticking out past the silhouette)
+            // instead of popping round to the front face.
+            armFront[i] = armZ[i] >= -0.05;
             double a = upper * Deg;
             elbU[i] = shU[i] + UpperArm * Math.Sin(a);
             elbV[i] = ShoulderV - UpperArm * Math.Cos(a);
