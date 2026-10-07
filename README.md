@@ -6,16 +6,37 @@ hops out, and strolls along the bottom of your monitors - all of them,
 including external ones. Move the mouse and it gets a fright and dives back
 down.
 
-It is a single C# source file with no dependencies beyond what ships with
-Windows: no runtime to install, no NuGet packages, no IDE needed.
+It is plain C# with no dependencies beyond what ships with Windows: no
+runtime to install, no NuGet packages, no IDE needed.
 
 ```
 fun/
-├── IdleWalker.cs   all of the code (art, renderer, window, behaviour)
-├── build.cmd       builds IdleWalker.exe with the compiler built into Windows
-├── IdleWalker.exe  the built program (ignored by git, see .gitignore)
-├── README.md       this file
-└── .gitignore
+├── build.cmd                 builds IdleWalker.exe with the compiler built into Windows
+├── IdleWalker.exe            the built program (ignored by git, see .gitignore)
+├── README.md                 this file
+├── .gitignore
+└── src/
+    ├── Program.cs            entry point: single instance, DPI, message loop
+    ├── Settings.cs           the tunable constants
+    ├── Domain/               the character - no Windows code in here
+    │   ├── Art.cs            pixel art parts and palette
+    │   ├── Pose.cs           which parts to show in one frame
+    │   ├── Puff.cs           a speck of dust
+    │   ├── IWorld.cs         what the walker needs to know about the terrain
+    │   └── Walker.cs         state machine, physics, idle behaviour
+    ├── Rendering/            pixels
+    │   ├── Surface.cs        software canvas, outline pass
+    │   └── FrameRenderer.cs  lays out the canvas and draws a frame
+    ├── Platform/             Win32
+    │   ├── Native.cs         P/Invoke declarations
+    │   ├── MonitorWorld.cs   IWorld backed by the real monitors
+    │   ├── SpriteWindow.cs   layered click-through window
+    │   ├── FramePump.cs      vsync-paced tick thread
+    │   └── StartupRegistration.cs   the "Start with Windows" registry entry
+    └── App/                  wiring
+        ├── WalkerApp.cs      the per-frame loop
+        ├── CursorWatcher.cs  idle detection
+        └── TrayMenu.cs       notification-area icon and menu
 ```
 
 ---
@@ -59,7 +80,7 @@ It runs this single command:
 
 ```bat
 %WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe /nologo /target:winexe /optimize+ ^
-    /out:IdleWalker.exe /r:System.Windows.Forms.dll /r:System.Drawing.dll IdleWalker.cs
+    /out:IdleWalker.exe /r:System.Windows.Forms.dll /r:System.Drawing.dll /recurse:src\*.cs
 ```
 
 | Flag | Why |
@@ -68,9 +89,30 @@ It runs this single command:
 | `/optimize+` | Release-style code generation. |
 | `/r:System.Windows.Forms.dll` | `NativeWindow`, `Screen`, `NotifyIcon`, the message loop. |
 | `/r:System.Drawing.dll` | `Bitmap`/`Icon` for the tray icon, `Rectangle`, `Point`. |
+| `/recurse:src\*.cs` | Compiles every source file under `src\`, so new files need no build changes. |
 
-The result is one ~30 KB `IdleWalker.exe` next to the source. Build takes a
+The result is one ~32 KB `IdleWalker.exe` next to `build.cmd`. Build takes a
 couple of seconds.
+
+### Building another way
+
+The sources are ordinary C#, so any .NET toolchain works too. With the .NET
+SDK installed, drop this `IdleWalker.csproj` next to `src\` and run
+`dotnet build -c Release`:
+
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <LangVersion>5</LangVersion>
+  </PropertyGroup>
+</Project>
+```
+
+(Only the Windows-compiler route is covered by `build.cmd`; the csproj above
+is a convenience and is not checked in.)
 
 **Notes**
 
@@ -94,6 +136,7 @@ arrow). Leave the mouse alone for two seconds and the character appears.
 
 | Item | Effect |
 |---|---|
+| Start with Windows | Ticked: the program starts when you sign in. See below. |
 | Pause | Keeps the character hidden until unticked. If it is on screen, it leaves immediately. |
 | Exit | Quits the program. |
 
@@ -101,10 +144,30 @@ Only one instance can run at a time; starting a second one quietly exits.
 
 ### Start automatically with Windows
 
-1. Press `Win + R`, type `shell:startup`, press Enter.
-2. Put a shortcut to `IdleWalker.exe` in the folder that opens.
+Tick **Start with Windows** in the tray menu. This writes a value named
+`IdleWalker` under
 
-Remove the shortcut to stop it from auto-starting.
+```
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run
+```
+
+containing the full path of the running `IdleWalker.exe`. It affects only
+your user account and needs no administrator rights. Untick it to remove
+the value again.
+
+Each time the program starts with the option on, it rewrites the path, so
+moving or renaming the `.exe` doesn't break auto-start - just run it once
+from its new location. If the registry write fails for some reason (a
+locked-down work PC, for instance), the tick stays off and a balloon tip
+says why.
+
+You can see or remove the entry yourself in Task Manager → *Startup apps*,
+or with:
+
+```powershell
+Get-ItemProperty HKCU:\Software\Microsoft\Windows\CurrentVersion\Run | Select-Object IdleWalker
+Remove-ItemProperty HKCU:\Software\Microsoft\Windows\CurrentVersion\Run -Name IdleWalker
+```
 
 ### Stopping it
 
@@ -162,8 +225,8 @@ and mouse clicks pass straight through it to whatever is underneath.
 
 ## Tuning
 
-All the knobs are constants at the top of `class WalkerContext` in
-`IdleWalker.cs`. Change them, exit the running copy, rebuild.
+All the knobs are constants in `src\Settings.cs`. Change them, exit the
+running copy, rebuild.
 
 | Constant | Default | Meaning |
 |---|---|---|
@@ -181,14 +244,15 @@ All the knobs are constants at the top of `class WalkerContext` in
 Speeds are automatically multiplied by the monitor's display scaling, so the
 motion looks the same on a 100% and a 200% screen.
 
-Timings that live in the state machine rather than as constants, should you
-want them: idle stop every `Between(5, 11)` s and hop every `Between(4, 9)` s
-in `StepWalk`; blink every `Between(1.8, 4.5)` s in `Step`; peek/look/duck
-durations in the `PeekRise`/`PeekLook`/`PeekDuck` cases of `Step`.
+Timings that live in the state machine (`src\Domain\Walker.cs`) rather than
+as constants, should you want them: idle stop every `Between(5, 11)` s and
+hop every `Between(4, 9)` s in `StepWalk`; blink every `Between(1.8, 4.5)` s
+in `Step`; peek/look/duck durations in the `PeekRise`/`PeekLook`/`PeekDuck`
+cases of `Step`.
 
 ## Editing the character art
 
-The art lives in `static class Art` as strings, one character per pixel,
+The art lives in `src\Domain\Art.cs` as strings, one character per pixel,
 16 columns wide. The soles of the boots are the bottom of row 17; parts
 declare which row their first line sits on (`new Part(10, ...)` starts on
 row 10). The figure is drawn facing right and mirrored in code when it faces
@@ -224,22 +288,60 @@ The parts are:
 - `TailDown`, `TailA`, `TailB`, `TailUp` - the loose end of the scarf.
 - `Bubble` - the "!" (rows -7 to -3, i.e. above the head).
 
-A `Pose` picks one of each and adds an upper-body bob (`BodyDy`), horizontal
-and vertical stretch factors, whether the head is turned and whether the
-bubble shows. `WalkerContext.CurrentPose()` decides the pose for each frame.
+A `Pose` (`src\Domain\Pose.cs`) picks one of each and adds an upper-body
+bob (`BodyDy`), horizontal and vertical stretch factors, whether the head is
+turned and whether the bubble shows. `Walker.CurrentPose()` decides the pose
+for each frame; `FrameRenderer.DrawPose()` turns it into pixels.
 
 ## How it works (technical)
 
-Everything is in one file, in four layers:
+### Architecture
+
+The code is split into four layers; dependencies point downwards only.
 
 ```
-WalkerContext   behaviour: idle detection, state machine, physics, dust
-    │  builds a Pose each frame
-Pose / Art      the character: parts, colours, how to draw a pose
-    │  draws into
-Surface         software canvas: rectangles, outline pass, premultiplied ARGB
-    │  pixels copied to
-SpriteWindow    layered Win32 window shown via UpdateLayeredWindow
+┌──────────────────────────────────────────────────────────────────┐
+│ App          WalkerApp · CursorWatcher · TrayMenu                │  the per-frame loop
+├──────────────────────────────────────────────────────────────────┤
+│ Platform     SpriteWindow · MonitorWorld · FramePump             │  Win32: windows, monitors,
+│              StartupRegistration · Native                        │  registry, vsync
+├──────────────────────────────────────────────────────────────────┤
+│ Rendering    FrameRenderer · Surface                             │  pixels, no Win32
+├──────────────────────────────────────────────────────────────────┤
+│ Domain       Walker · Pose · Art · Puff · IWorld                 │  the character; pure C#
+└──────────────────────────────────────────────────────────────────┘
+                              Settings (constants, used by all)
+```
+
+- **Domain** is the character itself: the art, the state machine, the
+  physics. It depends on nothing Windows-specific. The terrain it walks on
+  is abstracted behind `IWorld` (ground height at an x position, monitor
+  edges, the cell size to draw at), so the whole simulation could be driven
+  from a unit test with a fake world.
+- **Rendering** turns a `Walker` into an array of premultiplied ARGB pixels.
+  It knows about the canvas layout and the outline pass but not about
+  windows.
+- **Platform** is the only place that touches Win32: the layered window, the
+  real monitors (`MonitorWorld` implements `IWorld` on top of
+  `Screen.AllScreens` and `GetDpiForMonitor`), the vsync pump, the Run key.
+- **App** wires it together. `WalkerApp.OnTick` is the whole frame:
+
+  ```
+  poll cursor → spawn / startle → walker.Step(dt) → renderer.Render(walker) → window.Present(...)
+  ```
+
+Everything is `internal` to the one assembly; there is no public API.
+
+### Frame flow
+
+```
+FramePump (thread)   DwmFlush() ─▶ post tick ─┐
+                                              ▼  UI thread
+WalkerApp.OnTick     CursorWatcher.Poll ─▶ Walker.Spawn / Startle / Step
+                                              │
+FrameRenderer        Walker state ─▶ Pose ─▶ Surface (dust, parts, outline)
+                                              │
+SpriteWindow         Surface.Pixels ─▶ DIB section ─▶ UpdateLayeredWindow
 ```
 
 ### The window
@@ -341,6 +443,26 @@ a 100% and a 150% screen. Speeds scale the same way.
 
 A named mutex (`IdleWalker.SingleInstance`) makes a second copy exit at
 once.
+
+### Start with Windows
+
+`StartupRegistration` reads and writes the per-user Run key
+(`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, value `IdleWalker`).
+It uses `Microsoft.Win32.Registry`, which lives in mscorlib, so no extra
+assembly reference is needed. The stored command is the quoted
+`Application.ExecutablePath`; it is refreshed on every launch while the
+option is on.
+
+### Adding things
+
+- A new idle antic: add a `Mode`, start it from `PickIdle` via `Brake(...)`,
+  step it in `Walker.Step`, and give it a pose in `CurrentPose`.
+- New art: add a `Part` in `Art.cs` (16 columns wide, say which row it
+  starts on) and reference it from a pose.
+- A new menu item: `TrayMenu` owns the menu; expose state as a property or
+  an event like `Paused` / `ExitRequested`.
+- Anything needing a new Win32 call goes in `Native.cs` and is used only
+  from the Platform layer.
 
 ## Multiple monitors
 
