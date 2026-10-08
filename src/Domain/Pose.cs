@@ -15,10 +15,14 @@ namespace IdleWalker.Domain
         public double LegTuck;            // 0 standing, 1 knees pulled up for a jump
         public double ArmNear, ArmFar;    // upper arm: 0 hanging, 90 straight ahead, 180 straight up
         public double ForeNear, ForeFar;  // forearm bend added to the upper arm
+        public bool PointNear;            // the near hand has its index finger out
         public double Lean;               // forward lean, -1..1
         public double BodyDy;             // upper body offset in units, positive is down
         public double StretchX, StretchY; // squash and stretch
         public bool Bubble;               // the "!" overhead
+        public double Sweat;              // a drop beside the head: 0 none, else how far it has slid, 0..1
+        public bool Zzz, Note;            // sleep letters floating up; a music note from the mouth
+        public double DecorPhase;         // where the floating letters / note are in their drift, 0..1
 
         public static Pose Standing()
         {
@@ -37,8 +41,10 @@ namespace IdleWalker.Domain
                    GazeX == o.GazeX && GazeY == o.GazeY && Yaw == o.Yaw &&
                    Walking == o.Walking && WalkPhase == o.WalkPhase && LegTuck == o.LegTuck &&
                    ArmNear == o.ArmNear && ArmFar == o.ArmFar && ForeNear == o.ForeNear && ForeFar == o.ForeFar &&
+                   PointNear == o.PointNear &&
                    Lean == o.Lean && BodyDy == o.BodyDy && StretchX == o.StretchX && StretchY == o.StretchY &&
-                   Bubble == o.Bubble;
+                   Bubble == o.Bubble && Sweat == o.Sweat &&
+                   Zzz == o.Zzz && Note == o.Note && DecorPhase == o.DecorPhase;
         }
     }
 }

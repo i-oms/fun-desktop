@@ -7,9 +7,12 @@ hops out, and strolls along the bottom of your monitors - all of them,
 including external ones. Move the mouse and it gets a fright and dives back
 down.
 
-You can have up to five of them out at once. Each has its own face and
-temperament: the sociable ones stop to wave at each other, the aggressive
-ones charge at anyone nearby and shove them off their feet.
+You can have up to five of them out at once. Each has its own face,
+temperament and habits: one whistles and nods off, one shadow-boxes and
+sticks its tongue out at you, one dances, one twirls, one flexes. The
+sociable ones stop to wave or dance with each other, the aggressive ones
+charge at anyone nearby and shove them off their feet - and whoever is
+watching gasps, tuts or jeers, as is their nature.
 
 It is plain C# with no dependencies beyond what ships with Windows: no
 runtime to install, no NuGet packages, no IDE needed.
@@ -30,8 +33,9 @@ fun/
     │   ├── Pose.cs           which parts to show in one frame
     │   ├── Puff.cs           a speck of dust
     │   ├── IWorld.cs         what a walker needs to know about the terrain
-    │   ├── Walker.cs         one character: state machine, physics, antics
-    │   └── Troupe.cs         the group: staggered entrances, greetings, shoving
+    │   ├── Walker.cs         one character: state machine, physics, face
+    │   ├── WalkerAntics.cs   the same class, continued: the idle antics and reactions
+    │   └── Troupe.cs         the group: staggered entrances, greetings, shoving, onlookers
     ├── Rendering/            pixels
     │   ├── MinionPainter.cs  draws a Minion from solids: distance fields, normals, lighting
     │   ├── Surface.cs        software canvas, soft halo, shadow, dirty-region tracking
@@ -160,26 +164,33 @@ Only one instance can run at a time; starting a second one quietly exits.
 ### The cast
 
 Minions join in this order as you raise the count. Kevin is the first one
-out and behaves exactly as the original walker always did.
+out. Each has a resting face of its own, its own gait (how much it bobs
+and leans as it walks) and its own list of habits: the things it does when
+it stops walking for a moment, each weighted so some are rarer than others.
 
-| # | Name | Temperament | Look | Habits |
-|---|---|---|---|---|
-| 1 | Kevin | Calm | two eyes, a few sprouts of hair | Normal pace. Looks around, waves at your cursor, rests. Nods at Minions it meets. |
-| 2 | Stuart | Aggressive | one eye, hair combed flat, heavy brow | 20% faster, hops twice as often, never waves. Charges at anyone within reach and shoves them. |
-| 3 | Bob | Friendly | bald, one green eye and one brown, big smile | A little slower. Waves a lot - at nearby Minions in preference to the cursor. Stops to wave at anyone it meets. |
-| 4 | Dave | Friendly | two eyes, hair parted in the middle, smile | As Bob. |
-| 5 | Mel | Aggressive | two eyes, crew cut, heavy brows | As Stuart. |
+| # | Name | Temperament | Look | Resting face | Habits, most to least often |
+|---|---|---|---|---|---|
+| 1 | Kevin | Calm | two eyes, a few sprouts of hair | neutral; sleepy on a long rest | Looks around, rests, whistles a tune (notes float up), scratches his head over something until an idea strikes ("!"), nods off standing up (yawn, stretch, Zzz, then jerks awake), yawns, waves shyly at your cursor, sneezes. Nods at Minions it meets; shakes his head at fights. |
+| 2 | Stuart | Aggressive | one eye, hair combed flat, heavy brow | grumpy; bored on a rest, hands on hips | 20% faster, hops twice as often, leans into his walk. Looks around, shadow-boxes (and sweats), sticks his tongue out and beckons you to come and have a go, throws a two-footed tantrum, laughs at you. Charges at anyone within reach and shoves them; jeers and points when he sees someone else shoved. |
+| 3 | Bob | Friendly | bald, one green eye and one brown, big smile | happy | A little slower, bouncy. Waves a lot - at nearby Minions in preference to the cursor - dances a jig, points at your cursor and giggles, jumps for joy, laughs, sneezes now and then. Waves at anyone it meets, or dances with another friendly one; gasps with its hands up when someone is shoved. |
+| 4 | Dave | Friendly | two eyes, hair parted in the middle, open-mouthed smile | cheerful | The show-off. Waves, twirls right round with its arms out (and walks off dizzy), points at your cursor, jumps for joy, dances. Greets and gasps like Bob. |
+| 5 | Mel | Aggressive | two eyes, crew cut, heavy brows | stern; bored on a rest, hands on hips | 15% faster, leans into the walk. Flexes both arms and winks at them, stomps, shadow-boxes, occasionally taunts. Charges and jeers like Stuart. |
 
 **How they get on**
 
 - When two sociable walkers are about to pass each other they both stop and
-  face one another: a friendly one waves, a calm one nods. Then they carry
-  on. A pair won't greet again for several seconds.
+  face one another: a friendly one waves, a calm one nods, and two friendly
+  ones sometimes (40% of the time) dance a jig together. Then they carry on.
+  A pair won't greet again for several seconds.
 - An aggressive walker that spots someone within about 380 px ahead (or
   120 px behind) breaks into a run. On contact the victim is knocked into the
   air with a "!", lands in a puff of dust and runs away scared for a second
-  and a half; the bully stands proud for a moment, then walks on and leaves
-  people alone for ten seconds.
+  and a half, a drop of sweat flying; the bully stands proud for a moment,
+  then walks on and leaves people alone for ten seconds.
+- Anyone else on the same ground within about 620 px who is walking,
+  resting or looking around stops and turns to watch: a friendly one gasps
+  with its hands up by its face and then looks worried, a calm one puts its
+  hands on its hips and shakes its head, an aggressive one laughs and points.
 - Two aggressive walkers that charge each other collide and both go flying.
 - Aggressive walkers ignore greetings; friendly ones wave at them anyway.
 - Interactions only happen between walkers on the same ground level (so not
@@ -256,10 +267,14 @@ Stop-Process -Name IdleWalker
    The six-frame walk cycle is driven by distance travelled, so the feet never
    slide. It walks the whole width of the desktop and turns around at the
    outer edges - head first, then body.
-5. **Idle moments.** Every 5-11 seconds it stops to do one of: look around,
-   wave towards your cursor (turning to face it first if needed), or stand
-   and breathe for a moment. Every 4-9 seconds it does a little hop. It
-   blinks every few seconds regardless.
+5. **Idle moments.** Every 5-11 seconds it stops to do one of its habits
+   (see [The cast](#the-cast)): look around, wave or point towards your
+   cursor (turning to face it first if needed), stand and breathe, dance,
+   twirl, doze, whistle, box, taunt, and so on. Every 4-9 seconds it does a
+   little hop. It blinks every few seconds regardless - quick, frequent
+   blinks when frightened, slow heavy ones when drowsy, sometimes two in a
+   row - and while standing about its eyes dart a little way off and back
+   every second or two.
 6. **Other monitors.** When the next monitor's bottom edge is higher it jumps
    up onto it, timing the take-off so the top of the arc is over the edge.
    When it is lower, it walks off the edge and falls, landing with a bigger
@@ -300,8 +315,10 @@ running copy, rebuild.
 Speeds are automatically multiplied by the monitor's display scaling, so the
 motion looks the same on a 100% and a 200% screen.
 
-Per-character values (speed factor, hop and idle intervals, how often it
-looks around vs. waves vs. rests) are in `src\Domain\Personality.cs`.
+Per-character values (resting faces, speed factor, walk bob and lean, hop
+and idle intervals, and the weighted list of habits) are in
+`src\Domain\Personality.cs`; the timing of each antic is in
+`src\Domain\WalkerAntics.cs` (`StartAntic` sets how long it lasts).
 Timings that live in the state machine (`src\Domain\Walker.cs`): blink every
 `Between(1.8, 4.5)` s in `Step`; peek/look/duck durations in the
 `PeekRise`/`PeekLook`/`PeekDuck` cases; greet, gloat and flee durations at
@@ -331,25 +348,35 @@ painter put the goggles at `v = 12.55`, the mouth at `9.0`, the hips at
 **Faces.** An `Expression` (`src\Domain\Expression.cs`) is a set of
 numbers: how far the lids are down, a squint, a wink, where the brows sit and
 how they tilt, pupil size and offset, cross-eyes, and the mouth's curve,
-opening, width, sideways shift, teeth and tremble. Named presets cover the
-repertoire:
+opening, width, sideways shift, teeth, tremble and tongue. Named presets
+cover the repertoire:
 
 | Expression | Used when |
 |---|---|
-| `Neutral`, `Happy`, `Grumpy` | the resting face of a calm, friendly or aggressive Minion |
-| `Curious` | peeking out of the ground, looking around |
-| `Grin`, `Winking`, `Laugh` | waving at the cursor, greeting another Minion |
-| `Sleepy` | a long rest |
-| `Focused`, `Excited` | winding up for a jump; a big jump |
-| `Determined`, `Smug` | charging at someone; standing over them afterwards |
+| `Neutral`, `Happy`, `Cheerful`, `Grumpy`, `Stern` | the resting faces of Kevin, Bob, Dave, Stuart and Mel |
+| `Sleepy`, `Bored` | a long rest (calm; aggressive) |
+| `Curious` | peeking out of the ground, looking around, pointing, waking up |
+| `Grin`, `Winking`, `Laugh`, `Giggle` | waving, dancing, greeting, pointing, laughing |
+| `Focused`, `Excited` | winding up for a jump or a twirl; a big jump, a spin, jumping for joy |
+| `Thinking`, `Surprised` | scratching the head; the idea that follows |
+| `Whistling` | whistling |
+| `Yawn`, `Asleep`, `Shocked` | yawning; dozing; being jerked awake, seeing a shove |
+| `Inhale`, `Sneeze`, `Dizzy` | a sneeze, start to finish (also after a twirl) |
+| `Determined`, `Smug`, `Proud` | charging or boxing; standing over a victim; flexing, a twirl's ta-da |
+| `Raspberry`, `Mischievous` | taunting; the look that lingers afterwards |
+| `Furious` | a stomping tantrum |
+| `Panting` | walking off after a bout of boxing |
 | `Dizzy`, `Scared`, `Sad` | being shoved into the air; running away; slowing down after |
+| `Disapproving` | a calm Minion watching a shove |
 | `Surprised` | the mouse moved |
 | `Sad` | sent away because the count was lowered |
 
 The walker eases its face towards the current target expression every frame
-(`Expression.Towards`), so moods melt into one another over about a tenth of a
-second rather than snapping, and a blink is laid over whatever the face is
-doing. The body turns the same way: it swings round to face the way it is
+(`Expression.Towards`): moods melt into one another over about a tenth of a
+second rather than snapping, a fright arrives faster and drowsiness more
+slowly, and a blink is laid over whatever the face is doing. Some moods
+linger for a second or so after the antic that caused them (dizzy after a
+twirl, panting after boxing, mischievous after a taunt). The body turns the same way: it swings round to face the way it is
 walking, turns to face you when it stops to rest or wave at the cursor, and
 towards the other Minion when greeting, charging or gloating
 (`Walker.YawTarget`). The pupils follow a gaze point: your cursor when it is near, another
@@ -366,8 +393,11 @@ the yaw (how far the body is turned about its axis: 0 faces you, 58 is the
 three-quarter view it walks in, negative is a glance back over the
 shoulder), whether it is walking and where in the stride it is (legs and
 arms swing continuously from that), how far the knees are tucked
-up, the angle of each upper arm and forearm, a forward lean, an upper-body
-bob and squash-and-stretch factors, and whether the "!" shows. The shoulders
+up, the angle of each upper arm and forearm (and whether the near hand has
+its index finger out), a forward lean, an upper-body bob and
+squash-and-stretch factors, and the things that float about the figure: the
+"!", a drop of sweat sliding down beside the head, two "z"s drifting up
+from a sleeper, a music note rising from the mouth. The shoulders
 sit on the surface of the body a little forward of its widest point, so a
 hanging arm shows beside the body when the Minion faces you and swings round
 in front of it as it turns away. A hanging arm swings fore and aft of the
@@ -582,13 +612,16 @@ and the rest time to two seconds next time.
 ### Adding things
 
 - A new character: add an entry to `Personality.Roster` (name, temperament,
-  look, speed, hop/idle ranges, idle weights) and, if you want more than
-  five, raise `Settings.MaxWalkers`.
+  look, resting faces, speed, gait, hop/idle ranges, weighted habits) and,
+  if you want more than five, raise `Settings.MaxWalkers`.
 - A new temperament: add it to the `Temperament` enum and teach
-  `Troupe.TryGreet` / `ConsiderCharging` how it behaves towards others.
-- A new idle antic: add a `Mode` to `Walker`, start it from `PickIdle` via
-  `Brake(...)`, step it in `Walker.Step`, and give it a pose in
-  `CurrentPose`.
+  `Troupe.TryGreet` / `ConsiderCharging` how it behaves towards others, and
+  `Walker.React` how it responds to a shove.
+- A new idle antic: add it to the `Antic` enum, give it a duration in
+  `StartAntic`, its face in `AnticFace`, its turn in `AnticYaw` and its body
+  in `AnticPose` (all in `src\Domain\WalkerAntics.cs`; one-off effects such
+  as dust go in `StepAntic`), then list it in the habits of whoever should
+  do it.
 - A new expression: add a preset to `Expression` and pick it in
   `Walker.UpdateFace` for the situation it belongs to. A new hair style is a
   case in `MinionPainter.HairFor`. A new accessory is a solid in the painter:
@@ -650,7 +683,10 @@ is doing nothing but a cheap poll ten times a second.
 What keeps it cheap:
 
 - The simulation is trivial: stepping all five walkers plus their
-  interactions takes about 2 µs per frame.
+  interactions and face logic takes a few tens of microseconds per frame.
+- Slow motions (breathing, swaying, a sleeper's nodding, floating letters)
+  are stepped in coarse increments, so a walker that is only idling is
+  repainted a few times a second rather than sixty.
 - Monitor layout and DPI are read once per frame (`MonitorWorld.Refresh`),
   not once per query.
 - Rendering and `UpdateLayeredWindow` happen only for walkers whose picture

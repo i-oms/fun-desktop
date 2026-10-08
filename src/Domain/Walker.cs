@@ -4,13 +4,25 @@ using System.Drawing;
 
 namespace IdleWalker.Domain
 {
+    /// <summary>How a walker says hello: a nod, a wave, or a little dance together.</summary>
+    enum GreetStyle { Nod, Wave, Dance }
+
+    /// <summary>What a bystander does when it sees somebody shoved.</summary>
+    enum Reaction
+    {
+        Gasp,      // hands up by the face, then a worried look
+        Headshake, // hands on hips, shaking its head
+        Jeer       // laughing and pointing
+    }
+
     /// <summary>
     /// One character: where it is, what it is doing and how it moves. Pure
     /// simulation - it knows nothing about windows or pixels on screen beyond
     /// what <see cref="IWorld"/> tells it. Walkers only meet each other
-    /// through the <see cref="Troupe"/>.
+    /// through the <see cref="Troupe"/>. The idle antics and the reactions
+    /// live in WalkerAntics.cs.
     /// </summary>
-    sealed class Walker
+    sealed partial class Walker
     {
         const double StrideCells = 10;    // distance covered by one full walk cycle (short legs, quick steps)
         const double BlinkSeconds = 0.16;
@@ -18,6 +30,7 @@ namespace IdleWalker.Domain
         const int HiddenDepthCells = 20;  // feet this far underground hides everything
         const int PeekDepthCells = 10;    // feet this far underground shows the eyes
         const double GreetSeconds = 1.3;
+        const double DanceGreetSeconds = 2.6;
         const double GloatSeconds = 0.7;
         const double FleeSeconds = 1.4;
         const double ChargeSpeedFactor = 2.0;
@@ -26,10 +39,12 @@ namespace IdleWalker.Domain
         enum Mode
         {
             Hidden, PeekRise, PeekLook, PeekDuck, Air, Walk, Crouch, Turn, Look, Wave, Rest, Exit,
-            Greet,   // stopped to wave or nod at another walker
+            Greet,   // stopped to wave, nod or dance at another walker
             Charge,  // running at another walker to shove it
             Gloat,   // standing over a shoved walker
-            Flee     // running away after being shoved
+            Flee,    // running away after being shoved
+            Antic,   // one of the idle antics (dancing, boxing, dozing, ...)
+            React    // reacting to a shove it saw
         }
 
         readonly IWorld world;
@@ -70,13 +85,32 @@ namespace IdleWalker.Domain
         double restDuration;
         double idleTimer, hopTimer;
         double blinkTimer, blinkLeft;
+        bool blinkAgain;            // a second, quick blink right after this one
         bool startled;
 
         int greetFacing;
-        bool greetWave;
+        GreetStyle greetStyle;
         bool knocked;               // airborne because somebody shoved it
         double fleeTime;
         Walker chargeTarget;
+
+        // Antics and reactions (WalkerAntics.cs).
+        Antic antic;
+        double anticSeconds;
+        int anticStage;             // which of an antic's one-off effects have happened
+        Reaction reaction;
+        double reactSeconds;
+        int reactFacing;
+        double reactX;
+        int joyHops;                // hops still to come in a jump for joy
+        bool celebrating;           // airborne with the arms thrown up
+        bool wokeUp;                // airborne because it just jerked awake
+
+        // Small touches laid over whatever else is going on.
+        double sweat;               // 0 none, else how far the drop has slid, 0..1
+        Expression moodFace;        // a face that lingers for a while after an antic
+        double moodLeft;
+        double glanceTimer, glanceLeft, glanceDx, glanceDy;  // the eyes darting about while standing
 
         public Walker(IWorld world, Random rng, Personality personality)
         {
@@ -113,6 +147,7 @@ namespace IdleWalker.Domain
                 {
                     case Mode.Walk: case Mode.Crouch: case Mode.Turn: case Mode.Look: case Mode.Wave:
                     case Mode.Rest: case Mode.Greet: case Mode.Charge: case Mode.Gloat: case Mode.Flee:
+                    case Mode.Antic: case Mode.React:
                         return true;
                     default:
                         return false;
@@ -126,7 +161,7 @@ namespace IdleWalker.Domain
             get { return mode == Mode.Walk && !braking && Math.Abs(vx) > 6 * sizeFactor; }
         }
 
-        /// <summary>Free to stop and say hello.</summary>
+        /// <summary>Free to stop and say hello, or to gawp at a shove.</summary>
         public bool CanGreet
         {
             get { return (mode == Mode.Walk && !braking) || mode == Mode.Rest || mode == Mode.Look; }
@@ -167,6 +202,10 @@ namespace IdleWalker.Domain
             idleTimer = Between(4, 9);
             hopTimer = Between(3, 8);
             blinkTimer = Between(1, 3);
+            blinkAgain = false;
+            glanceTimer = Between(0.5, 1.5);
+            glanceLeft = 0;
+            ClearAntics();
             GreetCooldown = 2;
             ChargeCooldown = 3;
             puffs.Clear();
@@ -193,7 +232,17 @@ namespace IdleWalker.Domain
             if (underground) vy = 0;
             else if (mode != Mode.Air) vy = -Settings.StartleSpeed * sizeFactor;
             vx = 0;
+            ClearAntics();
             Enter(Mode.Exit);
+        }
+
+        void ClearAntics()
+        {
+            joyHops = 0;
+            celebrating = false;
+            wokeUp = false;
+            sweat = 0;
+            moodLeft = 0;
         }
 
         /// <summary>Another walker is near: tells this one where, for waving at.</summary>
@@ -203,14 +252,39 @@ namespace IdleWalker.Domain
             companyX = x;
         }
 
-        /// <summary>Stop and face `direction` to wave (friendly) or nod (calm) at someone.</summary>
-        public void Greet(int direction, bool wave)
+        /// <summary>Stop and face `direction` to greet someone there.</summary>
+        public void Greet(int direction, GreetStyle style)
         {
             if (!CanGreet) return;
             greetFacing = direction;
-            greetWave = wave;
+            greetStyle = style;
             if (mode == Mode.Walk) Brake(Mode.Greet);
             else Enter(Mode.Greet);
+        }
+
+        /// <summary>Saw somebody shoved at x: stop and react in character.</summary>
+        public void React(double x)
+        {
+            if (!CanGreet) return;
+            reactX = x;
+            reactFacing = x >= cx ? 1 : -1;
+            switch (personality.Temperament)
+            {
+                case Temperament.Friendly:
+                    reaction = Reaction.Gasp;
+                    reactSeconds = 1.7;
+                    break;
+                case Temperament.Calm:
+                    reaction = Reaction.Headshake;
+                    reactSeconds = 1.6;
+                    break;
+                default:
+                    reaction = Reaction.Jeer;
+                    reactSeconds = 1.8;
+                    break;
+            }
+            if (mode == Mode.Walk) Brake(Mode.React);
+            else Enter(Mode.React);
         }
 
         /// <summary>Run at another walker.</summary>
@@ -230,6 +304,7 @@ namespace IdleWalker.Domain
             vy = -200 * sizeFactor;
             knocked = true;
             chargeTarget = null;
+            ClearAntics();
             Enter(Mode.Air);
         }
 
@@ -252,15 +327,14 @@ namespace IdleWalker.Domain
             squash = Math.Max(0, squash - dt / 0.18);
             GreetCooldown -= dt;
             ChargeCooldown -= dt;
-            UpdateWorld();
-
-            blinkTimer -= dt;
-            blinkLeft -= dt;
-            if (blinkTimer <= 0)
+            if (moodLeft > 0) moodLeft -= dt;
+            if (sweat > 0)
             {
-                blinkLeft = BlinkSeconds;
-                blinkTimer = Between(1.8, 4.5);
+                sweat += dt / 1.6;
+                if (sweat >= 1) sweat = 0;
             }
+            UpdateWorld();
+            StepBlink(dt);
 
             switch (mode)
             {
@@ -367,7 +441,7 @@ namespace IdleWalker.Domain
                 case Mode.Greet:
                     if (!StayOnGround()) break;
                     facing = greetFacing;
-                    if (modeTime >= GreetSeconds) Enter(Mode.Walk);
+                    if (modeTime >= (greetStyle == GreetStyle.Dance ? DanceGreetSeconds : GreetSeconds)) Enter(Mode.Walk);
                     break;
 
                 case Mode.Charge:
@@ -397,6 +471,18 @@ namespace IdleWalker.Domain
                     if (fleeTime <= 0 && mode == Mode.Flee) Enter(Mode.Walk);
                     break;
 
+                case Mode.Antic:
+                    if (!StayOnGround()) break;
+                    StepAntic();
+                    if (mode == Mode.Antic && modeTime >= anticSeconds) EndAntic();
+                    break;
+
+                case Mode.React:
+                    if (!StayOnGround()) break;
+                    facing = reactFacing;
+                    if (modeTime >= reactSeconds) Enter(Mode.Walk);
+                    break;
+
                 case Mode.Exit:
                 {
                     vy += Settings.ExitGravity * sizeFactor * dt;
@@ -415,6 +501,31 @@ namespace IdleWalker.Domain
             UpdateFace(dt);
         }
 
+        // Blinks come in the rhythm of the mood: quick and frequent when
+        // frightened, slow and heavy when drowsy, sometimes two in a row -
+        // and not at all while the eyes are already shut.
+        void StepBlink(double dt)
+        {
+            blinkTimer -= dt;
+            blinkLeft -= dt;
+            if (blinkLeft <= 0 && blinkAgain)
+            {
+                blinkAgain = false;
+                blinkLeft = BlinkSeconds * 0.85;
+                return;
+            }
+            if (blinkTimer > 0) return;
+
+            bool tense = face.PupilSize < 0.8;
+            bool heavy = face.Lid > 0.5;
+            if (face.Lid < 0.9)
+            {
+                blinkLeft = BlinkSeconds * (heavy ? 1.9 : tense ? 0.8 : 1);
+                blinkAgain = !heavy && rng.NextDouble() < 0.2;
+            }
+            blinkTimer = Between(1.8, 4.5) * (tense ? 0.4 : 1);
+        }
+
         // ---- The face --------------------------------------------------------------
 
         /// <summary>Gaze towards a screen point, as -1..1 with +X ahead and +Y up.</summary>
@@ -427,13 +538,15 @@ namespace IdleWalker.Domain
         }
 
         // Picks the expression and gaze for the current situation and eases
-        // the face towards them, so moods change over a few frames.
+        // the face towards them, so moods change over a few frames - quickly
+        // for a fright, slowly for drowsiness.
         void UpdateFace(double dt)
         {
             Expression target = personality.BaseFace;
+            double rate = 14;
             double gx = 0.55, gy = -0.05;
             bool atCursor = false;
-            bool friendly = personality.Temperament == Temperament.Friendly;
+            bool steady = false;   // standing about: the eyes may wander a little
 
             switch (mode)
             {
@@ -445,6 +558,7 @@ namespace IdleWalker.Domain
                     break;
 
                 case Mode.Walk:
+                    if (moodLeft > 0) target = moodFace;
                     atCursor = Math.Abs(cursorX - cx) < 260 * sizeFactor;
                     break;
 
@@ -455,35 +569,64 @@ namespace IdleWalker.Domain
 
                 case Mode.Flee:
                     target = fleeTime > FleeSeconds * 0.45 ? Expression.Scared : Expression.Sad;
+                    rate = 24;
                     gx = -0.75;
                     gy = 0.1;
                     break;
 
                 case Mode.Crouch:
-                    target = Expression.Focused;
+                    target = celebrating ? Expression.Excited : Expression.Focused;
                     gy = 0.5;
                     break;
 
                 case Mode.Air:
                     if (knocked) target = Expression.Dizzy;
+                    else if (wokeUp)
+                    {
+                        target = Expression.Shocked;
+                        rate = 30;
+                        atCursor = true;
+                    }
+                    else if (celebrating)
+                    {
+                        target = Expression.Excited;
+                        atCursor = true;
+                    }
                     else if (Math.Abs(vy) > 1.2 * Settings.HopSpeed * sizeFactor) target = Expression.Excited;
                     gy = vy < 0 ? 0.5 : -0.5;
                     break;
 
                 case Mode.Exit:
                     target = startled ? Expression.Surprised : Expression.Sad;
+                    rate = startled ? 30 : 14;
                     atCursor = startled;
                     break;
 
                 case Mode.Wave:
-                    target = friendly ? (modeTime > 0.5 && modeTime < 1.0 ? Expression.Winking : Expression.Grin) : Expression.Happy;
+                    target = personality.Temperament == Temperament.Friendly
+                        ? (modeTime > 0.5 && modeTime < 1.0 ? Expression.Winking : Expression.Grin)
+                        : Expression.Happy;
                     if (!waveAtCursor && companyNearby) LookAt(companyX, feetY - 12 * scale, out gx, out gy);
                     else atCursor = true;
+                    steady = true;
                     break;
 
                 case Mode.Greet:
-                    target = greetWave ? Expression.Laugh : Expression.Happy;
+                    switch (greetStyle)
+                    {
+                        case GreetStyle.Dance:
+                            target = modeTime < DanceGreetSeconds * 0.5 ? Expression.Grin : Expression.Laugh;
+                            rate = 18;
+                            break;
+                        case GreetStyle.Wave:
+                            target = Expression.Laugh;
+                            break;
+                        default:
+                            target = Expression.Happy;
+                            break;
+                    }
                     LookAt(companyX, feetY - 12 * scale, out gx, out gy);
+                    steady = true;
                     break;
 
                 case Mode.Gloat:
@@ -495,15 +638,31 @@ namespace IdleWalker.Domain
                 case Mode.Look:
                     target = Expression.Curious;
                     atCursor = true;
+                    steady = true;
                     break;
 
                 case Mode.Rest:
-                    if (restDuration > 1.2 && modeTime > 0.4) target = Expression.Sleepy;
+                    if (restDuration > 1.2 && modeTime > 0.4)
+                    {
+                        target = personality.RestFace;
+                        rate = 7;
+                    }
                     atCursor = true;
+                    steady = true;
                     break;
 
                 case Mode.Turn:
                     atCursor = true;
+                    break;
+
+                case Mode.Antic:
+                    AnticFace(ref target, ref rate, ref gx, ref gy, ref atCursor);
+                    steady = true;
+                    break;
+
+                case Mode.React:
+                    ReactFace(ref target, ref rate, ref gx, ref gy);
+                    steady = true;
                     break;
             }
 
@@ -513,19 +672,48 @@ namespace IdleWalker.Domain
                 gx = -0.8;
                 gy = 0;
             }
+            Glance(dt, steady && target.Lid < 0.9, ref gx, ref gy);
 
-            face = Expression.Towards(face, target, 1 - Math.Exp(-dt * 14));
+            face = Expression.Towards(face, target, 1 - Math.Exp(-dt * rate));
             double k = 1 - Math.Exp(-dt * 10);
             gazeX = Settle(gazeX, gx, k);
             gazeY = Settle(gazeY, gy, k);
-            yaw = Settle(yaw, YawTarget(), 1 - Math.Exp(-dt * 9));
+
+            bool snap;
+            double yawTarget = YawTarget(out snap);
+            yaw = snap ? yawTarget : Settle(yaw, yawTarget, 1 - Math.Exp(-dt * 9));
+        }
+
+        // Real eyes never hold perfectly still: every second or two, while
+        // standing about, the pupils dart a little way off and come back.
+        void Glance(double dt, bool allowed, ref double gx, ref double gy)
+        {
+            glanceTimer -= dt;
+            if (glanceLeft > 0)
+            {
+                glanceLeft -= dt;
+            }
+            else if (glanceTimer <= 0 && allowed)
+            {
+                glanceLeft = Between(0.18, 0.32);
+                glanceDx = Between(-0.16, 0.16);
+                glanceDy = Between(-0.08, 0.08);
+                glanceTimer = Between(0.8, 2.4);
+            }
+            if (glanceLeft > 0 && allowed)
+            {
+                gx += glanceDx;
+                gy += glanceDy;
+            }
         }
 
         // How far round the body should be turned: towards where it is going
         // while on the move, towards whoever it is dealing with when stopped,
-        // and towards you the rest of the time.
-        double YawTarget()
+        // and towards you the rest of the time. `snap` means take the value
+        // this frame instead of easing towards it (a spin, a head-shake).
+        double YawTarget(out bool snap)
         {
+            snap = false;
             switch (mode)
             {
                 case Mode.PeekLook:
@@ -546,11 +734,33 @@ namespace IdleWalker.Domain
                 case Mode.Wave:
                     return waveAtCursor || !companyNearby ? 0 : 45;
                 case Mode.Greet:
-                    return 40;
+                    return greetStyle == GreetStyle.Dance ? DanceYaw(modeTime, 40) : 40;
                 case Mode.Gloat:
                     return 35;
+                case Mode.Rest:
+                    return RestYaw();
+                case Mode.Antic:
+                    return AnticYaw(out snap);
+                case Mode.React:
+                    return ReactYaw(out snap);
                 default:
-                    return 0; // peeking up, resting, leaving: face the viewer
+                    return 0; // peeking up, leaving: face the viewer
+            }
+        }
+
+        // Standing still, each temperament holds itself differently: the
+        // friendly ones rock gently, the calm one turns a little towards the
+        // cursor, the aggressive ones stand half turned away.
+        double RestYaw()
+        {
+            switch (personality.Temperament)
+            {
+                case Temperament.Friendly:
+                    return 12 * Math.Sin(time * 1.4);
+                case Temperament.Aggressive:
+                    return 15;
+                default:
+                    return (cursorX - cx) * facing >= 0 ? 10 : -10;
             }
         }
 
@@ -565,15 +775,18 @@ namespace IdleWalker.Domain
         {
             Pose pose = Pose.Standing();
             pose.Face = face;
-            pose.GazeX = gazeX;
-            pose.GazeY = gazeY;
-            pose.Yaw = yaw;
+            // Fine motion is stepped so a figure that is only easing into
+            // place is not repainted for changes too small to see.
+            pose.GazeX = Math.Round(gazeX * 32) / 32;
+            pose.GazeY = Math.Round(gazeY * 32) / 32;
+            pose.Yaw = Math.Round(yaw);
             bool breathe = false;
 
             switch (mode)
             {
                 case Mode.Walk:
                     Walk(ref pose);
+                    pose.Lean = personality.WalkLean;
                     break;
 
                 case Mode.Charge:
@@ -595,8 +808,8 @@ namespace IdleWalker.Domain
                     // Wound up for the jump: squashed, arms out for balance.
                     pose.StretchX = 1.12;
                     pose.StretchY = 0.84;
-                    pose.ArmNear = 30;
-                    pose.ArmFar = -30;
+                    pose.ArmNear = celebrating ? 120 : 30;
+                    pose.ArmFar = celebrating ? -120 : -30;
                     pose.ForeNear = 15;
                     pose.ForeFar = -15;
                     break;
@@ -625,6 +838,24 @@ namespace IdleWalker.Domain
                         pose.LegTuck = 0.6;
                         pose.Bubble = true;
                     }
+                    else if (celebrating)
+                    {
+                        // Jumping for joy: arms straight up, knees tucked.
+                        pose.ArmNear = 160;
+                        pose.ArmFar = -160;
+                        pose.ForeNear = -10;
+                        pose.ForeFar = 10;
+                        pose.LegTuck = rising ? 1 : 0.5;
+                    }
+                    else if (wokeUp)
+                    {
+                        // Jerked awake: arms flung out, a "!" overhead.
+                        pose.ArmNear = 70;
+                        pose.ArmFar = -70;
+                        pose.ForeNear = 10;
+                        pose.ForeFar = -10;
+                        pose.Bubble = true;
+                    }
                     else if (mode == Mode.Exit)
                     {
                         pose.Bubble = startled;
@@ -637,24 +868,48 @@ namespace IdleWalker.Domain
                     break;
 
                 case Mode.Greet:
-                    if (greetWave) WaveArm(ref pose);
-                    else pose.BodyDy = Quantise(0.45 * (1 - Math.Cos(modeTime * 2 * Math.PI / 0.5)) / 2); // a nod
+                    switch (greetStyle)
+                    {
+                        case GreetStyle.Dance:
+                            DancePose(ref pose, modeTime);
+                            break;
+                        case GreetStyle.Wave:
+                            WaveArm(ref pose);
+                            break;
+                        default:
+                            pose.BodyDy = Quantise(0.45 * (1 - Math.Cos(modeTime * 2 * Math.PI / 0.5)) / 2); // a nod
+                            break;
+                    }
                     break;
 
                 case Mode.Gloat:
                     // Chest out, hands on hips.
-                    pose.ArmNear = 40;
-                    pose.ArmFar = -40;
-                    pose.ForeNear = -85;
-                    pose.ForeFar = 85;
+                    HandsOnHips(ref pose);
                     pose.StretchY = 1.04;
                     pose.StretchX = 1.03;
                     pose.Lean = -0.3;
                     break;
 
+                case Mode.Rest:
+                    // The aggressive ones wait with their hands on their hips.
+                    if (personality.Temperament == Temperament.Aggressive)
+                    {
+                        HandsOnHips(ref pose);
+                        pose.Lean = -0.15;
+                    }
+                    breathe = true;
+                    break;
+
+                case Mode.Antic:
+                    AnticPose(ref pose);
+                    break;
+
+                case Mode.React:
+                    ReactPose(ref pose);
+                    break;
+
                 case Mode.Turn:
                 case Mode.Look:
-                case Mode.Rest:
                     breathe = true;
                     break;
             }
@@ -662,6 +917,7 @@ namespace IdleWalker.Domain
             if (breathe) pose.BodyDy = Quantise(0.3 * (1 + Math.Sin(time * 2.6)) / 2);
             pose.StretchY *= 1 - 0.22 * squash;
             pose.StretchX *= 1 + 0.16 * squash;
+            if (sweat > 0) pose.Sweat = Math.Ceiling(sweat * 12) / 12;
 
             // A blink is a quick close-and-open laid over whatever the face is doing.
             if (blinkLeft > 0)
@@ -677,7 +933,7 @@ namespace IdleWalker.Domain
             if (Math.Abs(vx) <= 6 * sizeFactor) return;
             pose.Walking = true;
             pose.WalkPhase = walkPhase;
-            pose.BodyDy = 0.3 * (1 - Math.Cos(walkPhase * 4 * Math.PI)) / 2; // two bobs per stride
+            pose.BodyDy = personality.WalkBob * (1 - Math.Cos(walkPhase * 4 * Math.PI)) / 2; // two bobs per stride
         }
 
         void WaveArm(ref Pose pose)
@@ -689,6 +945,14 @@ namespace IdleWalker.Domain
             double widen = 1 - Math.Cos(yaw * Math.PI / 180);
             pose.ArmNear = 150 + 8 * Math.Sin(modeTime * 16) - 130 * widen;
             pose.ForeNear = -25 + 25 * Math.Sin(modeTime * 16);
+        }
+
+        static void HandsOnHips(ref Pose pose)
+        {
+            pose.ArmNear = 40;
+            pose.ArmFar = -40;
+            pose.ForeNear = -85;
+            pose.ForeFar = 85;
         }
 
         // Slow motions are stepped in eighths of a unit, so a walker that is
@@ -796,6 +1060,18 @@ namespace IdleWalker.Domain
             Enter(Mode.Walk);
         }
 
+        /// <summary>A face to keep for a while once back on the move.</summary>
+        void SetMood(Expression mood, double seconds)
+        {
+            moodFace = mood;
+            moodLeft = seconds;
+        }
+
+        void StartSweat()
+        {
+            if (sweat <= 0) sweat = 0.001;
+        }
+
         // Walking, charging and fleeing all share this: ease towards the
         // target speed, turn at the ends of the desktop, jump up onto higher
         // monitors. `antics` allows the random hops and idle stops.
@@ -889,7 +1165,27 @@ namespace IdleWalker.Domain
                 if (vx != 0) facing = vx > 0 ? 1 : -1;
                 fleeTime = FleeSeconds;
                 GreetCooldown = Math.Max(GreetCooldown, FleeSeconds + 2);
+                StartSweat();
                 Enter(Mode.Flee);
+            }
+            else if (celebrating && joyHops > 0)
+            {
+                // Straight back up for the next hop.
+                joyHops--;
+                StartJump(0.85 * Settings.HopSpeed * sizeFactor, 0);
+            }
+            else if (celebrating)
+            {
+                celebrating = false;
+                SetMood(Expression.Giggle, 0.9);
+                Enter(Mode.Walk);
+            }
+            else if (wokeUp)
+            {
+                // Where am I?
+                wokeUp = false;
+                SetMood(Expression.Curious, 1.0);
+                Enter(Mode.Walk);
             }
             else if (landPause > 0)
             {
@@ -904,34 +1200,19 @@ namespace IdleWalker.Domain
             }
         }
 
-        // Every so often: stop and look around, wave at someone, or rest.
+        // Every so often: one of this character's habits, weighted.
         void PickIdle()
         {
-            double roll = rng.NextDouble();
-            if (roll < personality.LookWeight)
+            double roll = rng.NextDouble() * personality.HabitTotal;
+            Habit[] habits = personality.Habits;
+            for (int i = 0; i < habits.Length; i++)
             {
-                Brake(Mode.Look);
-            }
-            else if (roll < personality.LookWeight + personality.WaveWeight)
-            {
-                // Wave at a nearby walker if there is one, otherwise at the cursor.
-                double targetX = companyNearby ? companyX : cursorX;
-                waveAtCursor = !companyNearby;
-                bool targetBehind = (targetX - cx) * facing < -2 * HalfBodyCells * scale;
-                if (targetBehind)
+                roll -= habits[i].Weight;
+                if (roll < 0 || i == habits.Length - 1)
                 {
-                    afterTurn = Mode.Wave;
-                    Brake(Mode.Turn);
+                    StartAntic(habits[i].Antic);
+                    return;
                 }
-                else
-                {
-                    Brake(Mode.Wave);
-                }
-            }
-            else
-            {
-                restDuration = Between(0.8, 2.0);
-                Brake(Mode.Rest);
             }
         }
 

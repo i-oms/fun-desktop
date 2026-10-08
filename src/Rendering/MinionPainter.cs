@@ -51,6 +51,7 @@ namespace IdleWalker.Rendering
         const double ShoulderAngle = 78, ShoulderOut = 0.15, ShoulderV = 10.2, UpperArm = 1.75, Forearm = 1.85;
         const double RestSpread = 7;                      // a hanging arm angles out this far, degrees
         const double ArmR = 0.72, ForeR = 0.66, GloveR = 0.95;
+        const double FingerLen = 0.55, FingerR = 0.3;    // an index finger past the glove when pointing
 
         const double Deg = Math.PI / 180;
 
@@ -80,6 +81,7 @@ namespace IdleWalker.Rendering
                           armLo = new double[2], armHi = new double[2], armVlo = new double[2], armVhi = new double[2];
 
         readonly double[] hair;              // segments: u0, v0, u1, v1, r0, r1
+        readonly bool decorated;             // anything floating about the figure this frame
 
         // Depth of the body's surface at the pixel being shaded, and how far
         // in front of it a limb has to be to count as in front: a soft band
@@ -104,7 +106,11 @@ namespace IdleWalker.Rendering
             flip = faceLeft ? -1 : 1;
             this.px = px;
             lean = pose.Lean;
-            yaw = pose.Yaw * Deg;
+            // A spin can carry the yaw past a full turn; bring it back to
+            // (-180, 180] so the body's arc lengths stay in range.
+            double turn = pose.Yaw % 360;
+            if (turn > 180) turn -= 360; else if (turn <= -180) turn += 360;
+            yaw = turn * Deg;
             sinY = Math.Sin(yaw);
             cosY = Math.Cos(yaw);
             depthBlend = 2.5 * px;
@@ -151,6 +157,7 @@ namespace IdleWalker.Rendering
             PlaceArm(1, 1, pose.ArmNear, pose.ForeNear, -armSwing, foreSwing);
 
             hair = HairFor(look.Hair);
+            decorated = pose.Sweat > 0 || pose.Note || pose.Zzz || pose.Bubble;
         }
 
         // Where an eye at `phi` round the body ends up once the body has turned.
@@ -210,10 +217,12 @@ namespace IdleWalker.Rendering
             handV[i] = elbV[i] - Forearm * ca * cb;
             handZ[i] = elbZ[i] + Forearm * ca * sb * cosY;
 
-            armLo[i] = Math.Min(Math.Min(shU[i], elbU[i]), handU[i]) - 1.2;
-            armHi[i] = Math.Max(Math.Max(shU[i], elbU[i]), handU[i]) + 1.2;
-            armVlo[i] = Math.Min(Math.Min(ShoulderV, elbV[i]), handV[i]) - 1.2;
-            armVhi[i] = Math.Max(Math.Max(ShoulderV, elbV[i]), handV[i]) + 1.2;
+            // The box everything fits in, with room for a pointing finger.
+            double pad = side > 0 && pose.PointNear ? 1.2 + FingerLen : 1.2;
+            armLo[i] = Math.Min(Math.Min(shU[i], elbU[i]), handU[i]) - pad;
+            armHi[i] = Math.Max(Math.Max(shU[i], elbU[i]), handU[i]) + pad;
+            armVlo[i] = Math.Min(Math.Min(ShoulderV, elbV[i]), handV[i]) - pad;
+            armVhi[i] = Math.Max(Math.Max(ShoulderV, elbV[i]), handV[i]) + pad;
         }
 
         static double DomeTop(double x)
@@ -377,7 +386,15 @@ namespace IdleWalker.Rendering
             Mouth(ub, vb);
             Hair(ub, vb);
             for (int i = 0; i < frontCount; i++) Over(frontR[i], frontG[i], frontB[i], frontCov[i]);
-            if (pose.Bubble) Bubble(ub, vb);
+
+            // Things floating about the figure, in front of everything.
+            if (decorated)
+            {
+                if (pose.Sweat > 0) Sweat(ub, vb);
+                if (pose.Note) Note(ub, vb);
+                if (pose.Zzz) Zzz(u, v);
+                if (pose.Bubble) Bubble(ub, vb);
+            }
 
             if (ca <= 0.003) return 0;
             if (ca > 1) ca = 1;
@@ -721,7 +738,10 @@ namespace IdleWalker.Rendering
         void Mouth(double u, double v)
         {
             // The mouth is on the front of the body, so it swings round and
-            // narrows with the yaw like everything else.
+            // narrows with the yaw like everything else, and goes out of
+            // sight once the body has turned its back.
+            double vis = cosY > 0.17 ? 1 : cosY < -0.08 ? 0 : (cosY + 0.08) / 0.25;
+            if (vis <= 0) return;
             double k = cosY > 0.35 ? cosY : 0.35;
             double mu = BodyR * 0.93 * sinY + face.MouthDx * k;
             double w = face.MouthWidth * k;
@@ -738,7 +758,7 @@ namespace IdleWalker.Rendering
             {
                 double ox = hx > 0 ? hx : 0, oy = v - line;
                 double cov = Cov(Math.Sqrt(ox * ox + oy * oy) - lip / 2);
-                Over(0.16, 0.10, 0.09, cov);
+                Over(0.16, 0.10, 0.09, cov * vis);
                 return;
             }
 
@@ -748,18 +768,39 @@ namespace IdleWalker.Rendering
             double inside = Cov(d);
             if (inside > 0)
             {
-                Over(0.30, 0.07, 0.09, inside);
+                Over(0.30, 0.07, 0.09, inside * vis);
                 double teethH = open * 0.7 * face.Teeth;
                 if (teethH > 0.05)
                 {
                     double teeth = Cov(Math.Max(upper - teethH - v, d)) * inside;
                     double gap = Math.Abs(((u - mu) % 0.6 + 0.6) % 0.6 - 0.3);
                     double seam = Cov(gap - 0.03) * 0.35;
-                    Over(0.95 - seam * 0.5, 0.94 - seam * 0.5, 0.90 - seam * 0.5, teeth);
+                    Over(0.95 - seam * 0.5, 0.94 - seam * 0.5, 0.90 - seam * 0.5, teeth * vis);
                 }
             }
             double outline = Cov(Math.Abs(d) - lip / 2);
-            Over(0.16, 0.10, 0.09, outline);
+            Over(0.16, 0.10, 0.09, outline * vis);
+
+            if (face.Tongue > 0.02) Tongue(u, v, mu, w, upper, lower, vis);
+        }
+
+        // A pink tongue: lying in the bottom of an open mouth, or, the more
+        // of it there is, hanging out over the lower lip.
+        void Tongue(double u, double v, double mu, double w, double upper, double lower, double vis)
+        {
+            double tongue = face.Tongue;
+            double rx = Math.Min(w * 0.55, 0.8), ry = 0.35 + 0.5 * tongue;
+            double cy = lower + 0.35 - 0.8 * tongue;
+            double dx = (u - mu) / rx, dy = (v - cy) / ry;
+            double e = Math.Sqrt(dx * dx + dy * dy);
+            double rim = (e - 1) * ry;
+            double d = Math.Max(rim, v - upper + 0.15);   // never over the upper lip
+            double cov = Cov(d);
+            if (cov <= 0) return;
+            double shade = 1 - 0.25 * e;
+            Over(0.12 + 0.86 * shade, 0.42 * shade, 0.52 * shade, cov * vis);
+            double edge = Cov(Math.Abs(rim) - 0.09) * Cov(v - upper + 0.15) * 0.7;
+            Over(0.16, 0.10, 0.09, edge * vis);
         }
 
         void Hair(double u, double v)
@@ -785,8 +826,22 @@ namespace IdleWalker.Rendering
         void Limb(double u, double v, int i)
         {
             if (u < armLo[i] || u > armHi[i] || v < armVlo[i] || v > armVhi[i]) return;
-            ArmTube(u, v, shU[i], ShoulderV, shZ[i], elbU[i], elbV[i], elbZ[i], ArmR);
-            ArmTube(u, v, elbU[i], elbV[i], elbZ[i], handU[i], handV[i], handZ[i], ForeR);
+            ArmTube(u, v, shU[i], ShoulderV, shZ[i], elbU[i], elbV[i], elbZ[i], ArmR, 0.98, 0.84, 0.11, 0.3, 24);
+            ArmTube(u, v, elbU[i], elbV[i], elbZ[i], handU[i], handV[i], handZ[i], ForeR, 0.98, 0.84, 0.11, 0.3, 24);
+
+            // Pointing: the index finger carries on past the glove in the
+            // direction of the forearm.
+            if (i == 1 && pose.PointNear)
+            {
+                double fx = handU[i] - elbU[i], fy = handV[i] - elbV[i];
+                double len = Math.Sqrt(fx * fx + fy * fy);
+                if (len > 1e-6)
+                {
+                    double reach = (GloveR + FingerLen) / len;
+                    ArmTube(u, v, handU[i], handV[i], handZ[i], handU[i] + fx * reach, handV[i] + fy * reach, handZ[i],
+                            FingerR, 0.11, 0.10, 0.13, 0.7, 18);
+                }
+            }
 
             double dx = u - handU[i], dy = v - handV[i];
             double cov = Cov(Math.Sqrt(dx * dx + dy * dy) - GloveR);
@@ -799,7 +854,8 @@ namespace IdleWalker.Rendering
             Sort(lr, lg, lb, cov, handZ[i] + nz * GloveR);
         }
 
-        void ArmTube(double x, double y, double ax, double ay, double az, double bx, double by, double bz, double radius)
+        void ArmTube(double x, double y, double ax, double ay, double az, double bx, double by, double bz, double radius,
+                     double r, double g, double b, double spec, double shine)
         {
             double qx, qy, t;
             double dist = Seg(x, y, ax, ay, bx, by, out qx, out qy, out t);
@@ -810,7 +866,7 @@ namespace IdleWalker.Rendering
             double z = az + (bz - az) * t;
             double k = Depth(z);
             double lr, lg, lb;
-            Lit(0.98 * k, 0.84 * k, 0.11 * k, nx, ny, nz, 0.3, 24, out lr, out lg, out lb);
+            Lit(r * k, g * k, b * k, nx, ny, nz, spec, shine, out lr, out lg, out lb);
             Sort(lr, lg, lb, cov, z + nz * radius);
         }
 
@@ -841,6 +897,70 @@ namespace IdleWalker.Rendering
             frontG[n] = g;
             frontB[n] = b;
             frontCov[n] = cov * f;
+        }
+
+        // ---- Things floating about the figure ---------------------------------------------
+
+        // A drop of sweat beside the head on the side away from where it
+        // faces, sliding down and fading as Pose.Sweat goes 0..1.
+        void Sweat(double u, double v)
+        {
+            double s = pose.Sweat;
+            double x = -(BodyR + 1.1), y = 15.0 - 2.6 * s;
+            if (Math.Abs(u - x) > 1.0 || Math.Abs(v - y - 0.3) > 1.3) return;
+            double qx, qy, t;
+            double dx = u - x, dy = v - y;
+            double d = Math.Min(Math.Sqrt(dx * dx + dy * dy) - 0.42,
+                                Seg(u, v, x, y + 1.0, x, y, out qx, out qy, out t) - (0.04 + 0.36 * t));
+            double a = s < 0.75 ? 1 : (1 - s) / 0.25;
+            Over(0.10, 0.22, 0.42, Cov(Math.Abs(d) - 0.07) * 0.5 * a);
+            Over(0.55, 0.78, 0.98, Cov(d) * a);
+            double hx = dx + 0.15, hy = dy - 0.12;
+            Over(1, 1, 1, Cov(Math.Sqrt(hx * hx + hy * hy) - 0.12) * 0.9 * a);
+        }
+
+        // A music note drifting up and forward from the mouth.
+        void Note(double u, double v)
+        {
+            double ph = pose.DecorPhase;
+            double x = BodyR * 0.93 * sinY + 2.2 + 1.2 * ph, y = MouthV + 1.0 + 5.0 * ph;
+            if (Math.Abs(u - x - 0.3) > 1.4 || Math.Abs(v - y - 0.8) > 1.6) return;
+            const double s = 0.85;
+            double dx = (u - x) / (0.5 * s), dy = (v - y) / (0.38 * s);
+            double d = (Math.Sqrt(dx * dx + dy * dy) - 1) * 0.38 * s;          // the head
+            double qx, qy, t;
+            double sx = x + 0.42 * s;
+            d = Math.Min(d, Seg(u, v, sx, y, sx, y + 1.7 * s, out qx, out qy, out t) - 0.1 * s);                    // the stem
+            d = Math.Min(d, Seg(u, v, sx, y + 1.7 * s, sx + 0.6 * s, y + 1.15 * s, out qx, out qy, out t) - 0.12 * s); // the flag
+            double a = ph < 0.75 ? 1 : (1 - ph) / 0.25;
+            Over(0.98, 0.98, 1.0, Cov(d - 0.22) * 0.85 * a);
+            Over(0.12, 0.10, 0.18, Cov(d) * a);
+        }
+
+        // Two "z"s floating up and away from the top of the head, growing
+        // as they go; the second is half a drift behind the first.
+        void Zzz(double u, double v)
+        {
+            if (v < 17.5 || u < 1.0 || u > 9.5) return;
+            double ph = pose.DecorPhase;
+            ZGlyph(u, v, ph);
+            ZGlyph(u, v, ph >= 0.5 ? ph - 0.5 : ph + 0.5);
+        }
+
+        void ZGlyph(double u, double v, double ph)
+        {
+            double s = 1.0 + 0.6 * ph;
+            double x = 3.4 + 2.4 * ph, y = 19.8 + 3.2 * ph;
+            double h = s * 0.5;
+            if (Math.Abs(u - x) > h + 0.6 || Math.Abs(v - y) > h + 0.6) return;
+            double qx, qy, t;
+            double d = Seg(u, v, x - h, y + h, x + h, y + h, out qx, out qy, out t);
+            d = Math.Min(d, Seg(u, v, x + h, y + h, x - h, y - h, out qx, out qy, out t));
+            d = Math.Min(d, Seg(u, v, x - h, y - h, x + h, y - h, out qx, out qy, out t));
+            double r = 0.08 + 0.1 * s;
+            double a = ph < 0.8 ? 1 : (1 - ph) / 0.2;
+            Over(0.12, 0.10, 0.14, Cov(d - r - 0.25) * 0.8 * a);
+            Over(0.95, 0.96, 1.0, Cov(d - r) * a);
         }
 
         void Bubble(double u, double v)

@@ -164,8 +164,9 @@ namespace IdleWalker.Domain
             }
         }
 
-        // A charging walker that has reached its target shoves it.
-        static bool ResolveShove(Walker a, Walker b, double distance, int towardsB)
+        // A charging walker that has reached its target shoves it; anyone
+        // close enough to see it react in character.
+        bool ResolveShove(Walker a, Walker b, double distance, int towardsB)
         {
             bool aHits = a.IsCharging && a.ChargeTarget == b && distance < ContactDistanceBodies * a.BodyWidth;
             bool bHits = b.IsCharging && b.ChargeTarget == a && distance < ContactDistanceBodies * b.BodyWidth;
@@ -176,23 +177,40 @@ namespace IdleWalker.Domain
                 // Two bullies collide and both go flying.
                 a.Knock(-towardsB);
                 b.Knock(towardsB);
+                Witness(a, b, (a.CentreX + b.CentreX) / 2);
             }
             else if (aHits)
             {
                 b.Knock(towardsB);
                 a.Gloat();
+                Witness(a, b, b.CentreX);
             }
             else
             {
                 a.Knock(-towardsB);
                 b.Gloat();
+                Witness(a, b, a.CentreX);
             }
             return true;
         }
 
+        // Everyone else on the same ground within sight of x stops to gasp,
+        // tut or jeer, as is their nature.
+        void Witness(Walker a, Walker b, double x)
+        {
+            foreach (Walker other in walkers)
+            {
+                if (other == a || other == b || !other.IsGrounded) continue;
+                if (Math.Abs(other.FeetY - a.FeetY) > 2) continue;
+                if (Math.Abs(other.CentreX - x) > 620 * other.Scale / Settings.BasePixelSize) continue;
+                other.React(x);
+            }
+        }
+
         // Two walkers about to pass each other stop to say hello - unless
-        // they are aggressive, in which case they just keep walking.
-        static void TryGreet(Walker a, Walker b, double distance, int towardsB)
+        // they are aggressive, in which case they just keep walking. Two
+        // friendly ones sometimes break into a dance together.
+        void TryGreet(Walker a, Walker b, double distance, int towardsB)
         {
             if (distance >= GreetDistanceBodies * Math.Max(a.BodyWidth, b.BodyWidth)) return;
             if (!a.CanGreet || !b.CanGreet) return;
@@ -203,8 +221,16 @@ namespace IdleWalker.Domain
 
             a.GreetCooldown = GreetCooldownSeconds;
             b.GreetCooldown = GreetCooldownSeconds;
-            if (a.Temperament != Temperament.Aggressive) a.Greet(towardsB, a.Temperament == Temperament.Friendly);
-            if (b.Temperament != Temperament.Aggressive) b.Greet(-towardsB, b.Temperament == Temperament.Friendly);
+            bool bothFriendly = a.Temperament == Temperament.Friendly && b.Temperament == Temperament.Friendly;
+            bool dance = bothFriendly && rng.NextDouble() < 0.4;
+            if (a.Temperament != Temperament.Aggressive) a.Greet(towardsB, StyleFor(a, dance));
+            if (b.Temperament != Temperament.Aggressive) b.Greet(-towardsB, StyleFor(b, dance));
+        }
+
+        static GreetStyle StyleFor(Walker walker, bool dance)
+        {
+            if (walker.Temperament != Temperament.Friendly) return GreetStyle.Nod;
+            return dance ? GreetStyle.Dance : GreetStyle.Wave;
         }
 
         // An aggressive walker with somebody in range goes for them.
