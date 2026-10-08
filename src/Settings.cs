@@ -21,6 +21,12 @@ namespace IdleWalker
         /// <summary>How many walkers can be out at once (the tray menu offers 1..MaxWalkers).</summary>
         public const int MaxWalkers = 5;
 
+        /// <summary>How many come out until the user picks another number.</summary>
+        public const int DefaultWalkers = 5;
+
+        /// <summary>Whether "Start with Windows" is switched on the first time the program runs.</summary>
+        public const bool StartWithWindowsByDefault = true;
+
         public const double WalkSpeed = 90;
         public const double Acceleration = 420;  // easing into a walk
         public const double Braking = 520;       // easing to a stop

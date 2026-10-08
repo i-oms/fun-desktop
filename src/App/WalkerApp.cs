@@ -32,11 +32,15 @@ namespace IdleWalker.App
 
         double lastTick;
         double nextTopmost;
+        AboutToast about;           // the card while it is showing
 
         public WalkerApp()
         {
             troupe = new Troupe(monitors, new Random());
             troupe.Count = UserSettings.LoadWalkerCount();
+
+            // Before the menu reads the tick state.
+            StartupRegistration.ApplyDefault();
 
             tray = new TrayMenu(troupe.Count, UserSettings.LoadIdleSeconds());
             tray.ExitRequested += delegate { ExitThread(); };
@@ -46,6 +50,7 @@ namespace IdleWalker.App
                 UserSettings.SaveWalkerCount(tray.Count);
             };
             tray.IdleChanged += delegate { UserSettings.SaveIdleSeconds(tray.IdleSeconds); };
+            tray.AboutRequested += delegate { ShowAbout(); };
             StartupRegistration.RefreshPath();
 
             if (SynchronizationContext.Current == null)
@@ -67,7 +72,9 @@ namespace IdleWalker.App
 
             troupe.Step(dt, cursor.Position, wantOut, moved || paused);
 
-            bool raise = now >= nextTopmost;
+            // The walkers are re-raised once a second, except while the
+            // About card is up: that belongs above them.
+            bool raise = now >= nextTopmost && about == null;
             if (raise) nextTopmost = now + 1;
 
             IList<Walker> walkers = troupe.Walkers;
@@ -92,11 +99,25 @@ namespace IdleWalker.App
             pump.Animating = troupe.AnyVisible;
         }
 
+        /// <summary>Shows the About card; a second click while it is already up is ignored.</summary>
+        void ShowAbout()
+        {
+            if (about != null) return;
+            about = new AboutToast(cursor.Position);
+            about.FormClosed += delegate
+            {
+                about.Dispose();
+                about = null;
+            };
+            about.Present();
+        }
+
         protected override void Dispose(bool disposing)
         {
             if (disposing)
             {
                 pump.Stop();
+                if (about != null) about.Dispose();
                 tray.Dispose();
                 foreach (View view in views) view.Window.Dispose();
             }

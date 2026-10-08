@@ -23,6 +23,7 @@ namespace IdleWalker.App
         public event EventHandler ExitRequested;
         public event EventHandler CountChanged;
         public event EventHandler IdleChanged;
+        public event EventHandler AboutRequested;
 
         /// <summary>True while the user has ticked Pause.</summary>
         public bool Paused
@@ -80,6 +81,7 @@ namespace IdleWalker.App
             menu.Items.Add(startupItem);
             menu.Items.Add(pauseItem);
             menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add("About", null, OnAboutClick);
             menu.Items.Add("Exit", null, OnExitClick);
 
             iconHandle = RenderIcon();
@@ -159,12 +161,19 @@ namespace IdleWalker.App
             {
                 StartupRegistration.SetEnabled(enable);
                 startupItem.Checked = enable;
+                UserSettings.MarkStartupDecided();
             }
             catch (Exception ex)
             {
                 icon.ShowBalloonTip(4000, "Idle Walker",
                     "Could not change the start-up setting: " + ex.Message, ToolTipIcon.Warning);
             }
+        }
+
+        void OnAboutClick(object sender, EventArgs e)
+        {
+            EventHandler handler = AboutRequested;
+            if (handler != null) handler(this, EventArgs.Empty);
         }
 
         void OnExitClick(object sender, EventArgs e)

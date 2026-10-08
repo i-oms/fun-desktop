@@ -46,7 +46,8 @@ fun/
     └── App/                  wiring
         ├── WalkerApp.cs      the per-frame loop, one window per walker
         ├── CursorWatcher.cs  idle detection
-        └── TrayMenu.cs       notification-area icon and menu
+        ├── TrayMenu.cs       notification-area icon and menu
+        └── AboutToast.cs     the About card
 ```
 
 ---
@@ -147,10 +148,11 @@ Minion appears.
 
 | Item | Effect |
 |---|---|
-| Walkers: *n* → 1…5 | How many Minions come out. Raising it brings the new ones out straight away (one at a time); lowering it sends the extras away. Remembered between runs. |
+| Walkers: *n* → 1…5 | How many Minions come out (all five by default). Raising it brings the new ones out straight away (one at a time); lowering it sends the extras away. Remembered between runs. |
 | Appear after: *t* → 1…5 seconds, 1…5 minutes | How long the mouse must be still before they come out. Takes effect at once: shorten it and they appear sooner, lengthen it while they are out and they stay (they only ever leave when the mouse moves). Remembered between runs. |
-| Start with Windows | Ticked: the program starts when you sign in. See below. |
+| Start with Windows | Ticked: the program starts when you sign in. On by default; untick it to switch it off. See below. |
 | Pause | Keeps the characters hidden until unticked. If they are on screen, they leave immediately. |
+| About | Shows a small card above the walkers' lane - a waving Minion and the creator's name - for two seconds, then it fades out. It takes no focus; click it to dismiss it sooner. |
 | Exit | Quits the program. |
 
 Only one instance can run at a time; starting a second one quietly exits.
@@ -188,7 +190,9 @@ The cast is defined in `src\Domain\Personality.cs`; the meeting rules are in
 
 ### Start automatically with Windows
 
-Tick **Start with Windows** in the tray menu. This writes a value named
+**Start with Windows** is switched on the first time the program runs
+(`Settings.StartWithWindowsByDefault`); the tray menu shows it ticked, and
+unticking it switches it off for good. Either way it is a value named
 `IdleWalker` under
 
 ```
@@ -283,6 +287,8 @@ running copy, rebuild.
 | `MoveTolerance` | `2` | Cursor movement (pixels) below this does not count as moving. |
 | `BasePixelSize` | `3` | Size in screen pixels of one art pixel at 100% display scaling. `4` makes it a third bigger. |
 | `MaxWalkers` | `5` | Upper limit of the Walkers menu. The cast in `Personality.Roster` must have at least this many entries. |
+| `DefaultWalkers` | `5` | How many come out until a number is picked from the menu. |
+| `StartWithWindowsByDefault` | `true` | Whether the first run registers the program to start at sign-in. |
 | `WalkSpeed` | `90` | Walking speed, px/s at 100% scaling. |
 | `Acceleration` | `420` | How quickly it reaches walking speed. |
 | `Braking` | `520` | How quickly it stops. |
@@ -565,10 +571,13 @@ option is on.
 
 ### Remembered settings
 
-`UserSettings` stores the walker count as a DWORD `WalkerCount` and the
-rest time as a DWORD `IdleSeconds` under `HKCU\Software\IdleWalker`.
-Reading or writing failures are swallowed - the worst case is the count
-resets to 1 and the rest time to two seconds next time.
+`UserSettings` stores the walker count as a DWORD `WalkerCount`, the rest
+time as a DWORD `IdleSeconds` and, once "Start with Windows" has been set
+up (by the first-run default or by a click), a DWORD `StartupDecided` of 1,
+all under `HKCU\Software\IdleWalker`. The last one is what stops the
+default re-ticking the box after the user has unticked it. Reading or
+writing failures are swallowed - the worst case is the count resets to 5
+and the rest time to two seconds next time.
 
 ### Adding things
 
@@ -657,7 +666,7 @@ What keeps it cheap:
 | Symptom | Cause / fix |
 |---|---|
 | Nothing appears | Is the tray icon there? If not, the program is not running. Check **Pause** is unticked. The characters spawn on the monitor the *cursor* is on. |
-| Only one walker appears | Check **Walkers** in the tray menu; the count is remembered between runs and defaults to 1. |
+| Fewer walkers appear than expected | Check **Walkers** in the tray menu; the count is remembered between runs and defaults to 5. |
 | Walkers overlap each other | They can walk through one another; only meetings (greeting, shoving) are physical. This is by design. |
 | Appears, but immediately dives away | Something is moving the cursor (a jittery mouse, a wobbling desk, some remote-control software). Raise `MoveTolerance`. |
 | Hidden behind a full-screen game | Exclusive full-screen apps bypass the compositor; nothing can draw over them. Borderless-windowed games are fine. |

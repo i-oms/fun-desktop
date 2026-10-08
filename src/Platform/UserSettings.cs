@@ -9,11 +9,27 @@ namespace IdleWalker.Platform
         const string Key = @"Software\IdleWalker";
         const string CountValue = "WalkerCount";
         const string IdleValue = "IdleSeconds";
+        const string StartupValue = "StartupDecided";
 
         public static int LoadWalkerCount()
         {
-            int count = Load(CountValue, 1);
+            int count = Load(CountValue, Settings.DefaultWalkers);
             return Math.Max(1, Math.Min(Settings.MaxWalkers, count));
+        }
+
+        /// <summary>
+        /// True once "Start with Windows" has been set up - by the default
+        /// on the first run, or by the user clicking it - so the default is
+        /// applied only once and an unticked box stays unticked.
+        /// </summary>
+        public static bool StartupDecided()
+        {
+            return Load(StartupValue, 0) != 0;
+        }
+
+        public static void MarkStartupDecided()
+        {
+            Save(StartupValue, 1);
         }
 
         public static void SaveWalkerCount(int count)

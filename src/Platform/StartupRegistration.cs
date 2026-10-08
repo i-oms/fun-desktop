@@ -32,6 +32,25 @@ namespace IdleWalker.Platform
         }
 
         /// <summary>
+        /// On the very first run, switches the setting on if that is the
+        /// default. After that the user's choice stands.
+        /// </summary>
+        public static void ApplyDefault()
+        {
+            if (UserSettings.StartupDecided()) return;
+            try
+            {
+                if (Settings.StartWithWindowsByDefault) SetEnabled(true);
+                UserSettings.MarkStartupDecided();
+            }
+            catch (Exception)
+            {
+                // Leave it undecided: the next run tries again, and the tray
+                // menu still works for switching it on by hand.
+            }
+        }
+
+        /// <summary>
         /// If the setting is on, points it at wherever the program is running
         /// from now - so moving or renaming the exe doesn't break it.
         /// </summary>
