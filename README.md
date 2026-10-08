@@ -357,7 +357,13 @@ three-quarter view it walks in, negative is a glance back over the
 shoulder), whether it is walking and where in the stride it is (legs and
 arms swing continuously from that), how far the knees are tucked
 up, the angle of each upper arm and forearm, a forward lean, an upper-body
-bob and squash-and-stretch factors, and whether the "!" shows.
+bob and squash-and-stretch factors, and whether the "!" shows. The shoulders
+sit on the surface of the body a little forward of its widest point, so a
+hanging arm shows beside the body when the Minion faces you and swings round
+in front of it as it turns away. A hanging arm swings fore and aft of the
+body as it walks (which in the three-quarter view is partly towards you);
+an explicitly posed arm - waving, flailing, hands on hips - is read in the
+picture plane, so it looks the same from any angle.
 `Walker.CurrentPose()` decides the pose for each frame;
 `FrameRenderer.DrawPose()` paints it.
 
@@ -464,8 +470,14 @@ is what a 32-bpp `BI_RGB` DIB holds).
    and facing), every solid contributes a coverage from its signed distance
    (`0.5 - d / pixel`, clamped, which is a one-pixel anti-aliased edge) and a
    colour from its lit normal, and the solids are composited back to front:
-   far leg, near leg, body with the overalls and goggle strap painted on,
-   eyes and rims, brows, mouth, hair, arms, the "!".
+   far leg, near leg, the parts of the arms behind the body, body with the
+   overalls and goggle strap painted on, eyes and rims, brows, mouth, hair,
+   the parts of the arms in front, the "!". The arms are the one place where
+   "behind" is decided per pixel rather than per solid: each joint carries
+   a depth, every arm pixel compares its depth with the body's surface at
+   that point, and the two blend over a band a couple of pixels deep. That
+   is what lets a hand slide behind the body edge and come out again as the
+   Minion turns, instead of the whole arm flipping over in one frame.
 3. **Halo pass:** a transparent layer pixel next to a character pixel (along
    its row or column) gets a translucent dark halo, found with four linear
    sweeps so it costs O(pixels). It keeps the figure legible on a pale or

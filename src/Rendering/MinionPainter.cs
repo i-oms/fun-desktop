@@ -21,7 +21,10 @@ namespace IdleWalker.Rendering
     /// The body is a capsule so its outline does not change, but everything
     /// attached to it - goggles, mouth, overalls, hair, limbs - sits at an
     /// angle round the axis and is swung round, foreshortened and hidden
-    /// behind the body as it turns.
+    /// behind the body as it turns. The arms carry a depth as well as a
+    /// position, and every pixel of them is sorted against the body's
+    /// surface, so a hand slides behind the body or comes out in front of
+    /// it continuously instead of the whole arm flipping over at once.
     /// </summary>
     sealed class MinionPainter
     {
@@ -41,9 +44,12 @@ namespace IdleWalker.Rendering
         const double GoggleOut = 0.4;                     // goggles stand this far off the body
 
         const double HipV = 4.3, HipX = 1.7, LegLen = 3.0, LegR = 0.95;
-        // Shoulders sit at the body surface so hanging hands rest at the
-        // sides instead of on the belly.
-        const double ShoulderX = 5.2, ShoulderV = 10.2, UpperArm = 1.75, Forearm = 1.85;
+        // Shoulders sit on the body surface, ShoulderAngle round from the
+        // front on each side: just forward of the widest point, so a hanging
+        // arm shows beside the body when the Minion faces you and swings
+        // round in front of it as the body turns away.
+        const double ShoulderAngle = 78, ShoulderOut = 0.15, ShoulderV = 10.2, UpperArm = 1.75, Forearm = 1.85;
+        const double RestSpread = 7;                      // a hanging arm angles out this far, degrees
         const double ArmR = 0.72, ForeR = 0.66, GloveR = 0.95;
 
         const double Deg = Math.PI / 180;
@@ -66,12 +72,26 @@ namespace IdleWalker.Rendering
         readonly double[] hipU = new double[2], ankleU = new double[2], ankleV = new double[2], legZ = new double[2];
         readonly double shoeLen, toe;
 
-        // Arms: shoulder, elbow, hand, depth and brightness of each.
-        readonly double[] shU = new double[2], elbU = new double[2], elbV = new double[2],
-                          handU = new double[2], handV = new double[2], armZ = new double[2], armK = new double[2];
-        readonly bool[] armFront = new bool[2];
+        // Arms: shoulder, elbow and hand of each, with the depth of each
+        // joint (positive towards the viewer) and the screen box it all fits in.
+        readonly double[] shU = new double[2], shZ = new double[2],
+                          elbU = new double[2], elbV = new double[2], elbZ = new double[2],
+                          handU = new double[2], handV = new double[2], handZ = new double[2],
+                          armLo = new double[2], armHi = new double[2], armVlo = new double[2], armVhi = new double[2];
 
         readonly double[] hair;              // segments: u0, v0, u1, v1, r0, r1
+
+        // Depth of the body's surface at the pixel being shaded, and how far
+        // in front of it a limb has to be to count as in front: a soft band
+        // rather than a knife edge, so the join does not shimmer.
+        double bodyZ;
+        readonly double depthBlend;
+        const double ArmRadius = BodyR + ShoulderOut;
+
+        // Limb pieces that turned out to be in front of the body at this
+        // pixel, held back until the face has been painted.
+        readonly double[] frontR = new double[6], frontG = new double[6], frontB = new double[6], frontCov = new double[6];
+        int frontCount;
 
         // The pixel being shaded, premultiplied.
         double ca, cr, cg, cb;
@@ -87,6 +107,7 @@ namespace IdleWalker.Rendering
             yaw = pose.Yaw * Deg;
             sinY = Math.Sin(yaw);
             cosY = Math.Cos(yaw);
+            depthBlend = 2.5 * px;
 
             // Eyes sit on the surface at +-EyeAngle from the front (one eye: dead ahead).
             if (look.OneEye)
@@ -116,16 +137,18 @@ namespace IdleWalker.Rendering
             shoeLen = 1.2 + 0.75 * Math.Abs(sinY);       // seen from the side a shoe is long
             toe = 0.3 + 0.7 * sinY;                      // and its toe points the way it is going
 
-            // Arms: shoulders at the sides of the body, swung round likewise.
-            // They swing opposite to the leg on the same side, but only when
-            // hanging. An explicitly raised arm (waving, flailing overhead,
-            // hands on hips, ...) stays where the pose puts it.
+            // Arms: shoulders on the sides of the body, swung round likewise.
+            // A hanging arm swings fore and aft - the way the Minion is going,
+            // which brings the hand towards and away from the viewer as the
+            // body turns - opposite to the leg on the same side. An explicitly
+            // raised arm (waving, flailing overhead, hands on hips, ...) stays
+            // where the pose puts it.
             double armSwing = pose.Walking ? 32 * Math.Sin(p) : 0;
             double foreSwing = pose.Walking ? 14 : 0;
             if (pose.ArmNear != 0 || pose.ArmFar != 0) armSwing = 0;
             if (pose.ForeNear != 0 || pose.ForeFar != 0) foreSwing = 0;
-            PlaceArm(0, -ShoulderX, pose.ArmFar + armSwing, pose.ForeFar + foreSwing);
-            PlaceArm(1, ShoulderX, pose.ArmNear - armSwing, pose.ForeNear + foreSwing);
+            PlaceArm(0, -1, pose.ArmFar, pose.ForeFar, armSwing, foreSwing);
+            PlaceArm(1, 1, pose.ArmNear, pose.ForeNear, -armSwing, foreSwing);
 
             hair = HairFor(look.Hair);
         }
@@ -156,21 +179,41 @@ namespace IdleWalker.Rendering
             ankleV[i] = v;
         }
 
-        void PlaceArm(int i, double x, double upper, double fore)
+        /// <summary>
+        /// Lays out one arm. `side` is -1 or 1. `raise` and `bend` are the
+        /// pose's angles, measured in the picture plane through the shoulder
+        /// (0 hanging, positive out to that arm's own side, 180 straight up),
+        /// so a raised hand reads the same from any angle. `swing` and
+        /// `foreSwing` are the walk, measured fore and aft of the body: a
+        /// forward swing carries the hand the way the Minion faces, which is
+        /// partly towards the viewer when it is turned.
+        /// </summary>
+        void PlaceArm(int i, double side, double raise, double bend, double swing, double foreSwing)
         {
-            shU[i] = x * cosY;
-            armZ[i] = -x * sinY;
-            armK[i] = 0.78 + 0.22 * (1 + armZ[i] / ShoulderX) / 2;
-            // An arm the turn has put behind the body stays there: a raised
-            // hand waves from its own side (sticking out past the silhouette)
-            // instead of popping round to the front face.
-            armFront[i] = armZ[i] >= -0.05;
-            double a = upper * Deg;
-            elbU[i] = shU[i] + UpperArm * Math.Sin(a);
-            elbV[i] = ShoulderV - UpperArm * Math.Cos(a);
-            double b = (upper + fore) * Deg;
-            handU[i] = elbU[i] + Forearm * Math.Sin(b);
-            handV[i] = elbV[i] - Forearm * Math.Cos(b);
+            double at = side * ShoulderAngle * Deg + yaw;
+            shU[i] = ArmRadius * Math.Sin(at);
+            shZ[i] = ArmRadius * Math.Cos(at);
+
+            // A hanging arm angles out a little so the hand clears the hip.
+            if (raise == 0) raise = side * RestSpread;
+
+            double a = raise * Deg, b = swing * Deg;
+            double sa = Math.Sin(a), ca = Math.Cos(a), sb = Math.Sin(b), cb = Math.Cos(b);
+            elbU[i] = shU[i] + UpperArm * (sa + ca * sb * sinY);
+            elbV[i] = ShoulderV - UpperArm * ca * cb;
+            elbZ[i] = shZ[i] + UpperArm * ca * sb * cosY;
+
+            a = (raise + bend) * Deg;
+            b = (swing + foreSwing) * Deg;
+            sa = Math.Sin(a); ca = Math.Cos(a); sb = Math.Sin(b); cb = Math.Cos(b);
+            handU[i] = elbU[i] + Forearm * (sa + ca * sb * sinY);
+            handV[i] = elbV[i] - Forearm * ca * cb;
+            handZ[i] = elbZ[i] + Forearm * ca * sb * cosY;
+
+            armLo[i] = Math.Min(Math.Min(shU[i], elbU[i]), handU[i]) - 1.2;
+            armHi[i] = Math.Max(Math.Max(shU[i], elbU[i]), handU[i]) + 1.2;
+            armVlo[i] = Math.Min(Math.Min(ShoulderV, elbV[i]), handV[i]) - 1.2;
+            armVhi[i] = Math.Max(Math.Max(ShoulderV, elbV[i]), handV[i]) + 1.2;
         }
 
         static double DomeTop(double x)
@@ -309,18 +352,31 @@ namespace IdleWalker.Rendering
             double vb = v + pose.BodyDy;
             double ub = u - lean * 0.11 * Math.Max(0, v - 2);
 
+            // The body's distance field: how far this pixel is from the
+            // capsule's axis, and how far forward its surface bulges here.
+            // Everything that dips into the body is sorted against this.
+            double axisV = vb < BodyBottom ? BodyBottom : vb > BodyTop ? BodyTop : vb;
+            double bdy = vb - axisV;
+            double bodyDist = Math.Sqrt(ub * ub + bdy * bdy);
+            double bulge = BodyR * BodyR - ub * ub - bdy * bdy;
+            bodyZ = bulge > 0 ? Math.Sqrt(bulge) : 0;
+
             // Back to front: whatever the turn has put behind the body first.
+            // Each arm is painted once; the parts of it that are in front of
+            // the body are held back and laid on after the face.
             int backLeg = legZ[0] < legZ[1] ? 0 : 1;
             Leg(u, v, backLeg);
             Leg(u, v, 1 - backLeg);
-            for (int i = 0; i < 2; i++) if (!armFront[i]) Limb(ub, vb, i);
-            Body(ub, vb);
+            frontCount = 0;
+            Limb(ub, vb, 0);
+            Limb(ub, vb, 1);
+            Body(ub, vb, bdy, bodyDist);
             if (eyes == 2) Eye(ub, vb, firstEye);
             Eye(ub, vb, eyes == 2 ? 1 - firstEye : 0);
             Brows(ub, vb);
             Mouth(ub, vb);
             Hair(ub, vb);
-            for (int i = 0; i < 2; i++) if (armFront[i]) Limb(ub, vb, i);
+            for (int i = 0; i < frontCount; i++) Over(frontR[i], frontG[i], frontB[i], frontCov[i]);
             if (pose.Bubble) Bubble(ub, vb);
 
             if (ca <= 0.003) return 0;
@@ -447,19 +503,6 @@ namespace IdleWalker.Rendering
             Over(lr, lg, lb, cov);
         }
 
-        /// <summary>A ball, lit as a sphere.</summary>
-        void Ball(double x, double y, double cx, double cy, double radius,
-                  double r, double g, double b, double spec, double shine)
-        {
-            double dx = x - cx, dy = y - cy;
-            double cov = Cov(Math.Sqrt(dx * dx + dy * dy) - radius);
-            if (cov <= 0) return;
-            double nx, ny, nz;
-            Normal(dx, dy, radius, out nx, out ny, out nz);
-            double lr, lg, lb;
-            Lit(r, g, b, nx, ny, nz, spec, shine, out lr, out lg, out lb);
-            Over(lr, lg, lb, cov);
-        }
 
         void Leg(double u, double v, int i)
         {
@@ -482,16 +525,14 @@ namespace IdleWalker.Rendering
             Over(lr, lg, lb, cov);
         }
 
-        void Body(double u, double v)
+        /// <summary>The body at (u, v): dy is the height above the nearest point of the capsule's axis, dist the distance from it.</summary>
+        void Body(double u, double v, double dy, double dist)
         {
-            double axisV = v < BodyBottom ? BodyBottom : v > BodyTop ? BodyTop : v;
-            double dx = u, dy = v - axisV;
-            double dist = Math.Sqrt(dx * dx + dy * dy);
             double cov = Cov(dist - BodyR);
             if (cov <= 0) return;
 
             double nx, ny, nz;
-            Normal(dx, dy, BodyR, out nx, out ny, out nz);
+            Normal(u, dy, BodyR, out nx, out ny, out nz);
 
             // Where on the surface this is, measured round the body from the
             // front of the Minion (not the front as seen), as an arc length.
@@ -734,16 +775,72 @@ namespace IdleWalker.Rendering
             }
         }
 
+        /// <summary>
+        /// One arm: two tubes and a glove, each sorted against the body
+        /// pixel by pixel. Where a piece is behind the body's surface it is
+        /// painted now and the body will cover it; where it is in front it
+        /// is kept for after the face. The arm's own depth matters too: a
+        /// far arm is a shade darker.
+        /// </summary>
         void Limb(double u, double v, int i)
         {
-            double su = shU[i], eu = elbU[i], ev = elbV[i], hu = handU[i], hv = handV[i], k = armK[i];
-            double lo = Math.Min(Math.Min(su, eu), hu) - 1.2, hi = Math.Max(Math.Max(su, eu), hu) + 1.2;
-            if (u < lo || u > hi) return;
-            double vlo = Math.Min(Math.Min(ShoulderV, ev), hv) - 1.2, vhi = Math.Max(Math.Max(ShoulderV, ev), hv) + 1.2;
-            if (v < vlo || v > vhi) return;
-            Tube(u, v, su, ShoulderV, eu, ev, ArmR, 0.98 * k, 0.84 * k, 0.11 * k, 0.3, 24);
-            Tube(u, v, eu, ev, hu, hv, ForeR, 0.98 * k, 0.84 * k, 0.11 * k, 0.3, 24);
-            Ball(u, v, hu, hv, GloveR, 0.11 * k, 0.10 * k, 0.13 * k, 0.7, 18);
+            if (u < armLo[i] || u > armHi[i] || v < armVlo[i] || v > armVhi[i]) return;
+            ArmTube(u, v, shU[i], ShoulderV, shZ[i], elbU[i], elbV[i], elbZ[i], ArmR);
+            ArmTube(u, v, elbU[i], elbV[i], elbZ[i], handU[i], handV[i], handZ[i], ForeR);
+
+            double dx = u - handU[i], dy = v - handV[i];
+            double cov = Cov(Math.Sqrt(dx * dx + dy * dy) - GloveR);
+            if (cov <= 0) return;
+            double nx, ny, nz;
+            Normal(dx, dy, GloveR, out nx, out ny, out nz);
+            double k = Depth(handZ[i]);
+            double lr, lg, lb;
+            Lit(0.11 * k, 0.10 * k, 0.13 * k, nx, ny, nz, 0.7, 18, out lr, out lg, out lb);
+            Sort(lr, lg, lb, cov, handZ[i] + nz * GloveR);
+        }
+
+        void ArmTube(double x, double y, double ax, double ay, double az, double bx, double by, double bz, double radius)
+        {
+            double qx, qy, t;
+            double dist = Seg(x, y, ax, ay, bx, by, out qx, out qy, out t);
+            double cov = Cov(dist - radius);
+            if (cov <= 0) return;
+            double nx, ny, nz;
+            Normal(x - qx, y - qy, radius, out nx, out ny, out nz);
+            double z = az + (bz - az) * t;
+            double k = Depth(z);
+            double lr, lg, lb;
+            Lit(0.98 * k, 0.84 * k, 0.11 * k, nx, ny, nz, 0.3, 24, out lr, out lg, out lb);
+            Sort(lr, lg, lb, cov, z + nz * radius);
+        }
+
+        /// <summary>How much darker something gets with distance from the viewer.</summary>
+        static double Depth(double z)
+        {
+            double k = 0.89 + 0.11 * z / ArmRadius;
+            return k < 0.78 ? 0.78 : k > 1 ? 1 : k;
+        }
+
+        /// <summary>
+        /// Composites a limb piece at depth z against the body: the part
+        /// behind the body's surface now, the part in front later. Across
+        /// the surface the two blend over a band a couple of pixels deep,
+        /// which reads as the arm sinking into the body.
+        /// </summary>
+        void Sort(double r, double g, double b, double cov, double z)
+        {
+            double f = 0.5 + (z - bodyZ) / depthBlend;
+            if (f <= 0)
+            {
+                Over(r, g, b, cov);
+                return;
+            }
+            if (f < 1) Over(r, g, b, cov * (1 - f)); else f = 1;
+            int n = frontCount++;
+            frontR[n] = r;
+            frontG[n] = g;
+            frontB[n] = b;
+            frontCov[n] = cov * f;
         }
 
         void Bubble(double u, double v)
