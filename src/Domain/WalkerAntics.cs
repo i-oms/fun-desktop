@@ -3,10 +3,10 @@ using System;
 namespace IdleWalker.Domain
 {
     /// <summary>
-    /// The idle antics and the reactions to a shove: how each is started,
-    /// what happens over its course, the face it pulls, the way the body
-    /// turns and how the limbs are arranged. Which antics a walker goes in
-    /// for is down to its <see cref="Personality"/>.
+    /// The idle antics and the reactions: how each is started, what happens
+    /// over its course, the face it pulls, the way the body turns and how
+    /// the limbs are arranged. Which antics a walker goes in for is down to
+    /// its <see cref="Personality"/> and its mood (WalkerBrain.cs).
     /// </summary>
     partial class Walker
     {
@@ -19,15 +19,17 @@ namespace IdleWalker.Domain
         {
             antic = choice;
             anticStage = 0;
+            // Having a look at the cursor takes the edge off the curiosity.
+            if (choice == Antic.Look || choice == Antic.Wave || choice == Antic.Point) curiosity *= 0.4;
             switch (choice)
             {
                 case Antic.Look:
-                    Brake(Mode.Look);
+                    Stop(Mode.Look);
                     return;
 
                 case Antic.Rest:
                     restDuration = Between(0.8, 2.0);
-                    Brake(Mode.Rest);
+                    Stop(Mode.Rest);
                     return;
 
                 case Antic.Wave:
@@ -50,10 +52,10 @@ namespace IdleWalker.Domain
                     StopFacing(cursorX, Mode.Antic);
                     return;
 
-                case Antic.Dance: anticSeconds = 2.6; break;
+                case Antic.Dance: anticSeconds = 2.6; broadcast = Antic.Dance; break;
                 case Antic.Twirl: anticSeconds = 1.7; break;
-                case Antic.Yawn: anticSeconds = 2.1; break;
-                case Antic.Doze: anticSeconds = 2.1 + Between(2.5, 4.5); break;
+                case Antic.Yawn: anticSeconds = 2.1; broadcast = Antic.Yawn; break;
+                case Antic.Doze: anticSeconds = 2.1 + Between(2.5, 4.5); broadcast = Antic.Yawn; break;
                 case Antic.Scratch: anticSeconds = 2.0; break;
                 case Antic.Whistle: anticSeconds = 2.7; break;
                 case Antic.Sneeze: anticSeconds = 1.6; break;
@@ -61,27 +63,46 @@ namespace IdleWalker.Domain
                 case Antic.Stomp: anticSeconds = 1.1; break;
                 case Antic.Flex: anticSeconds = 2.4; break;
                 case Antic.Joy: anticSeconds = 1; break;   // it jumps on the first step
+                case Antic.Hiccups: anticSeconds = 2.6; break;
+                case Antic.Shrug: anticSeconds = 1.3; break;
+                case Antic.Trip: anticSeconds = 1.8; break;
+                case Antic.Boo: anticSeconds = 1.6; break;
             }
-            Brake(Mode.Antic);
+            Stop(Mode.Antic);
         }
 
         // Stops, turning round first if the target is behind.
         void StopFacing(double targetX, Mode then)
         {
             bool behind = (targetX - cx) * facing < -2 * HalfBodyCells * scale;
-            if (behind)
+            if (behind && mode == Mode.Walk)
             {
                 afterTurn = then;
                 Brake(Mode.Turn);
             }
+            else if (behind)
+            {
+                afterTurn = then;
+                Enter(Mode.Turn);
+            }
             else
             {
-                Brake(then);
+                Stop(then);
             }
         }
 
-        // The one-off effects along the way: a stomp lands, a sneeze sprays.
-        void StepAntic()
+        // A trip happens mid-stride, without stopping first.
+        void StartTrip()
+        {
+            antic = Antic.Trip;
+            anticSeconds = 1.8;
+            anticStage = 0;
+            Enter(Mode.Antic);
+        }
+
+        // The one-off effects along the way: a stomp lands, a sneeze sprays,
+        // a shout makes somebody jump.
+        void StepAntic(double dt)
         {
             double t = modeTime;
             switch (antic)
@@ -133,6 +154,27 @@ namespace IdleWalker.Domain
                         EmitDust(cx, feetY, 3, 0.5);
                     }
                     break;
+
+                case Antic.Trip:
+                    // Still travelling as it goes over, then skidding to a halt.
+                    vx = Approach(vx, 0, Settings.Braking * 1.5 * sizeFactor * dt);
+                    MoveX(vx * dt);
+                    walkPhase += Math.Abs(vx) * dt / (StrideCells * scale);
+                    if (anticStage == 0 && t >= 0.12)
+                    {
+                        anticStage = 1;
+                        Slam(0.9);
+                        vx *= 0.3;
+                    }
+                    break;
+
+                case Antic.Boo:
+                    if (anticStage == 0)
+                    {
+                        anticStage = 1;
+                        if (goalTarget != null) goalTarget.Spook(cx);
+                    }
+                    break;
             }
         }
 
@@ -162,6 +204,8 @@ namespace IdleWalker.Domain
                 case Antic.Scratch: SetMood(Expression.Happy, 1.0); break;
                 case Antic.Stomp: SetMood(Expression.Grumpy, 1.2); break;
                 case Antic.Laugh: SetMood(Expression.Giggle, 0.8); break;
+                case Antic.Trip: SetMood(Expression.Giggle, 1.0); break;   // embarrassed
+                case Antic.Boo: SetMood(Expression.Mischievous, 1.5); goalTarget = null; break;
             }
             Enter(Mode.Walk);
         }
@@ -272,6 +316,32 @@ namespace IdleWalker.Domain
                     rate = 20;
                     atCursor = true;
                     break;
+
+                case Antic.Hiccups:
+                    // Holding its breath between the jolts.
+                    target = HiccupJolt(t) > 0 ? Expression.Surprised : Expression.Focused;
+                    rate = HiccupJolt(t) > 0 ? 40 : 12;
+                    atCursor = true;
+                    break;
+
+                case Antic.Shrug:
+                    target = Expression.Curious;
+                    atCursor = true;
+                    break;
+
+                case Antic.Trip:
+                    target = t < 0.12 ? Expression.Shocked : t < 1.0 ? Expression.Dizzy : Expression.Giggle;
+                    rate = t < 0.12 ? 40 : 14;
+                    gx = 0.3;
+                    gy = t < 1.0 ? -0.5 : 0;
+                    break;
+
+                case Antic.Boo:
+                    target = t < 0.6 ? Expression.Excited : Expression.Laugh;
+                    rate = 40;
+                    if (goalTarget != null) LookAt(goalTarget.CentreX, goalTarget.FeetY - 12 * scale, out gx, out gy);
+                    else gx = 0.7;
+                    break;
             }
         }
 
@@ -303,7 +373,10 @@ namespace IdleWalker.Domain
                 case Antic.Box: return 45;
                 case Antic.Stomp: return 15;
                 case Antic.Flex: return t < 1.4 ? 20 : 38;
-                default: return 0;   // yawning, dozing, whistling, taunting, laughing: facing you
+                case Antic.Shrug: return 10;
+                case Antic.Trip: return t < 1.0 ? 58 : 30;
+                case Antic.Boo: return 30;
+                default: return 0;   // yawning, dozing, whistling, taunting, laughing, hiccuping: facing you
             }
         }
 
@@ -496,6 +569,87 @@ namespace IdleWalker.Domain
                 case Antic.Laugh:
                     LaughPose(ref pose, t, false);
                     break;
+
+                case Antic.Hiccups:
+                {
+                    // Each hiccup is a jolt: up on the toes, arms twitching out.
+                    double jolt = HiccupJolt(t);
+                    pose.StretchY = 1 + 0.09 * jolt;
+                    pose.StretchX = 1 - 0.05 * jolt;
+                    pose.BodyDy = -Quantise(0.5 * jolt);
+                    pose.ArmNear = Q2(25 * jolt);
+                    pose.ArmFar = -Q2(25 * jolt);
+                    if (jolt <= 0) Breathe(ref pose);
+                    break;
+                }
+
+                case Antic.Shrug:
+                {
+                    // Arms out, shoulders up: oh well. Then the arms drop.
+                    double e = t < 0.7 ? 1 : 1 - Ease(Math.Min(1, (t - 0.7) / 0.4));
+                    pose.ArmNear = Q2(60 * e);
+                    pose.ArmFar = -Q2(60 * e);
+                    pose.ForeNear = Q2(50 * e);
+                    pose.ForeFar = -Q2(50 * e);
+                    pose.StretchY = 1 + 0.03 * e;
+                    break;
+                }
+
+                case Antic.Trip:
+                    if (t < 0.12)
+                    {
+                        // Pitching forward mid-stride, arms out to catch itself.
+                        Walk(ref pose);
+                        pose.Lean = 0.6;
+                        pose.ArmNear = 70;
+                        pose.ArmFar = 70;
+                        pose.ForeNear = 20;
+                        pose.ForeFar = 20;
+                    }
+                    else if (t < 1.0)
+                    {
+                        // Flat out.
+                        pose.Lean = 1.0;
+                        pose.StretchY = 0.72;
+                        pose.StretchX = 1.18;
+                        pose.BodyDy = 0.9;
+                        pose.ArmNear = 80;
+                        pose.ArmFar = 80;
+                        pose.ForeNear = 10;
+                        pose.ForeFar = 10;
+                    }
+                    else
+                    {
+                        // Picking itself up.
+                        double e = 1 - Ease(Math.Min(1, (t - 1.0) / 0.6));
+                        pose.Lean = Math.Round(e * 8) / 8;
+                        pose.StretchY = 1 - 0.28 * e;
+                        pose.StretchX = 1 + 0.18 * e;
+                        pose.BodyDy = Quantise(0.9 * e);
+                        pose.ArmNear = Q2(80 * e);
+                        pose.ArmFar = Q2(80 * e);
+                        pose.ForeNear = Q2(10 * e);
+                        pose.ForeFar = Q2(10 * e);
+                    }
+                    break;
+
+                case Antic.Boo:
+                    if (t < 0.6)
+                    {
+                        // The shout: lunging, arms thrown up, a "!" overhead.
+                        pose.ArmNear = 150;
+                        pose.ArmFar = -150;
+                        pose.ForeNear = -20;
+                        pose.ForeFar = 20;
+                        pose.Lean = 0.3;
+                        pose.StretchY = 1.06;
+                        pose.Bubble = true;
+                    }
+                    else
+                    {
+                        LaughPose(ref pose, t - 0.6, false);
+                    }
+                    break;
             }
         }
 
@@ -555,6 +709,16 @@ namespace IdleWalker.Domain
             pose.Lean = -Math.Round(0.25 * up * 8) / 8;
         }
 
+        // The hiccups come at 0.4, 1.0, 1.7 and 2.3 s; each is a sharp jolt
+        // that dies away over 0.14 s.
+        static double HiccupJolt(double t)
+        {
+            double[] at = { 0.4, 1.0, 1.7, 2.3 };
+            for (int i = 0; i < at.Length; i++)
+                if (t >= at[i] && t < at[i] + 0.14) return 1 - (t - at[i]) / 0.14;
+            return 0;
+        }
+
         void Breathe(ref Pose pose)
         {
             pose.BodyDy = Quantise(0.3 * (1 + Math.Sin(time * 2.6)) / 2);
@@ -570,7 +734,7 @@ namespace IdleWalker.Domain
             return Q2(raise);
         }
 
-        // ---- Reactions to a shove ----------------------------------------------------------
+        // ---- Reactions ---------------------------------------------------------------------
 
         void ReactFace(ref Expression target, ref double rate, ref double gx, ref double gy)
         {
@@ -585,6 +749,12 @@ namespace IdleWalker.Domain
                     target = Expression.Disapproving;
                     rate = 12;
                     break;
+                case Reaction.Huff:
+                    target = Expression.Grumpy;
+                    rate = 16;
+                    gx = 0.5;   // pointedly looking the other way
+                    gy = 0.1;
+                    return;
                 default:
                     target = Expression.Laugh;
                     rate = 20;
@@ -615,6 +785,15 @@ namespace IdleWalker.Domain
                     pose.Lean = -0.15;
                     Breathe(ref pose);
                     break;
+                case Reaction.Huff:
+                    HandsOnHips(ref pose);
+                    pose.Lean = -0.25;
+                    pose.StretchY = 1.03;
+                    Breathe(ref pose);
+                    break;
+                case Reaction.Chuckle:
+                    LaughPose(ref pose, t, false);
+                    break;
                 default:
                     LaughPose(ref pose, t, true);
                     break;
@@ -636,6 +815,10 @@ namespace IdleWalker.Domain
                     snap = true;
                     return 20 * Math.Sin(2 * Math.PI * (t - 0.2) / 0.5);
                 }
+                case Reaction.Huff:
+                    return 45;
+                case Reaction.Chuckle:
+                    return 20;
                 default:
                     return 35;
             }

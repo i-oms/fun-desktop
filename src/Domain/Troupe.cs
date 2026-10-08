@@ -6,14 +6,15 @@ namespace IdleWalker.Domain
 {
     /// <summary>
     /// The whole cast: brings walkers out one at a time, sends them away,
-    /// and lets them meet - greetings between the sociable ones, shoving by
-    /// the aggressive ones.
+    /// and lets them meet - greetings and dances between the sociable ones,
+    /// shoving and shouting matches by the aggressive ones, games of tag,
+    /// onlookers reacting, and yawns and dances that spread.
     /// </summary>
     sealed class Troupe
     {
         const double GreetDistanceBodies = 2.2;   // how close two walkers get before saying hello
-        const double ContactDistanceBodies = 0.9; // how close a charger gets before the shove lands
-        const double GreetCooldownSeconds = 7;
+        const double ContactDistanceBodies = 0.9; // how close a charger gets before the shove (or the tag) lands
+        const double GreetCooldownSeconds = 12;
 
         readonly IWorld world;
         readonly Random rng;
@@ -86,6 +87,7 @@ namespace IdleWalker.Domain
                 if (walker.IsVisible) walker.Step(dt, cursor);
 
             Interact();
+            Spread();
         }
 
         Walker NextToAppear()
@@ -122,15 +124,16 @@ namespace IdleWalker.Domain
 
         void Interact()
         {
-            // Tell everyone who their nearest neighbour is, for waving at.
+            // Tell everyone who their nearest neighbour on the same ground is.
             foreach (Walker walker in walkers)
             {
                 if (!walker.IsVisible) continue;
                 Walker nearest = null;
-                double nearestDistance = 350 * walker.Scale / Settings.BasePixelSize;
+                double nearestDistance = double.MaxValue;
                 foreach (Walker other in walkers)
                 {
                     if (other == walker || !other.IsVisible || other.IsLeaving) continue;
+                    if (Math.Abs(other.FeetY - walker.FeetY) > 2) continue;
                     double distance = Math.Abs(other.CentreX - walker.CentreX);
                     if (distance < nearestDistance)
                     {
@@ -138,13 +141,21 @@ namespace IdleWalker.Domain
                         nearestDistance = distance;
                     }
                 }
-                walker.SetCompany(nearest != null, nearest != null ? nearest.CentreX : 0);
+                walker.SetCompany(nearest);
             }
 
             for (int i = 0; i < walkers.Count; i++)
             {
                 Walker a = walkers[i];
                 if (!a.IsGrounded) continue;
+
+                // Somebody coming to tag you: run for it.
+                if (a.IsCharging && a.IsPlayful)
+                {
+                    Walker quarry = a.ChargeTarget;
+                    if (quarry != null && quarry.IsGrounded && !quarry.IsFleeing)
+                        quarry.Scamper(quarry.CentreX >= a.CentreX ? 1 : -1);
+                }
 
                 for (int j = i + 1; j < walkers.Count; j++)
                 {
@@ -156,7 +167,7 @@ namespace IdleWalker.Domain
                     double distance = Math.Abs(dx);
                     int towardsB = dx >= 0 ? 1 : -1;
 
-                    if (ResolveShove(a, b, distance, towardsB)) continue;
+                    if (ResolveContact(a, b, distance, towardsB)) continue;
                     TryGreet(a, b, distance, towardsB);
                 }
 
@@ -164,22 +175,35 @@ namespace IdleWalker.Domain
             }
         }
 
-        // A charging walker that has reached its target shoves it; anyone
-        // close enough to see it react in character.
-        bool ResolveShove(Walker a, Walker b, double distance, int towardsB)
+        // A charging walker that has reached its target shoves it - or, in a
+        // game of tag, tags it. Anyone close enough to see a shove reacts.
+        bool ResolveContact(Walker a, Walker b, double distance, int towardsB)
         {
-            bool aHits = a.IsCharging && a.ChargeTarget == b && distance < ContactDistanceBodies * a.BodyWidth;
-            bool bHits = b.IsCharging && b.ChargeTarget == a && distance < ContactDistanceBodies * b.BodyWidth;
-            if (!aHits && !bHits) return false;
+            bool aReaches = a.IsCharging && a.ChargeTarget == b && distance < ContactDistanceBodies * a.BodyWidth;
+            bool bReaches = b.IsCharging && b.ChargeTarget == a && distance < ContactDistanceBodies * b.BodyWidth;
+            if (!aReaches && !bReaches) return false;
 
-            if (aHits && bHits)
+            if (aReaches && a.IsPlayful)
+            {
+                a.Tag(b.CentreX);
+                b.Tagged(a.CentreX);
+                return true;
+            }
+            if (bReaches && b.IsPlayful)
+            {
+                b.Tag(a.CentreX);
+                a.Tagged(b.CentreX);
+                return true;
+            }
+
+            if (aReaches && bReaches)
             {
                 // Two bullies collide and both go flying.
                 a.Knock(-towardsB);
                 b.Knock(towardsB);
                 Witness(a, b, (a.CentreX + b.CentreX) / 2);
             }
-            else if (aHits)
+            else if (aReaches)
             {
                 b.Knock(towardsB);
                 a.Gloat();
@@ -207,9 +231,10 @@ namespace IdleWalker.Domain
             }
         }
 
-        // Two walkers about to pass each other stop to say hello - unless
-        // they are aggressive, in which case they just keep walking. Two
-        // friendly ones sometimes break into a dance together.
+        // Two walkers about to pass each other stop to say hello: a friendly
+        // one waves, a calm one nods, two friendly ones sometimes break into
+        // a dance together, and two aggressive ones sometimes square up for
+        // a shouting match instead of just barging past.
         void TryGreet(Walker a, Walker b, double distance, int towardsB)
         {
             if (distance >= GreetDistanceBodies * Math.Max(a.BodyWidth, b.BodyWidth)) return;
@@ -221,6 +246,14 @@ namespace IdleWalker.Domain
 
             a.GreetCooldown = GreetCooldownSeconds;
             b.GreetCooldown = GreetCooldownSeconds;
+
+            bool bothAggressive = a.Temperament == Temperament.Aggressive && b.Temperament == Temperament.Aggressive;
+            if (bothAggressive)
+            {
+                if (rng.NextDouble() < 0.5) a.Argue(b);
+                return;
+            }
+
             bool bothFriendly = a.Temperament == Temperament.Friendly && b.Temperament == Temperament.Friendly;
             bool dance = bothFriendly && rng.NextDouble() < 0.4;
             if (a.Temperament != Temperament.Aggressive) a.Greet(towardsB, StyleFor(a, dance));
@@ -233,10 +266,11 @@ namespace IdleWalker.Domain
             return dance ? GreetStyle.Dance : GreetStyle.Wave;
         }
 
-        // An aggressive walker with somebody in range goes for them.
+        // An aggressive walker with somebody in range goes for them - unless
+        // it is busy with an errand of its own, or too worn out.
         void ConsiderCharging(Walker bully)
         {
-            if (!bully.IsWalking || bully.ChargeCooldown > 0) return;
+            if (!bully.IsWalking || bully.HasGoal || bully.ChargeCooldown > 0 || bully.Energy < 0.35) return;
 
             double reach = 380 * bully.Scale / Settings.BasePixelSize;
             double behind = 120 * bully.Scale / Settings.BasePixelSize;
@@ -254,6 +288,25 @@ namespace IdleWalker.Domain
                 targetDistance = distance;
             }
             if (target != null) bully.StartCharge(target);
+        }
+
+        // A yawn or a dance that has just begun spreads to whoever is near
+        // enough to see it, each according to their nature.
+        void Spread()
+        {
+            foreach (Walker walker in walkers)
+            {
+                Antic? started = walker.TakeBroadcast();
+                if (started == null || !walker.IsVisible) continue;
+                double reach = 450 * walker.Scale / Settings.BasePixelSize;
+                foreach (Walker other in walkers)
+                {
+                    if (other == walker || !other.IsVisible || other.IsLeaving) continue;
+                    if (Math.Abs(other.FeetY - walker.FeetY) > 2) continue;
+                    if (Math.Abs(other.CentreX - walker.CentreX) > reach) continue;
+                    other.Catch(started.Value);
+                }
+            }
         }
     }
 }

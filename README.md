@@ -35,7 +35,8 @@ fun/
     │   ├── IWorld.cs         what a walker needs to know about the terrain
     │   ├── Walker.cs         one character: state machine, physics, face
     │   ├── WalkerAntics.cs   the same class, continued: the idle antics and reactions
-    │   └── Troupe.cs         the group: staggered entrances, greetings, shoving, onlookers
+    │   ├── WalkerBrain.cs    the same class, continued: wants, errands, chats, pranks, tag
+    │   └── Troupe.cs         the group: entrances, greetings, shoving, tag, onlookers, contagion
     ├── Rendering/            pixels
     │   ├── MinionPainter.cs  draws a Minion from solids: distance fields, normals, lighting
     │   ├── Surface.cs        software canvas, soft halo, shadow, dirty-region tracking
@@ -165,32 +166,72 @@ Only one instance can run at a time; starting a second one quietly exits.
 
 Minions join in this order as you raise the count. Kevin is the first one
 out. Each has a resting face of its own, its own gait (how much it bobs
-and leans as it walks) and its own list of habits: the things it does when
-it stops walking for a moment, each weighted so some are rarer than others.
+and leans as it walks), its own list of habits (the things it does when it
+stops walking for a moment, each weighted so some are rarer than others)
+and its own temperament for dealing with the others.
 
-| # | Name | Temperament | Look | Resting face | Habits, most to least often |
-|---|---|---|---|---|---|
-| 1 | Kevin | Calm | two eyes, a few sprouts of hair | neutral; sleepy on a long rest | Looks around, rests, whistles a tune (notes float up), scratches his head over something until an idea strikes ("!"), nods off standing up (yawn, stretch, Zzz, then jerks awake), yawns, waves shyly at your cursor, sneezes. Nods at Minions it meets; shakes his head at fights. |
-| 2 | Stuart | Aggressive | one eye, hair combed flat, heavy brow | grumpy; bored on a rest, hands on hips | 20% faster, hops twice as often, leans into his walk. Looks around, shadow-boxes (and sweats), sticks his tongue out and beckons you to come and have a go, throws a two-footed tantrum, laughs at you. Charges at anyone within reach and shoves them; jeers and points when he sees someone else shoved. |
-| 3 | Bob | Friendly | bald, one green eye and one brown, big smile | happy | A little slower, bouncy. Waves a lot - at nearby Minions in preference to the cursor - dances a jig, points at your cursor and giggles, jumps for joy, laughs, sneezes now and then. Waves at anyone it meets, or dances with another friendly one; gasps with its hands up when someone is shoved. |
-| 4 | Dave | Friendly | two eyes, hair parted in the middle, open-mouthed smile | cheerful | The show-off. Waves, twirls right round with its arms out (and walks off dizzy), points at your cursor, jumps for joy, dances. Greets and gasps like Bob. |
-| 5 | Mel | Aggressive | two eyes, crew cut, heavy brows | stern; bored on a rest, hands on hips | 15% faster, leans into the walk. Flexes both arms and winks at them, stomps, shadow-boxes, occasionally taunts. Charges and jeers like Stuart. |
+| # | Name | Temperament | Look | Resting face | Habits, most to least often | With the others |
+|---|---|---|---|---|---|---|
+| 1 | Kevin | Calm | two eyes, a few sprouts of hair | neutral; sleepy on a long rest | Tires easily and is the most curious about the cursor. Looks around, rests, whistles a tune (notes float up), scratches his head over something until an idea strikes ("!"), nods off standing up (yawn, stretch, Zzz, then jerks awake), yawns, gets hiccups, waves shyly, sneezes. | Nods at Minions he meets, goes over for a chat now and then, nods along when others dance, shakes his head at fights, is grumpy for a while when pranked. |
+| 2 | Stuart | Aggressive | one eye, hair combed flat, heavy brow | grumpy; bored on a rest, hands on hips | 20% faster, leans into his walk. Looks around, shadow-boxes (and sweats), sticks his tongue out and beckons you to come and have a go, throws a two-footed tantrum, laughs at you. | Charges at anyone within reach and shoves them; creeps up on anyone standing quietly and shouts "boo!"; squares up to Mel for a shouting match; jeers and points when someone else is shoved; furious when pranked himself. |
+| 3 | Bob | Friendly | bald, one green eye and one brown, big smile | happy | A little slower, bouncy, and clumsy: trips flat on his face every couple of minutes. Waves a lot, dances a jig, points at your cursor and giggles, jumps for joy, laughs, gets hiccups, sneezes. | The most sociable: walks over to friends for a chat, goes to comfort anyone who has been shoved, starts games of tag, joins in any dance, catches yawns, gasps at shoves, laughs off a prank. |
+| 4 | Dave | Friendly | two eyes, hair parted in the middle, open-mouthed smile | cheerful | The most energetic show-off. Waves, twirls right round with his arms out (and walks off dizzy), points at your cursor, jumps for joy, dances. | Chats, tag, dances and gasps like Bob. |
+| 5 | Mel | Aggressive | two eyes, crew cut, heavy brows | stern; bored on a rest, hands on hips | 15% faster, leans into the walk. Flexes both arms and winks at them, stomps, shadow-boxes, occasionally taunts. | Charges, pranks, argues and jeers like Stuart. |
+
+**A mind of their own.** Each walker carries three simple drives that rise
+and fall: *energy* (spent by running, dancing, boxing and the like, won
+back by walking calmly, resting and above all dozing), the wish for
+*company* (grows while alone, satisfied by a chat or a greeting) and
+*curiosity* about the cursor (grows until it has been over for a look).
+When an idle moment comes, these decide what it does: a tired one rests,
+yawns or dozes; a lively one capers; one that wants company sets off on an
+errand to find some; one that cannot stand not knowing walks over to stand
+under your cursor and looks up at it - Kevin scratches his head over it,
+Bob and Dave point at it and giggle, Stuart and Mel stick their tongues out
+at it. Random hops only happen with energy to spare, and rarely.
 
 **How they get on**
 
 - When two sociable walkers are about to pass each other they both stop and
   face one another: a friendly one waves, a calm one nods, and two friendly
   ones sometimes (40% of the time) dance a jig together. Then they carry on.
-  A pair won't greet again for several seconds.
-- An aggressive walker that spots someone within about 380 px ahead (or
-  120 px behind) breaks into a run. On contact the victim is knocked into the
-  air with a "!", lands in a puff of dust and runs away scared for a second
-  and a half, a drop of sweat flying; the bully stands proud for a moment,
-  then walks on and leaves people alone for ten seconds.
-- Anyone else on the same ground within about 620 px who is walking,
-  resting or looking around stops and turns to watch: a friendly one gasps
-  with its hands up by its face and then looks worried, a calm one puts its
-  hands on its hips and shakes its head, an aggressive one laughs and points.
+  A pair won't greet again for a dozen seconds.
+- **Chats.** A walker wanting company walks up to its nearest neighbour and
+  the two face each other and talk, taking turns: the talker's mouth moves
+  and one hand gestures, the listener nods along, and friendly ones finish
+  with a laugh. If the other is busy (dozing, mid-twirl) the visitor shrugs
+  and walks off.
+- **Comfort.** A friendly walker who sees someone still sad after being
+  shoved walks over, puts a hand out to its shoulder, and both cheer up.
+- **Tag.** Two friendly walkers with energy to burn play tag: one runs at
+  the other laughing with an arm out, the other scampers off giggling; a tag
+  ends with "you're it!" (laughing and pointing) and a chuckle. The chaser
+  gives up, panting, after four seconds.
+- **Shouting matches.** Two aggressive walkers that meet sometimes square
+  up instead of barging past: they take turns to shout, arms flailing,
+  stamping a foot, the other standing with hands on hips, and finish by
+  turning their backs on each other in a huff.
+- **Pranks.** An aggressive walker that notices someone standing quietly
+  (resting, dozing, whistling, scratching) creeps up on them, leaning in
+  with fists up and a mischievous grin, and shouts: a "!" over its head and
+  the victim jumps into the air with a "!" of its own. A friendly victim
+  laughs it off, a calm one is grumpy for a while, an aggressive one is
+  furious and may well charge the prankster. If the target wanders off
+  before the prankster gets there, it stamps its feet in frustration.
+- **Shoves.** An aggressive walker with energy to spare that spots someone
+  within about 380 px ahead (or 120 px behind) breaks into a run. On
+  contact the victim is knocked into the air with a "!", lands in a puff of
+  dust and runs away scared, a drop of sweat flying, and stays sad for a
+  few seconds; the bully stands proud for a moment, then leaves people
+  alone for twenty to forty seconds.
+- **Onlookers.** Anyone else on the same ground within about 620 px who is
+  walking, resting or looking around stops and turns to watch a shove: a
+  friendly one gasps with its hands up by its face and then looks worried,
+  a calm one puts its hands on its hips and shakes its head, an aggressive
+  one laughs and points.
+- **Catching.** A yawn is catching: whoever sees one start is likely to yawn
+  too a moment later (the aggressive ones less so). So is a dance: friendly
+  walkers nearby almost always join in, Kevin sometimes, the bullies never.
 - Two aggressive walkers that charge each other collide and both go flying.
 - Aggressive walkers ignore greetings; friendly ones wave at them anyway.
 - Interactions only happen between walkers on the same ground level (so not
@@ -267,14 +308,16 @@ Stop-Process -Name IdleWalker
    The six-frame walk cycle is driven by distance travelled, so the feet never
    slide. It walks the whole width of the desktop and turns around at the
    outer edges - head first, then body.
-5. **Idle moments.** Every 5-11 seconds it stops to do one of its habits
-   (see [The cast](#the-cast)): look around, wave or point towards your
-   cursor (turning to face it first if needed), stand and breathe, dance,
-   twirl, doze, whistle, box, taunt, and so on. Every 4-9 seconds it does a
-   little hop. It blinks every few seconds regardless - quick, frequent
-   blinks when frightened, slow heavy ones when drowsy, sometimes two in a
-   row - and while standing about its eyes dart a little way off and back
-   every second or two.
+5. **Idle moments.** Every 5-11 seconds it decides what to do next (see
+   [The cast](#the-cast)): set off on an errand - over to a friend for a
+   chat, over to the cursor for a look, creeping up on someone to shout boo
+   - or one of its habits on the spot: look around, wave or point towards
+   your cursor (turning to face it first if needed), stand and breathe,
+   dance, twirl, doze, whistle, box, taunt, and so on. Now and then, with
+   energy to spare, it does a little hop. It blinks every few seconds
+   regardless - quick, frequent blinks when frightened, slow heavy ones when
+   drowsy, sometimes two in a row - and while standing about its eyes dart a
+   little way off and back every second or two.
 6. **Other monitors.** When the next monitor's bottom edge is higher it jumps
    up onto it, timing the take-off so the top of the arc is over the edge.
    When it is lower, it walks off the edge and falls, landing with a bigger
@@ -316,9 +359,11 @@ Speeds are automatically multiplied by the monitor's display scaling, so the
 motion looks the same on a 100% and a 200% screen.
 
 Per-character values (resting faces, speed factor, walk bob and lean, hop
-and idle intervals, and the weighted list of habits) are in
-`src\Domain\Personality.cs`; the timing of each antic is in
-`src\Domain\WalkerAntics.cs` (`StartAntic` sets how long it lasts).
+and idle intervals, stamina, sociability, curiosity, clumsiness and the
+weighted list of habits) are in `src\Domain\Personality.cs`; the timing of
+each antic is in `src\Domain\WalkerAntics.cs` (`StartAntic` sets how long
+it lasts); how fast the drives rise and fall, and the odds of each errand,
+are in `src\Domain\WalkerBrain.cs` (`StepMood` and `Decide`).
 Timings that live in the state machine (`src\Domain\Walker.cs`): blink every
 `Between(1.8, 4.5)` s in `Step`; peek/look/duck durations in the
 `PeekRise`/`PeekLook`/`PeekDuck` cases; greet, gloat and flee durations at
@@ -363,8 +408,8 @@ cover the repertoire:
 | `Yawn`, `Asleep`, `Shocked` | yawning; dozing; being jerked awake, seeing a shove |
 | `Inhale`, `Sneeze`, `Dizzy` | a sneeze, start to finish (also after a twirl) |
 | `Determined`, `Smug`, `Proud` | charging or boxing; standing over a victim; flexing, a twirl's ta-da |
-| `Raspberry`, `Mischievous` | taunting; the look that lingers afterwards |
-| `Furious` | a stomping tantrum |
+| `Raspberry`, `Mischievous` | taunting; the look that lingers afterwards, creeping up on someone |
+| `Furious`, `Grumpy` | a stomping tantrum, a shouting match; the other side of the argument, a huff |
 | `Panting` | walking off after a bout of boxing |
 | `Dizzy`, `Scared`, `Sad` | being shoved into the air; running away; slowing down after |
 | `Disapproving` | a calm Minion watching a shove |
@@ -622,6 +667,11 @@ and the rest time to two seconds next time.
   in `AnticPose` (all in `src\Domain\WalkerAntics.cs`; one-off effects such
   as dust go in `StepAntic`), then list it in the habits of whoever should
   do it.
+- A new errand (something that needs walking somewhere first): add it to
+  the `Goal` enum, choose it in `Decide`, say where it leads in `GoalX` and
+  what happens on arrival in `Arrive` (all in `src\Domain\WalkerBrain.cs`).
+- A new thing two walkers do face to face: a `ChatStyle`, with its face,
+  pose and ending in `ChatFace`, `ChatPose` and `EndChat`.
 - A new expression: add a preset to `Expression` and pick it in
   `Walker.UpdateFace` for the situation it belongs to. A new hair style is a
   case in `MinionPainter.HairFor`. A new accessory is a solid in the painter:
