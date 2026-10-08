@@ -13,13 +13,16 @@ namespace IdleWalker.App
         readonly NotifyIcon icon = new NotifyIcon();
         readonly ContextMenuStrip menu = new ContextMenuStrip();
         readonly ToolStripMenuItem countMenu = new ToolStripMenuItem("Walkers");
+        readonly ToolStripMenuItem idleMenu = new ToolStripMenuItem("Appear after");
         readonly ToolStripMenuItem startupItem = new ToolStripMenuItem("Start with Windows");
         readonly ToolStripMenuItem pauseItem = new ToolStripMenuItem("Pause");
         IntPtr iconHandle;
         int count;
+        int idleSeconds;
 
         public event EventHandler ExitRequested;
         public event EventHandler CountChanged;
+        public event EventHandler IdleChanged;
 
         /// <summary>True while the user has ticked Pause.</summary>
         public bool Paused
@@ -33,7 +36,13 @@ namespace IdleWalker.App
             get { return count; }
         }
 
-        public TrayMenu(int initialCount)
+        /// <summary>How long the cursor must be still before they come out, in seconds.</summary>
+        public int IdleSeconds
+        {
+            get { return idleSeconds; }
+        }
+
+        public TrayMenu(int initialCount, int initialIdleSeconds)
         {
             count = initialCount;
             for (int n = 1; n <= Settings.MaxWalkers; n++)
@@ -45,11 +54,29 @@ namespace IdleWalker.App
             }
             ShowCount();
 
+            // Seconds first, then minutes, with a line between the two.
+            idleSeconds = initialIdleSeconds;
+            bool minutes = false;
+            foreach (int seconds in Settings.IdleChoices)
+            {
+                if (seconds >= 60 && !minutes)
+                {
+                    minutes = true;
+                    idleMenu.DropDownItems.Add(new ToolStripSeparator());
+                }
+                ToolStripMenuItem item = new ToolStripMenuItem(Describe(seconds));
+                item.Tag = seconds;
+                item.Click += OnIdleClick;
+                idleMenu.DropDownItems.Add(item);
+            }
+            ShowIdle();
+
             startupItem.Checked = StartupRegistration.IsEnabled();
             startupItem.Click += OnStartupClick;
             pauseItem.CheckOnClick = true;
 
             menu.Items.Add(countMenu);
+            menu.Items.Add(idleMenu);
             menu.Items.Add(startupItem);
             menu.Items.Add(pauseItem);
             menu.Items.Add(new ToolStripSeparator());
@@ -94,6 +121,34 @@ namespace IdleWalker.App
             count = chosen;
             ShowCount();
             EventHandler handler = CountChanged;
+            if (handler != null) handler(this, EventArgs.Empty);
+        }
+
+        /// <summary>"1 second", "2 seconds", "1 minute", "5 minutes".</summary>
+        static string Describe(int seconds)
+        {
+            int n = seconds >= 60 ? seconds / 60 : seconds;
+            string unit = seconds >= 60 ? "minute" : "second";
+            return n + " " + unit + (n == 1 ? "" : "s");
+        }
+
+        void ShowIdle()
+        {
+            idleMenu.Text = "Appear after: " + Describe(idleSeconds);
+            foreach (ToolStripItem entry in idleMenu.DropDownItems)
+            {
+                ToolStripMenuItem item = entry as ToolStripMenuItem;
+                if (item != null) item.Checked = (int)item.Tag == idleSeconds;
+            }
+        }
+
+        void OnIdleClick(object sender, EventArgs e)
+        {
+            int chosen = (int)((ToolStripMenuItem)sender).Tag;
+            if (chosen == idleSeconds) return;
+            idleSeconds = chosen;
+            ShowIdle();
+            EventHandler handler = IdleChanged;
             if (handler != null) handler(this, EventArgs.Empty);
         }
 

@@ -6,8 +6,11 @@ namespace IdleWalker
     /// </summary>
     static class Settings
     {
-        /// <summary>Cursor rest time before the walker appears.</summary>
-        public const double IdleSeconds = 2.0;
+        /// <summary>Cursor rest time before the walker appears, until the user picks another from the tray menu.</summary>
+        public const int IdleSeconds = 2;
+
+        /// <summary>The rest times the tray menu offers, in seconds: one to five seconds, one to five minutes.</summary>
+        public static readonly int[] IdleChoices = { 1, 2, 3, 4, 5, 60, 120, 180, 240, 300 };
 
         /// <summary>Pixels of sensor jitter that don't count as movement.</summary>
         public const int MoveTolerance = 2;

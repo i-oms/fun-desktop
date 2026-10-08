@@ -38,13 +38,14 @@ namespace IdleWalker.App
             troupe = new Troupe(monitors, new Random());
             troupe.Count = UserSettings.LoadWalkerCount();
 
-            tray = new TrayMenu(troupe.Count);
+            tray = new TrayMenu(troupe.Count, UserSettings.LoadIdleSeconds());
             tray.ExitRequested += delegate { ExitThread(); };
             tray.CountChanged += delegate
             {
                 troupe.Count = tray.Count;
                 UserSettings.SaveWalkerCount(tray.Count);
             };
+            tray.IdleChanged += delegate { UserSettings.SaveIdleSeconds(tray.IdleSeconds); };
             StartupRegistration.RefreshPath();
 
             if (SynchronizationContext.Current == null)
@@ -62,7 +63,7 @@ namespace IdleWalker.App
             monitors.Refresh();
             bool moved = cursor.Poll(now);
             bool paused = tray.Paused;
-            bool wantOut = !paused && cursor.IdleFor(now, Settings.IdleSeconds);
+            bool wantOut = !paused && cursor.IdleFor(now, tray.IdleSeconds);
 
             troupe.Step(dt, cursor.Position, wantOut, moved || paused);
 

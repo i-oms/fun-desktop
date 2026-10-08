@@ -1,7 +1,8 @@
 # IdleWalker
 
-A tiny Windows desktop companion. When your mouse cursor has not moved for two
-seconds, a small shaded, 3D-looking Minion peeks over the bottom edge of the screen,
+A tiny Windows desktop companion. When your mouse cursor has not moved for a
+while (two seconds by default; anything from one second to five minutes), a
+small shaded, 3D-looking Minion peeks over the bottom edge of the screen,
 hops out, and strolls along the bottom of your monitors - all of them,
 including external ones. Move the mouse and it gets a fright and dives back
 down.
@@ -139,13 +140,15 @@ is a convenience and is not checked in.)
 
 Start `IdleWalker.exe`. Nothing visible happens except a small icon in the
 notification area (near the clock; it may be hidden under the `^` overflow
-arrow). Leave the mouse alone for two seconds and a Minion appears.
+arrow). Leave the mouse alone for two seconds (adjustable, see below) and a
+Minion appears.
 
 **Tray icon menu** (right-click):
 
 | Item | Effect |
 |---|---|
 | Walkers: *n* → 1…5 | How many Minions come out. Raising it brings the new ones out straight away (one at a time); lowering it sends the extras away. Remembered between runs. |
+| Appear after: *t* → 1…5 seconds, 1…5 minutes | How long the mouse must be still before they come out. Takes effect at once: shorten it and they appear sooner, lengthen it while they are out and they stay (they only ever leave when the mouse moves). Remembered between runs. |
 | Start with Windows | Ticked: the program starts when you sign in. See below. |
 | Pause | Keeps the characters hidden until unticked. If they are on screen, they leave immediately. |
 | Exit | Quits the program. |
@@ -275,7 +278,8 @@ running copy, rebuild.
 
 | Constant | Default | Meaning |
 |---|---|---|
-| `IdleSeconds` | `2.0` | How long the cursor must be still before it appears. |
+| `IdleSeconds` | `2` | How long the cursor must be still before it appears, until a different time is picked from the tray menu. |
+| `IdleChoices` | 1…5 s, 1…5 min | The times the **Appear after** menu offers. A remembered value that is not in this list falls back to `IdleSeconds`. |
 | `MoveTolerance` | `2` | Cursor movement (pixels) below this does not count as moving. |
 | `BasePixelSize` | `3` | Size in screen pixels of one art pixel at 100% display scaling. `4` makes it a third bigger. |
 | `MaxWalkers` | `5` | Upper limit of the Walkers menu. The cast in `Personality.Roster` must have at least this many entries. |
@@ -561,9 +565,10 @@ option is on.
 
 ### Remembered settings
 
-`UserSettings` stores the walker count as a DWORD `WalkerCount` under
-`HKCU\Software\IdleWalker`. Reading or writing failures are swallowed - the
-worst case is the count resets to 1 next time.
+`UserSettings` stores the walker count as a DWORD `WalkerCount` and the
+rest time as a DWORD `IdleSeconds` under `HKCU\Software\IdleWalker`.
+Reading or writing failures are swallowed - the worst case is the count
+resets to 1 and the rest time to two seconds next time.
 
 ### Adding things
 
