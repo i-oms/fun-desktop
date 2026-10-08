@@ -157,7 +157,7 @@ namespace IdleWalker.Rendering
             PlaceArm(1, 1, pose.ArmNear, pose.ForeNear, -armSwing, foreSwing);
 
             hair = HairFor(look.Hair);
-            decorated = pose.Sweat > 0 || pose.Note || pose.Zzz || pose.Bubble;
+            decorated = pose.Sweat > 0 || pose.Note || pose.Zzz || pose.Bubble || pose.Heart;
         }
 
         // Where an eye at `phi` round the body ends up once the body has turned.
@@ -292,6 +292,61 @@ namespace IdleWalker.Rendering
                     }
                     break;
                 }
+                case HairStyle.Spiky:
+                {
+                    // Short, stiff spikes radiating straight out of the dome.
+                    double[] at = { -2.4, -1.3, -0.2, 0.9, 2.0 };
+                    s = new double[at.Length * 6];
+                    for (int i = 0; i < at.Length; i++)
+                    {
+                        double u0 = at[i];
+                        double nx = u0 / BodyR, ny = Math.Sqrt(Math.Max(0, 1 - nx * nx));
+                        Strand(s, i * 6, u0, DomeTop(u0) - 0.15, u0 + nx * 1.9, DomeTop(u0) - 0.15 + ny * 1.9, 0.3, 0.04);
+                    }
+                    break;
+                }
+                case HairStyle.Quiff:
+                {
+                    // A tall wave rising from the front and curling back.
+                    double[] at = { 1.8, 1.1, 0.4, -0.3, -1.0 };
+                    s = new double[at.Length * 12];
+                    for (int i = 0; i < at.Length; i++)
+                    {
+                        double u0 = at[i], v0 = DomeTop(at[i]) - 0.15;
+                        double u1 = u0 + 0.35, v1 = v0 + 1.6 - 0.12 * i;
+                        double u2 = u1 - 0.9, v2 = v1 + 0.9 - 0.1 * i;
+                        Strand(s, i * 12, u0, v0, u1, v1, 0.3, 0.22);
+                        Strand(s, i * 12 + 6, u1, v1, u2, v2, 0.22, 0.06);
+                    }
+                    break;
+                }
+                case HairStyle.Tuft:
+                {
+                    // One long curl: up from the crown, over, and back down.
+                    s = new double[3 * 6];
+                    double t0 = 0.1, tv0 = DomeTop(0.1) - 0.15;
+                    Strand(s, 0, t0, tv0, t0 + 0.3, tv0 + 1.8, 0.34, 0.26);
+                    Strand(s, 6, t0 + 0.3, tv0 + 1.8, t0 + 1.4, tv0 + 2.5, 0.26, 0.18);
+                    Strand(s, 12, t0 + 1.4, tv0 + 2.5, t0 + 2.2, tv0 + 1.7, 0.18, 0.05);
+                    break;
+                }
+                case HairStyle.Wild:
+                {
+                    // Long strands sticking out every which way, as if it had a fright.
+                    double[] at = { -2.6, -1.6, -0.7, 0.3, 1.2, 2.3 };
+                    double[] tilt = { -1.1, -0.4, 0.5, -0.6, 0.9, 1.2 };
+                    double[] len = { 1.5, 2.1, 1.7, 2.3, 1.6, 1.9 };
+                    s = new double[at.Length * 12];
+                    for (int i = 0; i < at.Length; i++)
+                    {
+                        double u0 = at[i], v0 = DomeTop(at[i]) - 0.15;
+                        double u1 = u0 + tilt[i] * 0.5, v1 = v0 + len[i] * 0.55;
+                        double u2 = u1 + tilt[i] * 0.9 * (i % 2 == 0 ? -0.5 : 1), v2 = v1 + len[i] * 0.45;
+                        Strand(s, i * 12, u0, v0, u1, v1, 0.24, 0.15);
+                        Strand(s, i * 12 + 6, u1, v1, u2, v2, 0.15, 0.04);
+                    }
+                    break;
+                }
                 default:
                     return new double[0];
             }
@@ -394,6 +449,7 @@ namespace IdleWalker.Rendering
                 if (pose.Note) Note(ub, vb);
                 if (pose.Zzz) Zzz(u, v);
                 if (pose.Bubble) Bubble(ub, vb);
+                if (pose.Heart) Heart(ub, vb);
             }
 
             if (ca <= 0.003) return 0;
@@ -972,6 +1028,28 @@ namespace IdleWalker.Rendering
             double d = Math.Min(bar, dot);
             Over(0.12, 0.10, 0.14, Cov(d - 0.3) * 0.85);
             Over(0.98, 0.98, 0.98, Cov(d));
+        }
+
+        // A small pink heart drifting up and forward from the mouth, like
+        // the note: two round lobes over a point.
+        void Heart(double u, double v)
+        {
+            double ph = pose.DecorPhase;
+            double x = BodyR * 0.93 * sinY + 2.4 + 1.6 * ph, y = MouthV + 1.2 + 5.0 * ph;
+            if (Math.Abs(u - x) > 1.4 || Math.Abs(v - y) > 1.4) return;
+            const double s = 0.8;
+            double hx = Math.Abs(u - x) / s, hy = (v - y) / s;
+            double lx = hx - 0.45, ly = hy - 0.3;
+            double lobe = Math.Sqrt(lx * lx + ly * ly) - 0.5;
+            // The point: inside the triangle between the lobes' centres and the tip.
+            double edge = (1.2 * hx - 0.95 * (hy + 0.85)) / 1.53;
+            double tri = Math.Max(edge, hy - 0.3);
+            double d = Math.Min(lobe, tri) * s;
+            double a = ph < 0.75 ? 1 : (1 - ph) / 0.25;
+            Over(0.14, 0.08, 0.12, Cov(d - 0.22) * 0.85 * a);
+            Over(0.96, 0.28, 0.42, Cov(d) * a);
+            double gx = (u - x) / s + 0.35, gy = hy - 0.5;
+            Over(1, 0.85, 0.9, Cov(Math.Sqrt(gx * gx + gy * gy) - 0.14) * 0.8 * a);
         }
     }
 }

@@ -14,7 +14,8 @@ namespace IdleWalker.Domain
         Headshake, // hands on hips, shaking its head
         Jeer,      // laughing and pointing
         Chuckle,   // laughing, hands on the belly
-        Huff       // turned away, hands on hips, grumpy
+        Huff,      // turned away, hands on hips, grumpy
+        Cower      // crouched with the arms over the head, trembling
     }
 
     /// <summary>Something a walker has set out to do that means walking somewhere first.</summary>
@@ -220,7 +221,8 @@ namespace IdleWalker.Domain
                 if (mode == Mode.Rest || mode == Mode.Look) return true;
                 if (mode != Mode.Antic) return false;
                 return antic == Antic.Doze || antic == Antic.Whistle || antic == Antic.Scratch ||
-                       antic == Antic.Yawn || antic == Antic.Hiccups;
+                       antic == Antic.Yawn || antic == Antic.Hiccups || antic == Antic.Daydream ||
+                       antic == Antic.Fret || antic == Antic.Dig || antic == Antic.Sleepwalk;
             }
         }
 
@@ -373,10 +375,54 @@ namespace IdleWalker.Domain
                 case Temperament.Calm:
                     ReactWith(Reaction.Headshake, x, 1.6, false);
                     break;
+                case Temperament.Timid:
+                    ReactWith(Reaction.Cower, x, 2.0, false);
+                    break;
+                case Temperament.Goofy:
+                    ReactWith(Reaction.Chuckle, x, 1.6, false);
+                    break;
                 default:
                     ReactWith(Reaction.Jeer, x, 1.8, false);
                     break;
             }
+        }
+
+        /// <summary>Somebody at x just let one off: stop and react in character.</summary>
+        public void Smell(double x)
+        {
+            if (!CanGreet) return;
+            switch (personality.Temperament)
+            {
+                case Temperament.Friendly:
+                case Temperament.Timid:
+                    ReactWith(Reaction.Gasp, x, 1.5, false);
+                    break;
+                case Temperament.Calm:
+                    ReactWith(Reaction.Headshake, x, 1.4, false);
+                    break;
+                case Temperament.Goofy:
+                    ReactWith(Reaction.Chuckle, x, 1.4, false);
+                    break;
+                default:
+                    ReactWith(Reaction.Huff, x, 1.2, true);
+                    break;
+            }
+        }
+
+        /// <summary>A bully is coming: scream and run before it gets here.</summary>
+        public void Panic(int direction)
+        {
+            if (!IsGrounded || mode == Mode.Flee || mode == Mode.Chat || mode == Mode.Charge) return;
+            playful = false;
+            facing = direction;
+            fleeTime = FleeSeconds * 1.3;
+            goal = Goal.None;
+            goalTarget = null;
+            hasPending = false;
+            GreetCooldown = Math.Max(GreetCooldown, fleeTime + 2);
+            StartSweat();
+            EmitDust(cx, feetY, 2, 0.5);
+            Enter(Mode.Flee);
         }
 
         /// <summary>Run at another walker to shove it.</summary>
@@ -716,9 +762,9 @@ namespace IdleWalker.Domain
                     break;
 
                 case Mode.Wave:
-                    target = personality.Temperament == Temperament.Friendly
+                    target = personality.Warm
                         ? (modeTime > 0.5 && modeTime < 1.0 ? Expression.Winking : Expression.Grin)
-                        : Expression.Happy;
+                        : personality.Temperament == Temperament.Timid ? Expression.Nervous : Expression.Happy;
                     if (!waveAtCursor && companyNearby) LookAt(companyX, feetY - 12 * scale, out gx, out gy);
                     else atCursor = true;
                     steady = true;
@@ -876,9 +922,12 @@ namespace IdleWalker.Domain
             switch (personality.Temperament)
             {
                 case Temperament.Friendly:
+                case Temperament.Goofy:
                     return 12 * Math.Sin(time * 1.4);
                 case Temperament.Aggressive:
                     return 15;
+                case Temperament.Timid:
+                    return -12;   // half turned away, ready to run
                 default:
                     return (cursorX - cx) * facing >= 0 ? 10 : -10;
             }
@@ -1032,6 +1081,16 @@ namespace IdleWalker.Domain
                         HandsOnHips(ref pose);
                         pose.Lean = -0.15;
                     }
+                    else if (personality.Temperament == Temperament.Timid)
+                    {
+                        // The nervous one wrings its hands.
+                        pose.ArmNear = 35;
+                        pose.ArmFar = 35;
+                        double wring = Math.Sin(time * 7) > 0 ? 6 : 0;   // two positions, a few times a second
+                        pose.ForeNear = 70 + wring;
+                        pose.ForeFar = 76 - wring;
+                        pose.Lean = 0.1;
+                    }
                     breathe = true;
                     break;
 
@@ -1054,8 +1113,8 @@ namespace IdleWalker.Domain
             }
 
             if (breathe) pose.BodyDy = Quantise(0.3 * (1 + Math.Sin(time * 2.6)) / 2);
-            pose.StretchY *= 1 - 0.22 * squash;
-            pose.StretchX *= 1 + 0.16 * squash;
+            pose.StretchY *= (1 - 0.22 * squash) * personality.BuildY;
+            pose.StretchX *= (1 + 0.16 * squash) * personality.BuildX;
             if (sweat > 0) pose.Sweat = Math.Ceiling(sweat * 12) / 12;
 
             // A blink is a quick close-and-open laid over whatever the face is doing.
@@ -1391,11 +1450,17 @@ namespace IdleWalker.Domain
                     switch (personality.Temperament)
                     {
                         case Temperament.Friendly:
+                        case Temperament.Goofy:
                             SetMood(Expression.Giggle, 1.6);
                             break;
                         case Temperament.Calm:
                             SetMood(Expression.Grumpy, 2.5);
                             break;
+                        case Temperament.Timid:
+                            // Too much: out cold.
+                            vx = 0;
+                            StartAntic(Antic.Faint);
+                            return;
                         default:
                             SetMood(Expression.Furious, 2);
                             ChargeCooldown = 0;   // and may well go for whoever did it

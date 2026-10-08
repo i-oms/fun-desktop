@@ -19,7 +19,7 @@ namespace IdleWalker
         public const int BasePixelSize = 3;
 
         /// <summary>How many walkers can be out at once (the tray menu offers 1..MaxWalkers).</summary>
-        public const int MaxWalkers = 5;
+        public const int MaxWalkers = 10;
 
         /// <summary>How many come out until the user picks another number.</summary>
         public const int DefaultWalkers = 5;

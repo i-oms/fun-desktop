@@ -7,12 +7,15 @@ hops out, and strolls along the bottom of your monitors - all of them,
 including external ones. Move the mouse and it gets a fright and dives back
 down.
 
-You can have up to five of them out at once. Each has its own face,
+You can have up to ten of them out at once. Each has its own face, build,
 temperament and habits: one whistles and nods off, one shadow-boxes and
-sticks its tongue out at you, one dances, one twirls, one flexes. The
-sociable ones stop to wave or dance with each other, the aggressive ones
-charge at anyone nearby and shove them off their feet - and whoever is
-watching gasps, tuts or jeers, as is their nature.
+sticks its tongue out at you, one dances, one twirls, one flexes, one plays
+air guitar, one does push-ups and salutes, one moonwalks and plays
+peekaboo, one hides behind his hands and faints, one digs and sleepwalks
+and blows you kisses. The sociable ones stop to wave or dance with each
+other, the aggressive ones charge at anyone nearby and shove them off their
+feet, the timid one runs before they get there - and whoever is watching
+gasps, tuts, cowers or jeers, as is their nature.
 
 It is plain C# with no dependencies beyond what ships with Windows: no
 runtime to install, no NuGet packages, no IDE needed.
@@ -153,7 +156,7 @@ Minion appears.
 
 | Item | Effect |
 |---|---|
-| Walkers: *n* → 1…5 | How many Minions come out (all five by default). Raising it brings the new ones out straight away (one at a time); lowering it sends the extras away. Remembered between runs. |
+| Walkers: *n* → 1…10 | How many Minions come out (five by default). Raising it brings the new ones out straight away (one at a time); lowering it sends the extras away. Remembered between runs. |
 | Appear after: *t* → 1…5 seconds, 1…5 minutes | How long the mouse must be still before they come out. Takes effect at once: shorten it and they appear sooner, lengthen it while they are out and they stay (they only ever leave when the mouse moves). Remembered between runs. |
 | Start with Windows | Ticked: the program starts when you sign in. On by default; untick it to switch it off. See below. |
 | Pause | Keeps the characters hidden until unticked. If they are on screen, they leave immediately. |
@@ -177,6 +180,17 @@ and its own temperament for dealing with the others.
 | 3 | Bob | Friendly | bald, one green eye and one brown, big smile | happy | A little slower, bouncy, and clumsy: trips flat on his face every couple of minutes. Waves a lot, dances a jig, points at your cursor and giggles, jumps for joy, laughs, gets hiccups, sneezes. | The most sociable: walks over to friends for a chat, goes to comfort anyone who has been shoved, starts games of tag, joins in any dance, catches yawns, gasps at shoves, laughs off a prank. |
 | 4 | Dave | Friendly | two eyes, hair parted in the middle, open-mouthed smile | cheerful | The most energetic show-off. Waves, twirls right round with his arms out (and walks off dizzy), points at your cursor, jumps for joy, dances. | Chats, tag, dances and gasps like Bob. |
 | 5 | Mel | Aggressive | two eyes, crew cut, heavy brows | stern; bored on a rest, hands on hips | 15% faster, leans into the walk. Flexes both arms and winks at them, stomps, shadow-boxes, occasionally taunts. | Charges, pranks, argues and jeers like Stuart. |
+| 6 | Jerry | Friendly | short, two eyes, short spiky hair | cool: lids low, a lazy half-smile | The busker. Plays air guitar, head banging on the beat with notes flying, dances, whistles, waves, laughs, jumps for joy. Serenades your cursor when it gets curious. | His playing is catching: whoever is near enough to hear it wants to dance. Otherwise chats, tag, dances and gasps like Bob. |
+| 7 | Tim | Calm | tall and thin, two blue eyes, a tall quiff | serious; proud on a rest | The drill sergeant: never tires. Drops and does push-ups (side on, sweating by the end), jogs on the spot, snaps to attention and salutes you with a wink, flexes, occasionally stamps. Salutes your cursor. | Nods at Minions he meets, shakes his head at fights, grumpy when pranked, like Kevin. |
+| 8 | Phil | Goofy | one eye, a single curl on top, cross-eyed grin | silly | The clown, and a bit clumsy. Moonwalks (slides backwards while his feet step forwards), lets one off and whistles innocently, plays peekaboo with your cursor, struts like a chicken, laughs, dances, taunts, gets hiccups. | Copies most things he sees anyone else start (a twirl, boxing, a flex, push-ups, a stomp, a salute...). Waves, dances, plays tag and chats like the friendly ones, laughs at shoves and pranks. |
+| 9 | Carl | Timid | small, two amber eyes, hair standing on end | nervous; worried on a rest, wringing his hands | Scared of his own shadow. Looks around a lot, bites his nails with his eyes darting about (and sweats), hides behind his hands and peeks through his fingers, rests, shrugs, gets hiccups, sneezes. Peeks at your cursor through his fingers. | Keeps away from the bullies: hides if one is close, turns and walks the other way otherwise. Sees a charge coming and bolts before it lands (then sulks, and Bob comes to comfort him). Cowers when he sees a shove, faints flat on his back when pranked, nods nervously at Minions he meets. |
+| 10 | Norbert | Calm | stocky, one eye, bald | dopey: lids heavy, mouth open in a vacant smile; sleepy on a rest | A little slower, away with the fairies. Daydreams with his hands behind his back until he snaps out of it with a start, digs at the ground in a cloud of dust and finds nothing, sleepwalks with his arms out and Zzz until he bumps into something, blows a kiss at your cursor (a heart floats off), nods off, scratches his head, gets hiccups. | Nods, chats and shakes his head like Kevin; catches yawns. |
+
+The temperaments: **calm** ones nod, chat and tut; **friendly** ones wave,
+dance together, play tag and comfort the shoved; **aggressive** ones charge,
+shove, prank and argue; the **timid** one hides, runs and faints; the
+**goofy** one is a friendly one who finds everything hilarious and copies
+whatever he sees.
 
 **A mind of their own.** Each walker carries three simple drives that rise
 and fall: *energy* (spent by running, dancing, boxing and the like, won
@@ -188,7 +202,9 @@ yawns or dozes; a lively one capers; one that wants company sets off on an
 errand to find some; one that cannot stand not knowing walks over to stand
 under your cursor and looks up at it - Kevin scratches his head over it,
 Bob and Dave point at it and giggle, Stuart and Mel stick their tongues out
-at it. Random hops only happen with energy to spare, and rarely.
+at it, Jerry serenades it, Tim salutes it, Phil plays peekaboo with it,
+Carl peeks at it through his fingers and Norbert blows it a kiss. Random
+hops only happen with energy to spare, and rarely.
 
 **How they get on**
 
@@ -231,7 +247,25 @@ at it. Random hops only happen with energy to spare, and rarely.
   one laughs and points.
 - **Catching.** A yawn is catching: whoever sees one start is likely to yawn
   too a moment later (the aggressive ones less so). So is a dance: friendly
-  walkers nearby almost always join in, Kevin sometimes, the bullies never.
+  walkers nearby almost always join in, Kevin and the other calm ones
+  sometimes, Carl rarely, the bullies never.
+- **Busking.** Jerry's air guitar counts as a dance starting: anyone near
+  enough to hear it is as likely to break into a jig as if they had seen
+  one.
+- **The copycat.** Phil copies most antics he sees start within sight (a
+  twirl, boxing, a flex, a stomp, push-ups, jogging, a salute, a shrug...),
+  about two times in three, half a second to a second later.
+- **The timid one.** Carl keeps clear of Stuart and Mel: with one of them
+  nearby he hides behind his hands or turns and walks the other way. If
+  one charges at him he sees it coming and bolts, sweating, before the
+  shove lands - sometimes he gets away, sometimes not - and is sad for a
+  while afterwards, which brings Bob over to comfort him. He cowers when he
+  sees anyone else shoved, and a prank knocks him out cold: he faints flat
+  on his back, lies there for a couple of seconds and sits up dizzy.
+- **Toots.** When Phil lets one off, everyone within about 260 px reacts in
+  character: the friendly and timid ones gasp with their hands up, the calm
+  ones shake their heads, the bullies turn their backs in a huff, and Phil
+  himself whistles innocently and glances about.
 - Two aggressive walkers that charge each other collide and both go flying.
 - Aggressive walkers ignore greetings; friendly ones wave at them anyway.
 - Interactions only happen between walkers on the same ground level (so not
@@ -344,7 +378,7 @@ running copy, rebuild.
 | `IdleChoices` | 1…5 s, 1…5 min | The times the **Appear after** menu offers. A remembered value that is not in this list falls back to `IdleSeconds`. |
 | `MoveTolerance` | `2` | Cursor movement (pixels) below this does not count as moving. |
 | `BasePixelSize` | `3` | Size in screen pixels of one art pixel at 100% display scaling. `4` makes it a third bigger. |
-| `MaxWalkers` | `5` | Upper limit of the Walkers menu. The cast in `Personality.Roster` must have at least this many entries. |
+| `MaxWalkers` | `10` | Upper limit of the Walkers menu. The cast in `Personality.Roster` must have at least this many entries. |
 | `DefaultWalkers` | `5` | How many come out until a number is picked from the menu. |
 | `StartWithWindowsByDefault` | `true` | Whether the first run registers the program to start at sign-in. |
 | `WalkSpeed` | `90` | Walking speed, px/s at 100% scaling. |
@@ -399,6 +433,8 @@ cover the repertoire:
 | Expression | Used when |
 |---|---|
 | `Neutral`, `Happy`, `Cheerful`, `Grumpy`, `Stern` | the resting faces of Kevin, Bob, Dave, Stuart and Mel |
+| `Cool`, `Serious`, `Silly`, `Nervous`, `Dopey` | the resting faces of Jerry, Tim, Phil, Carl and Norbert |
+| `Smooch`, `Dreamy`, `Worried` | blowing a kiss; daydreaming; Carl on a rest, after hiding, after a cower |
 | `Sleepy`, `Bored` | a long rest (calm; aggressive) |
 | `Curious` | peeking out of the ground, looking around, pointing, waking up |
 | `Grin`, `Winking`, `Laugh`, `Giggle` | waving, dancing, greeting, pointing, laughing |
@@ -509,7 +545,7 @@ SpriteWindow ×n      Surface.Pixels (content rect only) ─▶ DIB section ─�
 ```
 
 Each walker has its own small window rather than one desktop-wide window:
-five 120 x 144 px windows are far cheaper to update than one 3840 px wide
+ten 120 x 144 px windows are far cheaper to update than one 3840 px wide
 one, and a walker that hasn't visibly changed costs nothing at all.
 
 ### The window
@@ -658,10 +694,16 @@ and the rest time to two seconds next time.
 
 - A new character: add an entry to `Personality.Roster` (name, temperament,
   look, resting faces, speed, gait, hop/idle ranges, weighted habits) and,
-  if you want more than five, raise `Settings.MaxWalkers`.
+  if you want more than ten, raise `Settings.MaxWalkers`.
 - A new temperament: add it to the `Temperament` enum and teach
-  `Troupe.TryGreet` / `ConsiderCharging` how it behaves towards others, and
-  `Walker.React` how it responds to a shove.
+  `Troupe.TryGreet` / `ConsiderCharging` how it behaves towards others,
+  `Walker.React` / `Smell` how it responds to a shove or a toot,
+  `Walker.Catch` whether it joins a dance, `RestYaw` how it stands, and the
+  `spooked` landing in `Walker.Land` how it takes a prank. `Personality.Warm`
+  groups the temperaments that wave, dance and play tag.
+- A character-specific errand or quirk: `Personality` already carries a
+  build (`BuildX`/`BuildY`), a `Mimic` flag and a `CursorAntic`; a new
+  flag there plus a check in `Walker.Decide` is usually all it takes.
 - A new idle antic: add it to the `Antic` enum, give it a duration in
   `StartAntic`, its face in `AnticFace`, its turn in `AnticYaw` and its body
   in `AnticPose` (all in `src\Domain\WalkerAntics.cs`; one-off effects such
@@ -722,6 +764,7 @@ Measured on a Windows 11 laptop with two 60 Hz monitors (12 logical cores):
 | Hidden (cursor moving, normal use) | ~0% | Ten `GetCursorPos` calls a second, nothing else. |
 | One walker out | < 5% of one core | 4.7% was measured before the dirty-rectangle optimisation; it is lower now. |
 | Five walkers out | 6-7% of one core | ≈ 0.5% of the machine (measured: 6.3% and 7.2% over two 8-second runs). |
+| Ten walkers out | roughly 1.75 × five | Headless measurement: ten walkers repaint about 1.75 times as many frames as five (more of them are standing about at any moment), and a repaint costs the same per walker as before, so expect 11-13% of one core. |
 
 Memory is about 35 MB working set, almost all of it the .NET runtime.
 
@@ -732,7 +775,7 @@ is doing nothing but a cheap poll ten times a second.
 
 What keeps it cheap:
 
-- The simulation is trivial: stepping all five walkers plus their
+- The simulation is trivial: stepping all ten walkers plus their
   interactions and face logic takes a few tens of microseconds per frame.
 - Slow motions (breathing, swaying, a sleeper's nodding, floating letters)
   are stepped in coarse increments, so a walker that is only idling is

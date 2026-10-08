@@ -157,6 +157,15 @@ namespace IdleWalker.Domain
                         quarry.Scamper(quarry.CentreX >= a.CentreX ? 1 : -1);
                 }
 
+                // A bully bearing down on the timid one: it sees him coming and bolts.
+                if (a.IsCharging && !a.IsPlayful)
+                {
+                    Walker prey = a.ChargeTarget;
+                    if (prey != null && prey.Temperament == Temperament.Timid && prey.IsGrounded && !prey.IsFleeing &&
+                        Math.Abs(prey.CentreX - a.CentreX) < 300 * a.Scale / Settings.BasePixelSize)
+                        prey.Panic(prey.CentreX >= a.CentreX ? 1 : -1);
+                }
+
                 for (int j = i + 1; j < walkers.Count; j++)
                 {
                     Walker b = walkers[j];
@@ -254,7 +263,7 @@ namespace IdleWalker.Domain
                 return;
             }
 
-            bool bothFriendly = a.Temperament == Temperament.Friendly && b.Temperament == Temperament.Friendly;
+            bool bothFriendly = a.Personality.Warm && b.Personality.Warm;
             bool dance = bothFriendly && rng.NextDouble() < 0.4;
             if (a.Temperament != Temperament.Aggressive) a.Greet(towardsB, StyleFor(a, dance));
             if (b.Temperament != Temperament.Aggressive) b.Greet(-towardsB, StyleFor(b, dance));
@@ -262,7 +271,7 @@ namespace IdleWalker.Domain
 
         static GreetStyle StyleFor(Walker walker, bool dance)
         {
-            if (walker.Temperament != Temperament.Friendly) return GreetStyle.Nod;
+            if (!walker.Personality.Warm) return GreetStyle.Nod;
             return dance ? GreetStyle.Dance : GreetStyle.Wave;
         }
 
@@ -298,13 +307,15 @@ namespace IdleWalker.Domain
             {
                 Antic? started = walker.TakeBroadcast();
                 if (started == null || !walker.IsVisible) continue;
-                double reach = 450 * walker.Scale / Settings.BasePixelSize;
+                bool toot = started.Value == Antic.Toot;   // that one carries less far, and nobody copies it
+                double reach = (toot ? 260 : 450) * walker.Scale / Settings.BasePixelSize;
                 foreach (Walker other in walkers)
                 {
                     if (other == walker || !other.IsVisible || other.IsLeaving) continue;
                     if (Math.Abs(other.FeetY - walker.FeetY) > 2) continue;
                     if (Math.Abs(other.CentreX - walker.CentreX) > reach) continue;
-                    other.Catch(started.Value);
+                    if (toot) other.Smell(walker.CentreX);
+                    else other.Catch(started.Value);
                 }
             }
         }

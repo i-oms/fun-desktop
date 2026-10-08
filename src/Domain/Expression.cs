@@ -69,6 +69,21 @@ namespace IdleWalker.Domain
         /// <summary>A hard stare and a flat mouth: not looking for friends.</summary>
         public static readonly Expression Stern = new Expression(lid: 0.25, browAngle: 0.6, mouthCurve: -0.25, mouthWidth: 1.6);
 
+        /// <summary>Lids relaxed, a lazy half-smile to one side: too cool to care.</summary>
+        public static readonly Expression Cool = new Expression(lid: 0.45, browRaise: -0.1, mouthCurve: 0.45, mouthWidth: 1.5, mouthDx: 0.3);
+
+        /// <summary>Brows a little down, mouth straight: all business.</summary>
+        public static readonly Expression Serious = new Expression(lid: 0.2, browAngle: 0.35, mouthCurve: -0.1, mouthWidth: 1.5);
+
+        /// <summary>Slightly cross-eyed, tongue out of a wide grin: the clown.</summary>
+        public static readonly Expression Silly = new Expression(crossEye: 0.5, browRaise: 0.3, mouthCurve: 0.8, mouthOpen: 0.5, mouthWidth: 2.0, tongue: 0.6);
+
+        /// <summary>Brows up in the middle, pupils shrunk a little, lip trembling: expecting the worst.</summary>
+        public static readonly Expression Nervous = new Expression(browRaise: 0.4, browAngle: -0.5, pupilSize: 0.85, mouthCurve: -0.2, mouthWidth: 1.2, wobble: 0.4);
+
+        /// <summary>Lids heavy, mouth hanging open in a vacant smile.</summary>
+        public static readonly Expression Dopey = new Expression(lid: 0.45, browRaise: 0.25, mouthCurve: 0.5, mouthOpen: 0.3, mouthWidth: 1.5, tongue: 0.3);
+
         // ---- Pleased ---------------------------------------------------------------
 
         /// <summary>A toothy grin.</summary>
@@ -97,6 +112,12 @@ namespace IdleWalker.Domain
 
         /// <summary>Squinting, brows down and tongue out: blowing a raspberry.</summary>
         public static readonly Expression Raspberry = new Expression(squint: 0.5, browAngle: 0.6, mouthCurve: 0.3, mouthOpen: 0.4, mouthWidth: 1.3, tongue: 1);
+
+        /// <summary>Lids lowered, lips pursed in a tiny "o": blowing a kiss.</summary>
+        public static readonly Expression Smooch = new Expression(lid: 0.7, browRaise: 0.2, mouthCurve: 0.2, mouthOpen: 0.35, mouthWidth: 0.5);
+
+        /// <summary>Half-lidded, eyes rolled up and away, a soft smile: miles away.</summary>
+        public static readonly Expression Dreamy = new Expression(lid: 0.5, browRaise: 0.3, pupilDx: 0.2, pupilDy: 0.45, mouthCurve: 0.65, mouthWidth: 1.4);
 
         // ---- Thoughtful and tired ----------------------------------------------------
 
@@ -160,6 +181,9 @@ namespace IdleWalker.Domain
 
         /// <summary>Brows up in the middle, mouth down.</summary>
         public static readonly Expression Sad = new Expression(lid: 0.35, browAngle: -0.8, mouthCurve: -0.7, mouthWidth: 1.4);
+
+        /// <summary>Brows up and worried, mouth down and trembling: something bad is coming.</summary>
+        public static readonly Expression Worried = new Expression(browRaise: 0.5, browAngle: -0.7, mouthCurve: -0.4, mouthOpen: 0.15, mouthWidth: 1.3, wobble: 0.7);
 
         // ---- Blending ------------------------------------------------------------
 

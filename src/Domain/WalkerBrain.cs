@@ -56,11 +56,19 @@ namespace IdleWalker.Domain
                     {
                         case Antic.Dance: case Antic.Twirl: case Antic.Joy: case Antic.Box: case Antic.Flex:
                         case Antic.Stomp: case Antic.Laugh: case Antic.Boo: case Antic.Trip:
+                        case Antic.Strum: case Antic.Pushups: case Antic.Jog: case Antic.Flap:
+                        case Antic.Dig: case Antic.Moonwalk:
                             drain = 0.08;
                             gain = 0;
                             break;
                         case Antic.Doze:
                             if (modeTime > 2.1) gain = 0.3;
+                            break;
+                        case Antic.Sleepwalk:
+                            gain = 0.2;
+                            break;
+                        case Antic.Daydream:
+                            gain = 0.05;
                             break;
                     }
                     break;
@@ -83,6 +91,20 @@ namespace IdleWalker.Domain
                         Math.Abs(other.FeetY - feetY) <= 2;
             double d = same ? Math.Abs(other.CentreX - cx) : double.MaxValue;
             Temperament tm = personality.Temperament;
+
+            // The timid one keeps well away from the bullies: hides if one is
+            // close, otherwise turns and walks the other way, glancing back.
+            if (same && tm == Temperament.Timid && other.Temperament == Temperament.Aggressive && d < 380 * sizeFactor)
+            {
+                if (d < 160 * sizeFactor || rng.NextDouble() < 0.35) StartAntic(Antic.Hide);
+                else if ((other.CentreX - cx) * facing > 0)
+                {
+                    afterTurn = Mode.Walk;
+                    Brake(Mode.Turn);
+                }
+                else StartAntic(Antic.Look);
+                return;
+            }
 
             // A bully with somebody standing quietly in range creeps up on them.
             if (same && tm == Temperament.Aggressive && other.IsQuiet && d > 1.6 * BodyWidth && d < 450 * sizeFactor &&
@@ -108,7 +130,7 @@ namespace IdleWalker.Domain
             }
 
             // Two friendly ones with energy to burn play tag.
-            if (same && tm == Temperament.Friendly && other.Temperament == Temperament.Friendly && other.IsWalking &&
+            if (same && personality.Warm && other.Personality.Warm && other.IsWalking &&
                 !other.HasGoal && d < 500 * sizeFactor && energy > 0.55 && rng.NextDouble() < 0.4)
             {
                 StartChase(other);
@@ -153,6 +175,7 @@ namespace IdleWalker.Domain
                 case Antic.Rest:
                 case Antic.Yawn:
                 case Antic.Doze:
+                case Antic.Sleepwalk:
                     return habit.Weight * (0.4 + 2.5 * (1 - energy));
                 case Antic.Dance:
                 case Antic.Twirl:
@@ -160,25 +183,28 @@ namespace IdleWalker.Domain
                 case Antic.Box:
                 case Antic.Flex:
                 case Antic.Stomp:
+                case Antic.Strum:
+                case Antic.Pushups:
+                case Antic.Jog:
+                case Antic.Flap:
+                case Antic.Moonwalk:
+                case Antic.Dig:
                     return habit.Weight * (0.25 + 1.2 * energy);
                 case Antic.Wave:
                 case Antic.Point:
                 case Antic.Look:
+                case Antic.Peekaboo:
+                case Antic.Kiss:
                     return habit.Weight * (0.5 + curiosity);
                 default:
                     return habit.Weight;
             }
         }
 
-        // What each temperament does on reaching the cursor.
+        // What each one does on reaching the cursor.
         Antic InspectAntic()
         {
-            switch (personality.Temperament)
-            {
-                case Temperament.Calm: return Antic.Scratch;
-                case Temperament.Friendly: return Antic.Point;
-                default: return Antic.Taunt;
-            }
+            return personality.CursorAntic;
         }
 
         bool CursorOnThisGround()
@@ -303,7 +329,7 @@ namespace IdleWalker.Domain
                     if (goalTarget != null) LookAt(goalTarget.CentreX, goalTarget.FeetY - 12 * scale, out gx, out gy);
                     break;
                 case Goal.Visit:
-                    target = personality.Temperament == Temperament.Friendly ? Expression.Happy : Expression.Curious;
+                    target = personality.Warm ? Expression.Happy : Expression.Curious;
                     if (goalTarget != null) LookAt(goalTarget.CentreX, goalTarget.FeetY - 12 * scale, out gx, out gy);
                     break;
                 default:
@@ -392,7 +418,7 @@ namespace IdleWalker.Domain
             switch (chatStyle)
             {
                 case ChatStyle.Chat:
-                    if (personality.Temperament == Temperament.Friendly)
+                    if (personality.Warm)
                     {
                         ReactWith(Reaction.Chuckle, px, 1.3, false);
                     }
@@ -417,7 +443,7 @@ namespace IdleWalker.Domain
         void ChatFace(ref Expression target, ref double rate, ref double gx, ref double gy)
         {
             double t = modeTime;
-            bool friendly = personality.Temperament == Temperament.Friendly;
+            bool friendly = personality.Warm;
             if (chatPartner != null) LookAt(chatPartner.CentreX, chatPartner.FeetY - 12 * scale, out gx, out gy);
             else
             {
@@ -576,7 +602,10 @@ namespace IdleWalker.Domain
             return b;
         }
 
-        /// <summary>Saw somebody start to yawn or dance: maybe do the same, a moment later.</summary>
+        /// <summary>
+        /// Saw somebody start to yawn or dance: maybe do the same, a moment
+        /// later. The mimic copies most anything it sees.
+        /// </summary>
         public void Catch(Antic what)
         {
             if (catchCooldown > 0 || hasPending) return;
@@ -586,20 +615,29 @@ namespace IdleWalker.Domain
                 chance = personality.Temperament == Temperament.Aggressive ? 0.3 : 0.7;
                 what = Antic.Yawn;
             }
-            else
+            else if (what == Antic.Dance)
             {
                 switch (personality.Temperament)
                 {
-                    case Temperament.Friendly: chance = 0.85; break;
+                    case Temperament.Friendly: case Temperament.Goofy: chance = 0.85; break;
                     case Temperament.Calm: chance = 0.45; break;
+                    case Temperament.Timid: chance = 0.25; break;
                     default: chance = 0; break;
                 }
+            }
+            else if (personality.Mimic && what != Antic.Toot)
+            {
+                chance = 0.65;
+            }
+            else
+            {
+                return;
             }
             if (rng.NextDouble() >= chance) return;
             hasPending = true;
             pendingAntic = what;
-            pendingIn = what == Antic.Yawn ? Between(0.8, 1.6) : Between(0.3, 0.7);
-            catchCooldown = 12;
+            pendingIn = what == Antic.Yawn ? Between(0.8, 1.6) : what == Antic.Dance ? Between(0.3, 0.7) : Between(0.5, 1.1);
+            catchCooldown = what == Antic.Yawn || what == Antic.Dance ? 12 : 9;
         }
 
         void StepPending(double dt)

@@ -21,8 +21,8 @@ namespace IdleWalker.Domain
         public double StretchX, StretchY; // squash and stretch
         public bool Bubble;               // the "!" overhead
         public double Sweat;              // a drop beside the head: 0 none, else how far it has slid, 0..1
-        public bool Zzz, Note;            // sleep letters floating up; a music note from the mouth
-        public double DecorPhase;         // where the floating letters / note are in their drift, 0..1
+        public bool Zzz, Note, Heart;     // sleep letters floating up; a music note from the mouth; a heart from the mouth
+        public double DecorPhase;         // where the floating letters / note / heart are in their drift, 0..1
 
         public static Pose Standing()
         {
@@ -44,7 +44,7 @@ namespace IdleWalker.Domain
                    PointNear == o.PointNear &&
                    Lean == o.Lean && BodyDy == o.BodyDy && StretchX == o.StretchX && StretchY == o.StretchY &&
                    Bubble == o.Bubble && Sweat == o.Sweat &&
-                   Zzz == o.Zzz && Note == o.Note && DecorPhase == o.DecorPhase;
+                   Zzz == o.Zzz && Note == o.Note && Heart == o.Heart && DecorPhase == o.DecorPhase;
         }
     }
 }
