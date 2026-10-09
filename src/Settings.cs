@@ -26,8 +26,8 @@ namespace IdleWalker
 
         /// <summary>
         /// The overalls colours the Dress menu offers, by name, as 0xRRGGBB. The
-        /// first is the default - the classic blue - and the one a remembered
-        /// value falls back to when it is not on the list.
+        /// first is the default - the classic blue. The menu also offers Random
+        /// and a colour picker for anything else.
         /// </summary>
         public static readonly string[] DressNames = { "Classic blue", "Red", "Green", "Purple", "Orange", "Pink", "Teal", "Black" };
         public static readonly int[] DressColors = { 0x2B59B8, 0xC0392B, 0x2E8B57, 0x6E3FB0, 0xE07A1F, 0xE2559A, 0x1F8A8A, 0x2A2A30 };

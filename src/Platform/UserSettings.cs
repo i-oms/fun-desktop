@@ -50,11 +50,11 @@ namespace IdleWalker.Platform
             Save(IdleValue, seconds);
         }
 
-        /// <summary>The chosen overalls colour; anything not on the menu falls back to the default.</summary>
+        /// <summary>The chosen overalls colour: random, or any 0xRRGGBB (the menu's or a custom one); anything else falls back to the default.</summary>
         public static int LoadDress()
         {
             int dress = Load(DressValue, Settings.DressColors[0]);
-            if (dress == Settings.RandomDress || Array.IndexOf(Settings.DressColors, dress) >= 0) return dress;
+            if (dress == Settings.RandomDress || (dress >= 0 && dress <= 0xFFFFFF)) return dress;
             return Settings.DressColors[0];
         }
 

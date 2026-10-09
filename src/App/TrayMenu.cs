@@ -15,6 +15,8 @@ namespace IdleWalker.App
         readonly ToolStripMenuItem countMenu = new ToolStripMenuItem("Walkers");
         readonly ToolStripMenuItem idleMenu = new ToolStripMenuItem("Appear after");
         readonly ToolStripMenuItem dressMenu = new ToolStripMenuItem("Dress");
+        readonly ToolStripMenuItem customItem = new ToolStripMenuItem("Custom...");
+        int[] customPalette;         // the colour dialog's own swatches, kept between openings
         readonly ToolStripMenuItem startupItem = new ToolStripMenuItem("Start with Windows");
         readonly ToolStripMenuItem pauseItem = new ToolStripMenuItem("Pause");
         IntPtr iconHandle;
@@ -87,6 +89,8 @@ namespace IdleWalker.App
                 AddDress(Settings.DressNames[i], Settings.DressColors[i]);
             dressMenu.DropDownItems.Add(new ToolStripSeparator());
             AddDress("Random", Settings.RandomDress);
+            customItem.Click += OnCustomDressClick;
+            dressMenu.DropDownItems.Add(customItem);
             ShowDress();
 
             startupItem.Checked = StartupRegistration.IsEnabled();
@@ -182,8 +186,14 @@ namespace IdleWalker.App
 
         static string DescribeDress(int rgb)
         {
+            if (rgb == Settings.RandomDress) return "Random";
             int i = Array.IndexOf(Settings.DressColors, rgb);
-            return i >= 0 ? Settings.DressNames[i] : "Random";
+            return i >= 0 ? Settings.DressNames[i] : "Custom #" + rgb.ToString("X6");
+        }
+
+        static bool IsCustom(int rgb)
+        {
+            return rgb != Settings.RandomDress && Array.IndexOf(Settings.DressColors, rgb) < 0;
         }
 
         void ShowDress()
@@ -192,13 +202,35 @@ namespace IdleWalker.App
             foreach (ToolStripItem entry in dressMenu.DropDownItems)
             {
                 ToolStripMenuItem item = entry as ToolStripMenuItem;
-                if (item != null) item.Checked = (int)item.Tag == dress;
+                if (item != null && item.Tag != null) item.Checked = (int)item.Tag == dress;
+            }
+            customItem.Checked = IsCustom(dress);
+        }
+
+        /// <summary>The standard colour dialog, starting from the current overalls colour.</summary>
+        void OnCustomDressClick(object sender, EventArgs e)
+        {
+            int start = IsCustom(dress) ? dress : Settings.DressColors[0];
+            using (ColorDialog dialog = new ColorDialog())
+            {
+                dialog.FullOpen = true;
+                dialog.AnyColor = true;
+                dialog.Color = Color.FromArgb(0xFF, (start >> 16) & 0xFF, (start >> 8) & 0xFF, start & 0xFF);
+                if (customPalette != null) dialog.CustomColors = customPalette;
+                if (dialog.ShowDialog() != DialogResult.OK) return;
+                customPalette = dialog.CustomColors;
+                Color c = dialog.Color;
+                Choose((c.R << 16) | (c.G << 8) | c.B);
             }
         }
 
         void OnDressClick(object sender, EventArgs e)
         {
-            int chosen = (int)((ToolStripMenuItem)sender).Tag;
+            Choose((int)((ToolStripMenuItem)sender).Tag);
+        }
+
+        void Choose(int chosen)
+        {
             // Picking Random again re-rolls everyone.
             if (chosen == dress && chosen != Settings.RandomDress) return;
             dress = chosen;
