@@ -54,10 +54,13 @@ namespace IdleWalker.Rendering
         const double FingerLen = 0.55, FingerR = 0.3;    // an index finger past the glove when pointing
 
         const double Deg = Math.PI / 180;
+        const double StrapShade = 0.78;                   // straps and pocket relative to the overalls
 
         readonly Pose pose;
         readonly Look look;
         readonly Expression face;
+        readonly double dressR, dressG, dressB;        // the overalls
+        readonly double strapR, strapG, strapB;        // their straps and pocket, a shade darker
         readonly double flip;   // -1 when facing left, so the light stays on the screen's left
         readonly double px;     // one pixel in units, for anti-aliasing
         readonly double yaw, sinY, cosY;
@@ -98,10 +101,16 @@ namespace IdleWalker.Rendering
         // The pixel being shaded, premultiplied.
         double ca, cr, cg, cb;
 
-        MinionPainter(Pose pose, Look look, bool faceLeft, double px)
+        MinionPainter(Pose pose, Look look, int dress, bool faceLeft, double px)
         {
             this.pose = pose;
             this.look = look;
+            dressR = ((dress >> 16) & 0xFF) / 255.0;
+            dressG = ((dress >> 8) & 0xFF) / 255.0;
+            dressB = (dress & 0xFF) / 255.0;
+            strapR = dressR * StrapShade;
+            strapG = dressG * StrapShade;
+            strapB = dressB * StrapShade;
             face = pose.Face;
             flip = faceLeft ? -1 : 1;
             this.px = px;
@@ -376,14 +385,15 @@ namespace IdleWalker.Rendering
 
         /// <summary>
         /// Paints the Minion with its soles on soleY, centred on centreX, at
-        /// `scale` pixels per unit (before squash and stretch).
+        /// `scale` pixels per unit (before squash and stretch), in overalls of
+        /// colour `dress` (0xRRGGBB).
         /// </summary>
-        public static void Draw(Surface surface, Pose pose, Look look, bool faceLeft,
+        public static void Draw(Surface surface, Pose pose, Look look, int dress, bool faceLeft,
                                 double centreX, double soleY, double scale)
         {
             double sx = scale * pose.StretchX, sy = scale * pose.StretchY;
             double px = 1 / Math.Min(sx, sy);
-            MinionPainter painter = new MinionPainter(pose, look, faceLeft, px);
+            MinionPainter painter = new MinionPainter(pose, look, dress, faceLeft, px);
 
             int left = Math.Max(0, (int)Math.Floor(centreX - 10.5 * sx));
             int right = Math.Min(surface.Width, (int)Math.Ceiling(centreX + 10.5 * sx));
@@ -616,13 +626,13 @@ namespace IdleWalker.Rendering
             // Yellow skin, with the overalls and the goggle strap painted on.
             double r = 0.98, g = 0.84, b = 0.11, spec = 0.35, shine = 26;
             double denim = Math.Max(Cov(v - WaistV), Cov(RoundRect(arc, v - 6.1, 2.5, 1.5, 0.45)));
-            Mix(ref r, ref g, ref b, ref spec, ref shine, 0.17, 0.35, 0.72, 0.06, 8, denim);
+            Mix(ref r, ref g, ref b, ref spec, ref shine, dressR, dressG, dressB, 0.06, 8, denim);
 
             double qx, qy, t;
             double straps = Math.Max(Cov(Seg(arc, v, 2.2, 7.4, 4.4, 9.6, out qx, out qy, out t) - 0.42),
                                      Cov(Seg(arc, v, -2.2, 7.4, -4.4, 9.6, out qx, out qy, out t) - 0.42));
             double pocket = Cov(RoundRect(arc, v - 6.0, 0.85, 0.6, 0.2));
-            Mix(ref r, ref g, ref b, ref spec, ref shine, 0.13, 0.27, 0.58, 0.06, 8, Math.Max(straps, pocket));
+            Mix(ref r, ref g, ref b, ref spec, ref shine, strapR, strapG, strapB, 0.06, 8, Math.Max(straps, pocket));
 
             double band = Cov(Math.Max(BandBottom - v, v - BandTop));
             Mix(ref r, ref g, ref b, ref spec, ref shine, 0.30, 0.31, 0.34, 0.2, 10, band);

@@ -21,6 +21,7 @@ namespace IdleWalker.Rendering
         Pose lastPose;
         int lastLeft, lastTop, lastFeet, lastGround, lastScale;
         bool lastFaceLeft, lastHadDust;
+        int lastDress;
 
         /// <summary>The rendered frame.</summary>
         public Surface Surface { get { return surface; } }
@@ -49,10 +50,12 @@ namespace IdleWalker.Rendering
             int feet = Round(walker.FeetY);
             bool hasDust = walker.Puffs.Count > 0;
             Pose pose = walker.CurrentPose();
+            int dress = walker.Dress;
 
             bool unchanged = hasLast && !hasDust && !lastHadDust &&
                              left == lastLeft && top == lastTop && feet == lastFeet && ground == lastGround &&
-                             scale == lastScale && walker.FacesLeft == lastFaceLeft && pose.SameAs(lastPose);
+                             scale == lastScale && walker.FacesLeft == lastFaceLeft && dress == lastDress &&
+                             pose.SameAs(lastPose);
             if (unchanged) return false;
 
             hasLast = true;
@@ -63,6 +66,7 @@ namespace IdleWalker.Rendering
             lastGround = ground;
             lastScale = scale;
             lastFaceLeft = walker.FacesLeft;
+            lastDress = dress;
             lastHadDust = hasDust;
             Left = left;
             Top = top;
@@ -85,7 +89,7 @@ namespace IdleWalker.Rendering
             }
 
             // The soles sit just above the ground line, leaving room for the halo.
-            DrawPose(surface, pose, walker.Personality.Look, walker.FacesLeft, walker.CentreX - left, walker.FeetY - top - 1, scale);
+            DrawPose(surface, pose, walker.Personality.Look, dress, walker.FacesLeft, walker.CentreX - left, walker.FeetY - top - 1, scale);
             return true;
         }
 
@@ -93,10 +97,10 @@ namespace IdleWalker.Rendering
         /// Draws a pose with its soles resting on soleY, centred on centreX,
         /// and commits it to the canvas. Also used for the tray icon.
         /// </summary>
-        public static void DrawPose(Surface surface, Pose pose, Look look, bool faceLeft,
+        public static void DrawPose(Surface surface, Pose pose, Look look, int dress, bool faceLeft,
                                     double centreX, double soleY, double scale)
         {
-            MinionPainter.Draw(surface, pose, look, faceLeft, centreX, soleY, scale);
+            MinionPainter.Draw(surface, pose, look, dress, faceLeft, centreX, soleY, scale);
             surface.CommitCharacter(1);
         }
 

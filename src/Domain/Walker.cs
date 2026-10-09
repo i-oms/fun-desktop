@@ -168,6 +168,9 @@ namespace IdleWalker.Domain
         // ---- What others need to know ----------------------------------------------
 
         public Personality Personality { get { return personality; } }
+
+        /// <summary>The overalls colour (0xRRGGBB); the troupe hands it out.</summary>
+        public int Dress = Settings.DressColors[0];
         public Temperament Temperament { get { return personality.Temperament; } }
 
         public bool IsHidden { get { return mode == Mode.Hidden; } }

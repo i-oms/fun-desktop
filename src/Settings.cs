@@ -24,6 +24,17 @@ namespace IdleWalker
         /// <summary>How many come out until the user picks another number.</summary>
         public const int DefaultWalkers = 5;
 
+        /// <summary>
+        /// The overalls colours the Dress menu offers, by name, as 0xRRGGBB. The
+        /// first is the default - the classic blue - and the one a remembered
+        /// value falls back to when it is not on the list.
+        /// </summary>
+        public static readonly string[] DressNames = { "Classic blue", "Red", "Green", "Purple", "Orange", "Pink", "Teal", "Black" };
+        public static readonly int[] DressColors = { 0x2B59B8, 0xC0392B, 0x2E8B57, 0x6E3FB0, 0xE07A1F, 0xE2559A, 0x1F8A8A, 0x2A2A30 };
+
+        /// <summary>The Dress menu's "Random" entry: every Minion picks its own colour each time it comes out.</summary>
+        public const int RandomDress = -1;
+
         /// <summary>Whether "Start with Windows" is switched on the first time the program runs.</summary>
         public const bool StartWithWindowsByDefault = true;
 

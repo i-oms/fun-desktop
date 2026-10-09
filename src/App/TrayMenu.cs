@@ -14,15 +14,18 @@ namespace IdleWalker.App
         readonly ContextMenuStrip menu = new ContextMenuStrip();
         readonly ToolStripMenuItem countMenu = new ToolStripMenuItem("Walkers");
         readonly ToolStripMenuItem idleMenu = new ToolStripMenuItem("Appear after");
+        readonly ToolStripMenuItem dressMenu = new ToolStripMenuItem("Dress");
         readonly ToolStripMenuItem startupItem = new ToolStripMenuItem("Start with Windows");
         readonly ToolStripMenuItem pauseItem = new ToolStripMenuItem("Pause");
         IntPtr iconHandle;
         int count;
         int idleSeconds;
+        int dress;
 
         public event EventHandler ExitRequested;
         public event EventHandler CountChanged;
         public event EventHandler IdleChanged;
+        public event EventHandler DressChanged;
         public event EventHandler AboutRequested;
 
         /// <summary>True while the user has ticked Pause.</summary>
@@ -43,7 +46,13 @@ namespace IdleWalker.App
             get { return idleSeconds; }
         }
 
-        public TrayMenu(int initialCount, int initialIdleSeconds)
+        /// <summary>The overalls colour (0xRRGGBB), or Settings.RandomDress.</summary>
+        public int Dress
+        {
+            get { return dress; }
+        }
+
+        public TrayMenu(int initialCount, int initialIdleSeconds, int initialDress)
         {
             count = initialCount;
             for (int n = 1; n <= Settings.MaxWalkers; n++)
@@ -72,12 +81,21 @@ namespace IdleWalker.App
             }
             ShowIdle();
 
+            // The fixed colours, then Random after a line.
+            dress = initialDress;
+            for (int i = 0; i < Settings.DressColors.Length; i++)
+                AddDress(Settings.DressNames[i], Settings.DressColors[i]);
+            dressMenu.DropDownItems.Add(new ToolStripSeparator());
+            AddDress("Random", Settings.RandomDress);
+            ShowDress();
+
             startupItem.Checked = StartupRegistration.IsEnabled();
             startupItem.Click += OnStartupClick;
             pauseItem.CheckOnClick = true;
 
             menu.Items.Add(countMenu);
             menu.Items.Add(idleMenu);
+            menu.Items.Add(dressMenu);
             menu.Items.Add(startupItem);
             menu.Items.Add(pauseItem);
             menu.Items.Add(new ToolStripSeparator());
@@ -98,7 +116,7 @@ namespace IdleWalker.App
             Surface surface = new Surface();
             surface.Reset(size, size);
             Personality first = Personality.Roster[0];
-            FrameRenderer.DrawPose(surface, Pose.Standing(), first.Look, false, size / 2.0, size - 2, 1.85);
+            FrameRenderer.DrawPose(surface, Pose.Standing(), first.Look, Settings.DressColors[0], false, size / 2.0, size - 2, 1.85);
 
             using (Bitmap bitmap = new Bitmap(size, size))
             {
@@ -151,6 +169,41 @@ namespace IdleWalker.App
             idleSeconds = chosen;
             ShowIdle();
             EventHandler handler = IdleChanged;
+            if (handler != null) handler(this, EventArgs.Empty);
+        }
+
+        void AddDress(string name, int rgb)
+        {
+            ToolStripMenuItem item = new ToolStripMenuItem(name);
+            item.Tag = rgb;
+            item.Click += OnDressClick;
+            dressMenu.DropDownItems.Add(item);
+        }
+
+        static string DescribeDress(int rgb)
+        {
+            int i = Array.IndexOf(Settings.DressColors, rgb);
+            return i >= 0 ? Settings.DressNames[i] : "Random";
+        }
+
+        void ShowDress()
+        {
+            dressMenu.Text = "Dress: " + DescribeDress(dress);
+            foreach (ToolStripItem entry in dressMenu.DropDownItems)
+            {
+                ToolStripMenuItem item = entry as ToolStripMenuItem;
+                if (item != null) item.Checked = (int)item.Tag == dress;
+            }
+        }
+
+        void OnDressClick(object sender, EventArgs e)
+        {
+            int chosen = (int)((ToolStripMenuItem)sender).Tag;
+            // Picking Random again re-rolls everyone.
+            if (chosen == dress && chosen != Settings.RandomDress) return;
+            dress = chosen;
+            ShowDress();
+            EventHandler handler = DressChanged;
             if (handler != null) handler(this, EventArgs.Empty);
         }
 

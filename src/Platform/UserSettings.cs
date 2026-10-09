@@ -10,6 +10,7 @@ namespace IdleWalker.Platform
         const string CountValue = "WalkerCount";
         const string IdleValue = "IdleSeconds";
         const string StartupValue = "StartupDecided";
+        const string DressValue = "Dress";
 
         public static int LoadWalkerCount()
         {
@@ -47,6 +48,19 @@ namespace IdleWalker.Platform
         public static void SaveIdleSeconds(int seconds)
         {
             Save(IdleValue, seconds);
+        }
+
+        /// <summary>The chosen overalls colour; anything not on the menu falls back to the default.</summary>
+        public static int LoadDress()
+        {
+            int dress = Load(DressValue, Settings.DressColors[0]);
+            if (dress == Settings.RandomDress || Array.IndexOf(Settings.DressColors, dress) >= 0) return dress;
+            return Settings.DressColors[0];
+        }
+
+        public static void SaveDress(int dress)
+        {
+            Save(DressValue, dress);
         }
 
         static int Load(string name, int fallback)

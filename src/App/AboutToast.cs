@@ -213,7 +213,7 @@ namespace IdleWalker.App
             pose.GazeX = 0;
             pose.ArmNear = 150;
             pose.ForeNear = -25;
-            FrameRenderer.DrawPose(surface, pose, Personality.Roster[0].Look, false, width / 2.0, height - 2, unit);
+            FrameRenderer.DrawPose(surface, pose, Personality.Roster[0].Look, Settings.DressColors[0], false, width / 2.0, height - 2, unit);
 
             Bitmap bitmap = new Bitmap(width, height, PixelFormat.Format32bppPArgb);
             BitmapData data = bitmap.LockBits(new Rectangle(0, 0, width, height), ImageLockMode.WriteOnly, bitmap.PixelFormat);

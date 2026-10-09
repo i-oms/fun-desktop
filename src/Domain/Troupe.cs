@@ -20,6 +20,7 @@ namespace IdleWalker.Domain
         readonly Random rng;
         readonly List<Walker> walkers = new List<Walker>();
         int count = 1;
+        int dress = Settings.DressColors[0];
         double spawnTimer;
 
         public Troupe(IWorld world, Random rng)
@@ -36,6 +37,25 @@ namespace IdleWalker.Domain
         {
             get { return count; }
             set { count = Math.Max(1, Math.Min(Settings.MaxWalkers, value)); }
+        }
+
+        /// <summary>
+        /// The overalls colour, 0xRRGGBB, or Settings.RandomDress for a fresh
+        /// random colour per Minion per appearance. A change shows at once.
+        /// </summary>
+        public int Dress
+        {
+            get { return dress; }
+            set
+            {
+                dress = value;
+                foreach (Walker walker in walkers) walker.Dress = PickDress();
+            }
+        }
+
+        int PickDress()
+        {
+            return dress == Settings.RandomDress ? Look.RandomDress(rng) : dress;
         }
 
         public bool AnyVisible
@@ -71,6 +91,7 @@ namespace IdleWalker.Domain
                     Walker next = NextToAppear();
                     if (next != null)
                     {
+                        next.Dress = PickDress();
                         next.Spawn(cursor, PickSpawnX(cursor));
                         spawnTimer = 0.7 + rng.NextDouble() * 0.7;
                     }

@@ -50,7 +50,7 @@ fun/
     │   ├── SpriteWindow.cs   layered click-through window
     │   ├── FramePump.cs      vsync-paced tick thread
     │   ├── StartupRegistration.cs   the "Start with Windows" registry entry
-    │   └── UserSettings.cs   remembers the walker count
+    │   └── UserSettings.cs   remembers the walker count, rest time and dress
     └── App/                  wiring
         ├── WalkerApp.cs      the per-frame loop, one window per walker
         ├── CursorWatcher.cs  idle detection
@@ -158,6 +158,7 @@ Minion appears.
 |---|---|
 | Walkers: *n* → 1…10 | How many Minions come out (five by default). Raising it brings the new ones out straight away (one at a time); lowering it sends the extras away. Remembered between runs. |
 | Appear after: *t* → 1…5 seconds, 1…5 minutes | How long the mouse must be still before they come out. Takes effect at once: shorten it and they appear sooner, lengthen it while they are out and they stay (they only ever leave when the mouse moves). Remembered between runs. |
+| Dress: *colour* → Classic blue, Red, Green, Purple, Orange, Pink, Teal, Black, Random | The colour of their overalls. Classic blue is the default. A fixed colour applies to everyone at once, even while they are out. Random gives each Minion its own colour every time it comes out; picking Random again re-rolls the ones on screen. Remembered between runs. |
 | Start with Windows | Ticked: the program starts when you sign in. On by default; untick it to switch it off. See below. |
 | Pause | Keeps the characters hidden until unticked. If they are on screen, they leave immediately. |
 | About | Shows a small card above the walkers' lane - a waving Minion and the creator's name - for two seconds, then it fades out. It takes no focus; click it to dismiss it sooner. |
@@ -376,6 +377,8 @@ running copy, rebuild.
 |---|---|---|
 | `IdleSeconds` | `2` | How long the cursor must be still before it appears, until a different time is picked from the tray menu. |
 | `IdleChoices` | 1…5 s, 1…5 min | The times the **Appear after** menu offers. A remembered value that is not in this list falls back to `IdleSeconds`. |
+| `DressNames`, `DressColors` | 8 colours | The overalls colours the **Dress** menu offers, as names and 0xRRGGBB values. The first is the default and what a remembered value not in the list falls back to. |
+| `RandomDress` | `-1` | The menu's "Random" entry: a fresh colour per Minion per appearance (`Look.RandomDress`, any hue but yellow). |
 | `MoveTolerance` | `2` | Cursor movement (pixels) below this does not count as moving. |
 | `BasePixelSize` | `3` | Size in screen pixels of one art pixel at 100% display scaling. `4` makes it a third bigger. |
 | `MaxWalkers` | `10` | Upper limit of the Walkers menu. The cast in `Personality.Roster` must have at least this many entries. |
@@ -467,7 +470,9 @@ when the head is turned.
 **Looks.** A `Look` (`src\Domain\Look.cs`) is what a Minion is born with:
 one eye or two, the iris colour of each, and a hair style (`None`, `Sprouts`,
 `Combed`, `Parted`, `Crew`). Hair is a handful of tapering strands rooted on
-the dome.
+the dome. The overalls colour is not part of the look: it is a setting,
+handed to each walker by the `Troupe` (`Walker.Dress`) and passed down to
+the painter per frame, so changing it repaints at once.
 
 **Poses.** A `Pose` (`src\Domain\Pose.cs`) carries the expression, the gaze,
 the yaw (how far the body is turned about its axis: 0 faces you, 58 is the
@@ -683,12 +688,13 @@ option is on.
 ### Remembered settings
 
 `UserSettings` stores the walker count as a DWORD `WalkerCount`, the rest
-time as a DWORD `IdleSeconds` and, once "Start with Windows" has been set
+time as a DWORD `IdleSeconds`, the overalls colour as a DWORD `Dress`
+(0xRRGGBB, or -1 for random) and, once "Start with Windows" has been set
 up (by the first-run default or by a click), a DWORD `StartupDecided` of 1,
 all under `HKCU\Software\IdleWalker`. The last one is what stops the
 default re-ticking the box after the user has unticked it. Reading or
-writing failures are swallowed - the worst case is the count resets to 5
-and the rest time to two seconds next time.
+writing failures are swallowed - the worst case is the count resets to 5,
+the rest time to two seconds and the dress to classic blue next time.
 
 ### Adding things
 

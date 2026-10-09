@@ -38,11 +38,12 @@ namespace IdleWalker.App
         {
             troupe = new Troupe(monitors, new Random());
             troupe.Count = UserSettings.LoadWalkerCount();
+            troupe.Dress = UserSettings.LoadDress();
 
             // Before the menu reads the tick state.
             StartupRegistration.ApplyDefault();
 
-            tray = new TrayMenu(troupe.Count, UserSettings.LoadIdleSeconds());
+            tray = new TrayMenu(troupe.Count, UserSettings.LoadIdleSeconds(), troupe.Dress);
             tray.ExitRequested += delegate { ExitThread(); };
             tray.CountChanged += delegate
             {
@@ -50,6 +51,11 @@ namespace IdleWalker.App
                 UserSettings.SaveWalkerCount(tray.Count);
             };
             tray.IdleChanged += delegate { UserSettings.SaveIdleSeconds(tray.IdleSeconds); };
+            tray.DressChanged += delegate
+            {
+                troupe.Dress = tray.Dress;
+                UserSettings.SaveDress(tray.Dress);
+            };
             tray.AboutRequested += delegate { ShowAbout(); };
             StartupRegistration.RefreshPath();
 
