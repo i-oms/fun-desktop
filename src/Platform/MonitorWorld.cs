@@ -21,6 +21,7 @@ namespace IdleWalker.Platform
         }
 
         Monitor[] monitors = new Monitor[0];
+        Rectangle[] monitorBounds = new Rectangle[0];
         int[] edges = new int[0];
         int left, right;
 
@@ -31,6 +32,7 @@ namespace IdleWalker.Platform
             if (monitors.Length != screens.Length)
             {
                 monitors = new Monitor[screens.Length];
+                monitorBounds = new Rectangle[screens.Length];
                 edges = new int[screens.Length * 2];
             }
 
@@ -40,6 +42,7 @@ namespace IdleWalker.Platform
             {
                 Rectangle bounds = screens[i].Bounds;
                 monitors[i].Bounds = bounds;
+                monitorBounds[i] = bounds;
                 monitors[i].Ground = screens[i].WorkingArea.Bottom;
                 monitors[i].Scale = ScaleFor(bounds);
                 edges[2 * i] = bounds.Left;
@@ -48,6 +51,9 @@ namespace IdleWalker.Platform
                 right = Math.Max(right, bounds.Right);
             }
         }
+
+        /// <summary>Every monitor's bounds, as of the last Refresh (for the hot corners).</summary>
+        public Rectangle[] MonitorBounds { get { return monitorBounds; } }
 
         public int Left { get { return left; } }
         public int Right { get { return right; } }

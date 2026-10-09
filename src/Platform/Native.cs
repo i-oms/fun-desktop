@@ -66,6 +66,27 @@ namespace IdleWalker.Platform
             public int biClrImportant;
         }
 
+        // Hot corners: keyboard shortcuts, the lock screen, the screen saver, monitor power.
+        public const uint WM_SYSCOMMAND = 0x0112;
+        public static readonly IntPtr SC_SCREENSAVE = new IntPtr(0xF140);
+        public static readonly IntPtr SC_MONITORPOWER = new IntPtr(0xF170);
+        public static readonly IntPtr HWND_BROADCAST = new IntPtr(0xFFFF);
+        public const int VK_LBUTTON = 0x01, VK_RBUTTON = 0x02, VK_MBUTTON = 0x04;
+        public const byte VK_TAB = 0x09, VK_CONTROL = 0x11, VK_ESCAPE = 0x1B, VK_A = 0x41, VK_D = 0x44, VK_N = 0x4E, VK_LWIN = 0x5B;
+        public const uint KEYEVENTF_KEYUP = 0x0002;
+
+        [DllImport("user32.dll")]
+        public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extraInfo);
+
+        [DllImport("user32.dll")]
+        public static extern bool LockWorkStation();
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr SendMessage(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        public static extern short GetAsyncKeyState(int vk);
+
         [DllImport("user32.dll")]
         public static extern bool GetCursorPos(out POINT point);
 

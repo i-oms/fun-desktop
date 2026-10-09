@@ -12,11 +12,19 @@ namespace IdleWalker.App
     sealed class CursorWatcher
     {
         Native.POINT anchor;
+        Native.POINT latest;   // the last sample, exactly
         double lastMoveTime;
 
         public CursorWatcher()
         {
             Native.GetCursorPos(out anchor);
+            latest = anchor;
+        }
+
+        /// <summary>Where the cursor was at the last sample, to the pixel.</summary>
+        public Point Latest
+        {
+            get { return new Point(latest.X, latest.Y); }
         }
 
         /// <summary>Where the cursor is resting.</summary>
@@ -32,6 +40,7 @@ namespace IdleWalker.App
             // GetCursorPos fails on the secure desktop (UAC, lock screen);
             // that counts as not moving.
             if (!Native.GetCursorPos(out cursor)) return false;
+            latest = cursor;
 
             bool moved = Math.Abs(cursor.X - anchor.X) > Settings.MoveTolerance ||
                          Math.Abs(cursor.Y - anchor.Y) > Settings.MoveTolerance;

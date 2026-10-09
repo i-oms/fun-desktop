@@ -10,8 +10,9 @@ using IdleWalker.Rendering;
 namespace IdleWalker.App
 {
     /// <summary>
-    /// Wires everything together: watches the cursor, steps the troupe once
-    /// per frame, and renders each walker into its own sprite window.
+    /// Wires everything together: watches the cursor, fires the hot corners,
+    /// steps the troupe once per frame, and renders each walker into its own
+    /// sprite window.
     /// </summary>
     sealed class WalkerApp : ApplicationContext
     {
@@ -24,6 +25,7 @@ namespace IdleWalker.App
 
         readonly MonitorWorld monitors = new MonitorWorld();
         readonly CursorWatcher cursor = new CursorWatcher();
+        readonly HotCorners corners = new HotCorners();
         readonly Stopwatch clock = Stopwatch.StartNew();
         readonly List<View> views = new List<View>();
         readonly Troupe troupe;
@@ -32,6 +34,7 @@ namespace IdleWalker.App
 
         double lastTick;
         double nextTopmost;
+        bool summoned;              // a hot corner called the Minions out; cleared when the cursor moves
         AboutToast about;           // the card while it is showing
 
         public WalkerApp()
@@ -40,11 +43,18 @@ namespace IdleWalker.App
             troupe.Count = UserSettings.LoadWalkerCount();
             troupe.Dress = UserSettings.LoadDress();
 
+            CornerAction[] actions = new CornerAction[4];
+            for (int c = 0; c < actions.Length; c++) actions[c] = UserSettings.LoadCornerAction((Corner)c);
+            int delayMs = UserSettings.LoadHotCornerDelay();
+            corners.DwellSeconds = delayMs / 1000.0;
+
             // Before the menu reads the tick state.
             StartupRegistration.ApplyDefault();
 
-            tray = new TrayMenu(troupe.Count, UserSettings.LoadIdleSeconds(), troupe.Dress);
+            tray = new TrayMenu(troupe.Count, UserSettings.LoadIdleSeconds(), troupe.Dress,
+                                UserSettings.LoadMinionsEnabled(), UserSettings.LoadHotCornersEnabled(), actions, delayMs);
             tray.ExitRequested += delegate { ExitThread(); };
+            tray.MinionsToggled += delegate { UserSettings.SaveMinionsEnabled(tray.MinionsEnabled); };
             tray.CountChanged += delegate
             {
                 troupe.Count = tray.Count;
@@ -55,6 +65,17 @@ namespace IdleWalker.App
             {
                 troupe.Dress = tray.Dress;
                 UserSettings.SaveDress(tray.Dress);
+            };
+            tray.HotCornersToggled += delegate
+            {
+                corners.Reset();
+                UserSettings.SaveHotCornersEnabled(tray.HotCornersEnabled);
+            };
+            tray.CornerChanged += delegate(Corner corner) { UserSettings.SaveCornerAction(corner, tray.CornerActionFor(corner)); };
+            tray.DelayChanged += delegate
+            {
+                corners.DwellSeconds = tray.DelayMs / 1000.0;
+                UserSettings.SaveHotCornerDelay(tray.DelayMs);
             };
             tray.AboutRequested += delegate { ShowAbout(); };
             StartupRegistration.RefreshPath();
@@ -73,10 +94,23 @@ namespace IdleWalker.App
 
             monitors.Refresh();
             bool moved = cursor.Poll(now);
-            bool paused = tray.Paused;
-            bool wantOut = !paused && cursor.IdleFor(now, tray.IdleSeconds);
+            if (moved) summoned = false;
 
-            troupe.Step(dt, cursor.Position, wantOut, moved || paused);
+            // The hot corners: the cursor resting in a corner of any monitor.
+            if (tray.HotCornersEnabled)
+            {
+                Corner corner;
+                if (corners.Step(now, cursor.Latest, monitors.MonitorBounds, CornerActions.MouseButtonDown(), out corner))
+                {
+                    CornerAction action = tray.CornerActionFor(corner);
+                    if (action == CornerAction.CallMinions) summoned = tray.MinionsEnabled;
+                    else CornerActions.Perform(action);
+                }
+            }
+
+            bool enabled = tray.MinionsEnabled;
+            bool wantOut = enabled && (summoned || cursor.IdleFor(now, tray.IdleSeconds));
+            troupe.Step(dt, cursor.Position, wantOut, moved || !enabled);
 
             // The walkers are re-raised once a second, except while the
             // About card is up: that belongs above them.

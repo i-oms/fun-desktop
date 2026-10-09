@@ -7,33 +7,51 @@ using IdleWalker.Rendering;
 
 namespace IdleWalker.App
 {
-    /// <summary>The notification-area icon and its right-click menu.</summary>
+    /// <summary>
+    /// The notification-area icon and its right-click menu: the Minions and
+    /// their settings, the hot corners and theirs, and the program itself.
+    /// </summary>
     sealed class TrayMenu : IDisposable
     {
         readonly NotifyIcon icon = new NotifyIcon();
         readonly ContextMenuStrip menu = new ContextMenuStrip();
+
+        // The Minions.
+        readonly ToolStripMenuItem minionsItem = new ToolStripMenuItem("Minions");
         readonly ToolStripMenuItem countMenu = new ToolStripMenuItem("Walkers");
         readonly ToolStripMenuItem idleMenu = new ToolStripMenuItem("Appear after");
         readonly ToolStripMenuItem dressMenu = new ToolStripMenuItem("Dress");
         readonly ToolStripMenuItem customItem = new ToolStripMenuItem("Custom...");
         int[] customPalette;         // the colour dialog's own swatches, kept between openings
+
+        // The hot corners.
+        static readonly string[] CornerNames = { "Top-left", "Top-right", "Bottom-left", "Bottom-right" };
+        readonly ToolStripMenuItem cornersItem = new ToolStripMenuItem("Hot corners");
+        readonly ToolStripMenuItem[] cornerMenus = new ToolStripMenuItem[CornerNames.Length];
+        readonly ToolStripMenuItem delayMenu = new ToolStripMenuItem("Corner delay");
+
         readonly ToolStripMenuItem startupItem = new ToolStripMenuItem("Start with Windows");
-        readonly ToolStripMenuItem pauseItem = new ToolStripMenuItem("Pause");
         IntPtr iconHandle;
         int count;
         int idleSeconds;
         int dress;
+        readonly CornerAction[] actions = new CornerAction[CornerNames.Length];
+        int delayMs;
 
         public event EventHandler ExitRequested;
+        public event EventHandler MinionsToggled;
         public event EventHandler CountChanged;
         public event EventHandler IdleChanged;
         public event EventHandler DressChanged;
+        public event EventHandler HotCornersToggled;
+        public event Action<Corner> CornerChanged;
+        public event EventHandler DelayChanged;
         public event EventHandler AboutRequested;
 
-        /// <summary>True while the user has ticked Pause.</summary>
-        public bool Paused
+        /// <summary>True while the Minions are switched on.</summary>
+        public bool MinionsEnabled
         {
-            get { return pauseItem.Checked; }
+            get { return minionsItem.Checked; }
         }
 
         /// <summary>How many walkers the user wants (1..Settings.MaxWalkers).</summary>
@@ -54,8 +72,32 @@ namespace IdleWalker.App
             get { return dress; }
         }
 
-        public TrayMenu(int initialCount, int initialIdleSeconds, int initialDress)
+        /// <summary>True while the hot corners are switched on.</summary>
+        public bool HotCornersEnabled
         {
+            get { return cornersItem.Checked; }
+        }
+
+        /// <summary>What a corner does.</summary>
+        public CornerAction CornerActionFor(Corner corner)
+        {
+            return actions[(int)corner];
+        }
+
+        /// <summary>How long the cursor must rest in a corner before it fires, in ms.</summary>
+        public int DelayMs
+        {
+            get { return delayMs; }
+        }
+
+        public TrayMenu(int initialCount, int initialIdleSeconds, int initialDress, bool minionsOn,
+                        bool cornersOn, CornerAction[] initialActions, int initialDelayMs)
+        {
+            // ---- The Minions ----
+            minionsItem.Checked = minionsOn;
+            minionsItem.CheckOnClick = true;
+            minionsItem.CheckedChanged += OnMinionsToggled;
+
             count = initialCount;
             for (int n = 1; n <= Settings.MaxWalkers; n++)
             {
@@ -83,7 +125,7 @@ namespace IdleWalker.App
             }
             ShowIdle();
 
-            // The fixed colours, then Random after a line.
+            // The fixed colours, then Random and the picker after a line.
             dress = initialDress;
             for (int i = 0; i < Settings.DressColors.Length; i++)
                 AddDress(Settings.DressNames[i], Settings.DressColors[i]);
@@ -93,18 +135,54 @@ namespace IdleWalker.App
             dressMenu.DropDownItems.Add(customItem);
             ShowDress();
 
+            // ---- The hot corners ----
+            cornersItem.Checked = cornersOn;
+            cornersItem.CheckOnClick = true;
+            cornersItem.CheckedChanged += OnCornersToggled;
+
+            for (int c = 0; c < CornerNames.Length; c++)
+            {
+                actions[c] = initialActions[c];
+                ToolStripMenuItem cornerMenu = new ToolStripMenuItem(CornerNames[c]);
+                cornerMenu.Tag = c;
+                for (int a = 0; a < CornerActions.Names.Length; a++)
+                {
+                    ToolStripMenuItem item = new ToolStripMenuItem(CornerActions.Names[a]);
+                    item.Tag = a;
+                    item.Click += OnCornerActionClick;
+                    cornerMenu.DropDownItems.Add(item);
+                }
+                cornerMenus[c] = cornerMenu;
+                ShowCorner(c);
+            }
+
+            delayMs = initialDelayMs;
+            foreach (int ms in Settings.HotCornerDelayChoices)
+            {
+                ToolStripMenuItem item = new ToolStripMenuItem(DescribeDelay(ms));
+                item.Tag = ms;
+                item.Click += OnDelayClick;
+                delayMenu.DropDownItems.Add(item);
+            }
+            ShowDelay();
+
+            // ---- The program ----
             startupItem.Checked = StartupRegistration.IsEnabled();
             startupItem.Click += OnStartupClick;
-            pauseItem.CheckOnClick = true;
 
+            menu.Items.Add(minionsItem);
             menu.Items.Add(countMenu);
             menu.Items.Add(idleMenu);
             menu.Items.Add(dressMenu);
-            menu.Items.Add(startupItem);
-            menu.Items.Add(pauseItem);
             menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add(cornersItem);
+            foreach (ToolStripMenuItem cornerMenu in cornerMenus) menu.Items.Add(cornerMenu);
+            menu.Items.Add(delayMenu);
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add(startupItem);
             menu.Items.Add("About", null, OnAboutClick);
             menu.Items.Add("Exit", null, OnExitClick);
+            ShowEnabled();
 
             iconHandle = RenderIcon();
             icon.Icon = Icon.FromHandle(iconHandle);
@@ -131,6 +209,33 @@ namespace IdleWalker.App
             }
         }
 
+        // A feature's settings are greyed out while it is off.
+        void ShowEnabled()
+        {
+            bool minions = minionsItem.Checked;
+            countMenu.Enabled = minions;
+            idleMenu.Enabled = minions;
+            dressMenu.Enabled = minions;
+
+            bool corners = cornersItem.Checked;
+            foreach (ToolStripMenuItem cornerMenu in cornerMenus) cornerMenu.Enabled = corners;
+            delayMenu.Enabled = corners;
+        }
+
+        void OnMinionsToggled(object sender, EventArgs e)
+        {
+            ShowEnabled();
+            Raise(MinionsToggled);
+        }
+
+        void OnCornersToggled(object sender, EventArgs e)
+        {
+            ShowEnabled();
+            Raise(HotCornersToggled);
+        }
+
+        // ---- The Minions ----
+
         void ShowCount()
         {
             countMenu.Text = "Walkers: " + count;
@@ -144,8 +249,7 @@ namespace IdleWalker.App
             if (chosen == count) return;
             count = chosen;
             ShowCount();
-            EventHandler handler = CountChanged;
-            if (handler != null) handler(this, EventArgs.Empty);
+            Raise(CountChanged);
         }
 
         /// <summary>"1 second", "2 seconds", "1 minute", "5 minutes".</summary>
@@ -159,11 +263,7 @@ namespace IdleWalker.App
         void ShowIdle()
         {
             idleMenu.Text = "Appear after: " + Describe(idleSeconds);
-            foreach (ToolStripItem entry in idleMenu.DropDownItems)
-            {
-                ToolStripMenuItem item = entry as ToolStripMenuItem;
-                if (item != null) item.Checked = (int)item.Tag == idleSeconds;
-            }
+            Tick(idleMenu, idleSeconds);
         }
 
         void OnIdleClick(object sender, EventArgs e)
@@ -172,8 +272,7 @@ namespace IdleWalker.App
             if (chosen == idleSeconds) return;
             idleSeconds = chosen;
             ShowIdle();
-            EventHandler handler = IdleChanged;
-            if (handler != null) handler(this, EventArgs.Empty);
+            Raise(IdleChanged);
         }
 
         void AddDress(string name, int rgb)
@@ -199,11 +298,7 @@ namespace IdleWalker.App
         void ShowDress()
         {
             dressMenu.Text = "Dress: " + DescribeDress(dress);
-            foreach (ToolStripItem entry in dressMenu.DropDownItems)
-            {
-                ToolStripMenuItem item = entry as ToolStripMenuItem;
-                if (item != null && item.Tag != null) item.Checked = (int)item.Tag == dress;
-            }
+            Tick(dressMenu, dress);
             customItem.Checked = IsCustom(dress);
         }
 
@@ -220,24 +315,66 @@ namespace IdleWalker.App
                 if (dialog.ShowDialog() != DialogResult.OK) return;
                 customPalette = dialog.CustomColors;
                 Color c = dialog.Color;
-                Choose((c.R << 16) | (c.G << 8) | c.B);
+                ChooseDress((c.R << 16) | (c.G << 8) | c.B);
             }
         }
 
         void OnDressClick(object sender, EventArgs e)
         {
-            Choose((int)((ToolStripMenuItem)sender).Tag);
+            ChooseDress((int)((ToolStripMenuItem)sender).Tag);
         }
 
-        void Choose(int chosen)
+        void ChooseDress(int chosen)
         {
             // Picking Random again re-rolls everyone.
             if (chosen == dress && chosen != Settings.RandomDress) return;
             dress = chosen;
             ShowDress();
-            EventHandler handler = DressChanged;
-            if (handler != null) handler(this, EventArgs.Empty);
+            Raise(DressChanged);
         }
+
+        // ---- The hot corners ----
+
+        void ShowCorner(int c)
+        {
+            cornerMenus[c].Text = CornerNames[c] + ": " + CornerActions.Names[(int)actions[c]];
+            Tick(cornerMenus[c], (int)actions[c]);
+        }
+
+        void OnCornerActionClick(object sender, EventArgs e)
+        {
+            ToolStripMenuItem item = (ToolStripMenuItem)sender;
+            int c = (int)item.OwnerItem.Tag;
+            CornerAction chosen = (CornerAction)(int)item.Tag;
+            if (chosen == actions[c]) return;
+            actions[c] = chosen;
+            ShowCorner(c);
+            Action<Corner> handler = CornerChanged;
+            if (handler != null) handler((Corner)c);
+        }
+
+        /// <summary>"0.3 s", "1 s".</summary>
+        static string DescribeDelay(int ms)
+        {
+            return (ms / 1000.0).ToString("0.#") + " s";
+        }
+
+        void ShowDelay()
+        {
+            delayMenu.Text = "Corner delay: " + DescribeDelay(delayMs);
+            Tick(delayMenu, delayMs);
+        }
+
+        void OnDelayClick(object sender, EventArgs e)
+        {
+            int chosen = (int)((ToolStripMenuItem)sender).Tag;
+            if (chosen == delayMs) return;
+            delayMs = chosen;
+            ShowDelay();
+            Raise(DelayChanged);
+        }
+
+        // ---- The program ----
 
         void OnStartupClick(object sender, EventArgs e)
         {
@@ -257,13 +394,28 @@ namespace IdleWalker.App
 
         void OnAboutClick(object sender, EventArgs e)
         {
-            EventHandler handler = AboutRequested;
-            if (handler != null) handler(this, EventArgs.Empty);
+            Raise(AboutRequested);
         }
 
         void OnExitClick(object sender, EventArgs e)
         {
-            EventHandler handler = ExitRequested;
+            Raise(ExitRequested);
+        }
+
+        // ---- Helpers ----
+
+        /// <summary>Ticks the submenu entry whose Tag is `value` and unticks the rest.</summary>
+        static void Tick(ToolStripMenuItem submenu, int value)
+        {
+            foreach (ToolStripItem entry in submenu.DropDownItems)
+            {
+                ToolStripMenuItem item = entry as ToolStripMenuItem;
+                if (item != null && item.Tag != null) item.Checked = (int)item.Tag == value;
+            }
+        }
+
+        void Raise(EventHandler handler)
+        {
             if (handler != null) handler(this, EventArgs.Empty);
         }
 

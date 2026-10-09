@@ -36,6 +36,7 @@ fun/
     │   ├── Pose.cs           which parts to show in one frame
     │   ├── Puff.cs           a speck of dust
     │   ├── IWorld.cs         what a walker needs to know about the terrain
+    │   ├── HotCorners.cs     the corners of the monitors, and when a resting cursor fires one
     │   ├── Walker.cs         one character: state machine, physics, face
     │   ├── WalkerAntics.cs   the same class, continued: the idle antics and reactions
     │   ├── WalkerBrain.cs    the same class, continued: wants, errands, chats, pranks, tag
@@ -47,11 +48,12 @@ fun/
     │   └── FrameRenderer.cs  lays out the canvas, draws a frame, skips unchanged ones
     ├── Platform/             Win32
     │   ├── Native.cs         P/Invoke declarations
+    │   ├── CornerActions.cs  what a hot corner does: shortcuts, lock, screen saver, monitor off
     │   ├── MonitorWorld.cs   IWorld backed by the real monitors (cached per frame)
     │   ├── SpriteWindow.cs   layered click-through window
     │   ├── FramePump.cs      vsync-paced tick thread
     │   ├── StartupRegistration.cs   the "Start with Windows" registry entry
-    │   └── UserSettings.cs   remembers the walker count, rest time and dress
+    │   └── UserSettings.cs   remembers every menu choice
     └── App/                  wiring
         ├── WalkerApp.cs      the per-frame loop, one window per walker
         ├── CursorWatcher.cs  idle detection
@@ -157,11 +159,14 @@ Minion appears.
 
 | Item | Effect |
 |---|---|
+| Minions | Ticked (the default): the Minions come out when the cursor rests. Untick it to switch them off; any on screen leave at once, and their settings below are greyed out. Remembered between runs. |
 | Walkers: *n* → 1…10 | How many Minions come out (five by default). Raising it brings the new ones out straight away (one at a time); lowering it sends the extras away. Remembered between runs. |
 | Appear after: *t* → 1…5 seconds, 1…5 minutes | How long the mouse must be still before they come out. Takes effect at once: shorten it and they appear sooner, lengthen it while they are out and they stay (they only ever leave when the mouse moves). Remembered between runs. |
 | Dress: *colour* → Classic blue, Red, Green, Purple, Orange, Pink, Teal, Black, Random, Custom… | The colour of their overalls. Classic blue is the default. A fixed colour applies to everyone at once, even while they are out. Random gives each Minion its own colour every time it comes out; picking Random again re-rolls the ones on screen. Custom… opens the Windows colour picker; the menu then shows the colour as "Custom #RRGGBB". Remembered between runs. |
 | Start with Windows | Ticked: the program starts when you sign in. On by default; untick it to switch it off. See below. |
-| Pause | Keeps the characters hidden until unticked. If they are on screen, they leave immediately. |
+| Hot corners | Ticked (the default): pushing the cursor into a corner of any monitor and leaving it there fires that corner's action. Untick it to switch the corners off. Remembered between runs. See [Hot corners](#hot-corners). |
+| Top-left / Top-right / Bottom-left / Bottom-right: *action* | What each corner does: Nothing, Task view, Show desktop, Start menu, Notification centre, Quick settings, Lock screen, Screen saver, Monitor off, or Call the Minions. Defaults: Task view, Notification centre, Start menu, Show desktop. |
+| Corner delay: *t* → 0.1…1 s | How long the cursor must rest in the corner before it fires (0.3 s by default). |
 | About | Shows a small card above the walkers' lane - a waving Minion and the creator's name - for two seconds, then it fades out. It takes no focus; click it to dismiss it sooner. |
 | Exit | Quits the program. |
 
@@ -371,7 +376,7 @@ Stop-Process -Name IdleWalker
    up onto it, timing the take-off so the top of the arc is over the edge.
    When it is lower, it walks off the edge and falls, landing with a bigger
    squash and more dust. See [Multiple monitors](#multiple-monitors).
-7. **Exit.** As soon as the cursor moves (or Pause is ticked) a "!" appears
+7. **Exit.** As soon as the cursor moves (or Minions is unticked) a "!" appears
    over its head, it does a small startled hop and drops through the ground
    line in about 0.4 seconds. The idle timer then starts again.
 
@@ -398,6 +403,11 @@ running copy, rebuild.
 | `MaxWalkers` | `10` | Upper limit of the Walkers menu. The cast in `Personality.Roster` must have at least this many entries. |
 | `DefaultWalkers` | `5` | How many come out until a number is picked from the menu. |
 | `StartWithWindowsByDefault` | `true` | Whether the first run registers the program to start at sign-in. |
+| `MinionsEnabledByDefault` | `true` | Whether the Minions are on until the menu says otherwise. |
+| `HotCornersByDefault` | `true` | Whether the hot corners are on until the menu says otherwise. |
+| `DefaultCornerActions` | Task view, Notification centre, Start menu, Show desktop | What the four corners do until the menu says otherwise (top-left, top-right, bottom-left, bottom-right). |
+| `HotCornerReach` | `2` | How far in from a corner's two edges, in pixels, still counts as being in the corner. |
+| `HotCornerDelayMs`, `HotCornerDelayChoices` | `300`; 100…1000 | The default corner dwell time and the choices the menu offers. |
 | `WalkSpeed` | `90` | Walking speed, px/s at 100% scaling. |
 | `Acceleration` | `420` | How quickly it reaches walking speed. |
 | `Braking` | `520` | How quickly it stops. |
@@ -711,12 +721,17 @@ option is on.
 
 `UserSettings` stores the walker count as a DWORD `WalkerCount`, the rest
 time as a DWORD `IdleSeconds`, the overalls colour as a DWORD `Dress`
-(any 0xRRGGBB, from the menu or the picker, or -1 for random) and, once "Start with Windows" has been set
-up (by the first-run default or by a click), a DWORD `StartupDecided` of 1,
-all under `HKCU\Software\IdleWalker`. The last one is what stops the
+(any 0xRRGGBB, from the menu or the picker, or -1 for random), the two
+switches as DWORDs `MinionsEnabled` and `HotCornersEnabled` (1 or 0), the
+corner actions as DWORDs `CornerTopLeft`, `CornerTopRight`,
+`CornerBottomLeft` and `CornerBottomRight` (a `CornerAction` value), the
+corner dwell as a DWORD `HotCornerDelayMs` and, once "Start with Windows"
+has been set up (by the first-run default or by a click), a DWORD
+`StartupDecided` of 1, all under `HKCU\Software\IdleWalker`. The last one is what stops the
 default re-ticking the box after the user has unticked it. Reading or
 writing failures are swallowed - the worst case is the count resets to 5,
-the rest time to two seconds and the dress to classic blue next time.
+the rest time to two seconds, the dress to classic blue and the corners to
+their defaults next time.
 
 ### Adding things
 
@@ -748,12 +763,35 @@ the rest time to two seconds and the dress to classic blue next time.
   a distance function, a normal, an albedo, and a place in the back-to-front
   order.
 - A new menu item: `TrayMenu` owns the menu; expose state as a property or
-  an event like `Paused` / `Count` / `ExitRequested`.
+  an event like `MinionsEnabled` / `Count` / `ExitRequested`.
 - Anything needing a new Win32 call goes in `Native.cs` and is used only
   from the Platform layer.
 - Testing group behaviour: the Domain layer runs headless. A `Troupe` with a
   fake `IWorld` (flat ground, one monitor) stepped at 1/60 s in a console
   harness is enough to count greetings, charges and shoves.
+
+## Hot corners
+
+The second thing the program does, in the manner of WinXCorners or a Mac:
+push the cursor into a corner of the screen, leave it there for the corner
+delay, and the corner's action fires - once; it does not fire again until
+the cursor has left the corner and come back. Every monitor has four hot
+corners, the main display included, and the same corner does the same thing
+on each. A drag through a corner (any mouse button held) never fires, and
+the dwell starts over when the button is released there.
+
+The actions are the keyboard shortcuts you would press - Win+Tab for Task
+view, Win+D for Show desktop, Ctrl+Esc for the Start menu, Win+N for the
+notification centre, Win+A for quick settings - plus the lock screen
+(`LockWorkStation`), the screen saver (`SC_SCREENSAVE`, which needs one to
+be set in Windows) and monitor off (`SC_MONITORPOWER`). "Call the Minions"
+brings them out at once without waiting for the rest time; they leave as
+usual when the cursor moves.
+
+The watching is in `srcDomainHotCorners.cs` (no Windows code: it is fed
+the cursor and the monitor rectangles once per tick, every 100 ms while
+nothing is animating), the doing in `srcPlatformCornerActions.cs`, and the
+wiring in `WalkerApp.OnTick`.
 
 ## Multiple monitors
 
@@ -822,7 +860,7 @@ What keeps it cheap:
 
 | Symptom | Cause / fix |
 |---|---|
-| Nothing appears | Is the tray icon there? If not, the program is not running. Check **Pause** is unticked. The characters spawn on the monitor the *cursor* is on. |
+| Nothing appears | Is the tray icon there? If not, the program is not running. Check **Minions** is ticked. The characters spawn on the monitor the *cursor* is on. |
 | Fewer walkers appear than expected | Check **Walkers** in the tray menu; the count is remembered between runs and defaults to 5. |
 | Walkers overlap each other | They can walk through one another; only meetings (greeting, shoving) are physical. This is by design. |
 | Appears, but immediately dives away | Something is moving the cursor (a jittery mouse, a wobbling desk, some remote-control software). Raise `MoveTolerance`. |

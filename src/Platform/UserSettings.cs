@@ -1,5 +1,6 @@
 using System;
 using Microsoft.Win32;
+using IdleWalker.Domain;
 
 namespace IdleWalker.Platform
 {
@@ -11,6 +12,10 @@ namespace IdleWalker.Platform
         const string IdleValue = "IdleSeconds";
         const string StartupValue = "StartupDecided";
         const string DressValue = "Dress";
+        const string MinionsValue = "MinionsEnabled";
+        const string CornersValue = "HotCornersEnabled";
+        const string DelayValue = "HotCornerDelayMs";
+        static readonly string[] CornerValues = { "CornerTopLeft", "CornerTopRight", "CornerBottomLeft", "CornerBottomRight" };
 
         public static int LoadWalkerCount()
         {
@@ -61,6 +66,51 @@ namespace IdleWalker.Platform
         public static void SaveDress(int dress)
         {
             Save(DressValue, dress);
+        }
+
+        public static bool LoadMinionsEnabled()
+        {
+            return Load(MinionsValue, Settings.MinionsEnabledByDefault ? 1 : 0) != 0;
+        }
+
+        public static void SaveMinionsEnabled(bool on)
+        {
+            Save(MinionsValue, on ? 1 : 0);
+        }
+
+        public static bool LoadHotCornersEnabled()
+        {
+            return Load(CornersValue, Settings.HotCornersByDefault ? 1 : 0) != 0;
+        }
+
+        public static void SaveHotCornersEnabled(bool on)
+        {
+            Save(CornersValue, on ? 1 : 0);
+        }
+
+        /// <summary>What a corner does; anything unknown falls back to the default for that corner.</summary>
+        public static CornerAction LoadCornerAction(Corner corner)
+        {
+            CornerAction fallback = Settings.DefaultCornerActions[(int)corner];
+            int value = Load(CornerValues[(int)corner], (int)fallback);
+            return Enum.IsDefined(typeof(CornerAction), value) ? (CornerAction)value : fallback;
+        }
+
+        public static void SaveCornerAction(Corner corner, CornerAction action)
+        {
+            Save(CornerValues[(int)corner], (int)action);
+        }
+
+        /// <summary>The corner dwell time; anything not on the menu falls back to the default.</summary>
+        public static int LoadHotCornerDelay()
+        {
+            int ms = Load(DelayValue, Settings.HotCornerDelayMs);
+            return Array.IndexOf(Settings.HotCornerDelayChoices, ms) >= 0 ? ms : Settings.HotCornerDelayMs;
+        }
+
+        public static void SaveHotCornerDelay(int ms)
+        {
+            Save(DelayValue, ms);
         }
 
         static int Load(string name, int fallback)

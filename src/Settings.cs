@@ -1,3 +1,5 @@
+using IdleWalker.Domain;
+
 namespace IdleWalker
 {
     /// <summary>
@@ -34,6 +36,25 @@ namespace IdleWalker
 
         /// <summary>The Dress menu's "Random" entry: every Minion picks its own colour each time it comes out.</summary>
         public const int RandomDress = -1;
+
+        /// <summary>Whether the Minions are on until the tray menu says otherwise.</summary>
+        public const bool MinionsEnabledByDefault = true;
+
+        /// <summary>Whether the hot corners are on until the tray menu says otherwise.</summary>
+        public const bool HotCornersByDefault = true;
+
+        /// <summary>What each corner does until the tray menu says otherwise, in Corner order.</summary>
+        public static readonly CornerAction[] DefaultCornerActions =
+        {
+            CornerAction.TaskView, CornerAction.Notifications, CornerAction.StartMenu, CornerAction.ShowDesktop
+        };
+
+        /// <summary>How far in from a corner's two edges (pixels) still counts as being in it.</summary>
+        public const int HotCornerReach = 2;
+
+        /// <summary>How long the cursor must rest in a corner before it fires (ms), and the choices the menu offers.</summary>
+        public const int HotCornerDelayMs = 300;
+        public static readonly int[] HotCornerDelayChoices = { 100, 200, 300, 500, 1000 };
 
         /// <summary>Whether "Start with Windows" is switched on the first time the program runs.</summary>
         public const bool StartWithWindowsByDefault = true;
