@@ -31,8 +31,8 @@ fun/
     ├── Settings.cs           the tunable constants
     ├── Domain/               the characters - no Windows code in here
     │   ├── Expression.cs     a face as numbers, and the repertoire of moods
-    │   ├── Look.cs           eyes, eye colour and hair of one Minion
-    │   ├── Personality.cs    the cast: temperament, face, speed, habits
+    │   ├── Look.cs           what a walker is born with: which figure it is (Minion or Mr. Bean), eyes, hair; the figures' measurements (Anatomy)
+    │   ├── Personality.cs    the cast: temperament, face, speed, habits - the Minions, and Mr. Bean
     │   ├── Pose.cs           which parts to show in one frame
     │   ├── Puff.cs           a speck of dust
     │   ├── IWorld.cs         what a walker needs to know about the terrain
@@ -43,7 +43,9 @@ fun/
     │   ├── WalkerEyes.cs     the same class, continued: where the eyes go - following, side-eyes, eye-rolls, blinks in character
     │   └── Troupe.cs         the group: entrances, greetings, shoving, tag, onlookers, contagion
     ├── Rendering/            pixels
+    │   ├── SolidPainter.cs   what the painters share: compositing, lighting, distance fields, limb sorting, the floating sweat/notes/Zzz/"!"
     │   ├── MinionPainter.cs  draws a Minion from solids: distance fields, normals, lighting
+    │   ├── BeanPainter.cs    draws Mr. Bean the same way: knees, a tweed jacket and tie, a head on a neck, Teddy
     │   ├── Surface.cs        software canvas, soft halo, shadow, dirty-region tracking
     │   └── FrameRenderer.cs  lays out the canvas, draws a frame, skips unchanged ones
     ├── Platform/             Win32
@@ -164,6 +166,7 @@ Minion appears.
 | Walkers: *n* → 1…10 | How many Minions come out (five by default). Raising it brings the new ones out straight away (one at a time); lowering it sends the extras away. Remembered between runs. |
 | Appear after: *t* → 1…5 seconds, 1…5 minutes | How long the mouse must be still before they come out. Takes effect at once: shorten it and they appear sooner, lengthen it while they are out and they stay (they only ever leave when the mouse moves). Remembered between runs. |
 | Dress: *colour* → Classic blue, Red, Green, Purple, Orange, Pink, Teal, Black, Random, Custom… | The colour of their overalls. Classic blue is the default. A fixed colour applies to everyone at once, even while they are out. Random gives each Minion its own colour every time it comes out; picking Random again re-rolls the ones on screen. Custom… opens the Windows colour picker; the menu then shows the colour as "Custom #RRGGBB". Remembered between runs. |
+| Mr. Bean | Unticked by default. Tick it and Mr. Bean comes out with the Minions (after them, as an extra; the Walkers count is still the number of Minions). Untick it and he leaves at once. Greyed out while the Minions are off. Remembered between runs. See [Mr. Bean](#mr-bean). |
 | Start with Windows | Ticked: the program starts when you sign in. On by default; untick it to switch it off. See below. |
 | Hot corners | Ticked (the default): pushing the cursor into a corner of any monitor and leaving it there fires that corner's action. Untick it to switch the corners off. Remembered between runs. See [Hot corners](#hot-corners). |
 | Top-left / Top-right / Bottom-left / Bottom-right: *action* | What each corner does: Nothing, Task view, Show desktop, Start menu, Notification centre, Quick settings, Lock screen, Screen saver, Monitor off, or Call the Minions. Defaults: Task view, Notification centre, Start menu, Show desktop. |
@@ -198,7 +201,28 @@ The temperaments: **calm** ones nod, chat and tut; **friendly** ones wave,
 dance together, play tag and comfort the shoved; **aggressive** ones charge,
 shove, prank and argue; the **timid** one hides, runs and faints; the
 **goofy** one is a friendly one who finds everything hilarious and copies
-whatever he sees.
+whatever he sees; the **eccentric** one is Mr. Bean.
+
+### Mr. Bean
+
+Off by default; tick **Mr. Bean** in the tray menu and he comes out after
+the Minions, as an extra on top of the Walkers count. He is drawn by the
+same method as the Minions (lit solids, anti-aliased, see
+[Editing the character](#editing-the-character)) but is a different figure:
+28 units tall to their 18, with long legs that bend at the knee, a brown
+tweed jacket with elbow patches over a white shirt and a thin red tie,
+brown trousers, black shoes, and a round head on a neck with heavy
+eyebrows, big eyes, a long nose, a wide mouth, sticking-out ears and dark
+hair swept back from a high forehead. His head turns and nods on its own,
+he can go up on tiptoe, and his arms come forward out of the picture to put
+a hand to his chin, his collar or his chest.
+
+| | |
+|---|---|
+| Resting face | wide-eyed and gormless, lips just parted; a knowing look on a rest, hands clasped in front, rocking on his heels, head turning slowly |
+| Habits, most to least often | **Teddy**: fishes Teddy out of his jacket, holds him up and gazes at him fondly, makes him wave his paw at you with a big grin, tucks him away. **Hello**: his stiff wave - arm straight up beside the head, hand wagging from the wrist, up on his toes, chin up. **Eyebrows**: leans in with his hands behind his back and waggles his eyebrows at you over a smirk. **Sneak**: looks over each shoulder, creeps forward on tiptoe hunched with his hands up, then freezes and whistles innocently. **Fuss**: straightens his tie with both hands, brushes down a lapel, pats his hair. **Ponder**: finger to the chin, eyes rolled up, tapping, then an idea - finger in the air and a "!". **The Bean dance**: elbows pumping, hips twisting, knees bouncing, head bobbing, notes flying. Also looks about, rests, dozes (head nodding right off, Zzz), whistles, gets hiccups, sneezes. He never trips and hardly ever hops. |
+| At your cursor | Walks over and prods it with one finger, twice, examines the finger, then hides his hands behind his back and looks innocent. |
+| With the others | Creeps up on tiptoe on anyone standing quietly (dozing, whistling, daydreaming...) and pokes them in the back; they jump with a "!". The Minions react when Teddy comes out: the friendly ones wave, the calm and timid ones stop to look, the bullies laugh. He greets with his stiff wave, nods with his head, chats (mumbling, gesturing), joins dances with the Bean dance, plays tag, comforts the shoved and is comforted himself. He winces with his hands to his cheeks when he sees a shove, recoils fanning his nose at a toot, and glares when pranked. The bullies charge him like anyone else; shoved, he flies, runs off flailing and sulks until Bob comes over. |
 
 **A mind of their own.** Each walker carries three simple drives that rise
 and fall: *energy* (spent by running, dancing, boxing and the like, won
@@ -211,8 +235,9 @@ errand to find some; one that cannot stand not knowing walks over to stand
 under your cursor and looks up at it - Kevin scratches his head over it,
 Bob and Dave point at it and giggle, Stuart and Mel stick their tongues out
 at it, Jerry serenades it, Tim salutes it, Phil plays peekaboo with it,
-Carl peeks at it through his fingers and Norbert blows it a kiss. Random
-hops only happen with energy to spare, and rarely.
+Carl peeks at it through his fingers, Norbert blows it a kiss and Mr. Bean
+prods it with a finger. Random hops only happen with energy to spare, and
+rarely.
 
 **How they get on**
 
@@ -279,7 +304,8 @@ hops only happen with energy to spare, and rarely.
 - Interactions only happen between walkers on the same ground level (so not
   across a step between monitors) and never while someone is in the air.
 
-The cast is defined in `src\Domain\Personality.cs`; the meeting rules are in
+The cast is defined in `src\Domain\Personality.cs` (the Minions in
+`Roster`, Mr. Bean as `Personality.Bean`); the meeting rules are in
 `src\Domain\Troupe.cs`.
 
 ### Start automatically with Windows
@@ -405,6 +431,7 @@ running copy, rebuild.
 | `DefaultWalkers` | `5` | How many come out until a number is picked from the menu. |
 | `StartWithWindowsByDefault` | `true` | Whether the first run registers the program to start at sign-in. |
 | `MinionsEnabledByDefault` | `true` | Whether the Minions are on until the menu says otherwise. |
+| `MrBeanByDefault` | `false` | Whether Mr. Bean comes out with them until the menu says otherwise. |
 | `HotCornersByDefault` | `true` | Whether the hot corners are on until the menu says otherwise. |
 | `DefaultCornerActions` | Task view, Notification centre, Start menu, Show desktop | What the four corners do until the menu says otherwise (top-left, top-right, bottom-left, bottom-right). |
 | `HotCornerReach` | `2` | How far in from a corner's two edges, in pixels, still counts as being in the corner. |
@@ -445,9 +472,21 @@ surface normal at that point (which gives the lighting), then composites the
 solids back to front. The light sits above and to the left of the viewer,
 so the body is brighter on that side, the goggles catch a highlight and the
 rims gleam. A soft shadow is painted on the ground under the feet and thins
-out when the Minion jumps.
+out when the Minion jumps. The machinery - compositing, lighting, the
+distance functions, sorting the arms against the body, and the sweat, notes,
+Zzz, "!" and hearts that float about a figure - is in
+`src\Rendering\SolidPainter.cs`, which both painters build on.
+`src\Rendering\BeanPainter.cs` draws Mr. Bean the same way from different
+solids: two-segment legs with knees, a tapered capsule for the torso with
+the jacket, lapels, shirt, tie, button and breast pocket painted on its
+surface, a neck with a collar, a sphere for the head with the hair painted
+where the surface faces up and back, ears, eyes with lids, brows, a tube
+for the nose, and Teddy when the pose calls for him. Which painter draws a
+walker is decided by its `Look.Figure`; the walker's measurements that the
+behaviour needs (eye height, stride, how deep it hides, its canvas size)
+come from `Anatomy` in `src\Domain\Look.cs`.
 
-The figure is 18 units tall and is drawn at `scale` pixels per unit (3 at
+The Minion is 18 units tall and is drawn at `scale` pixels per unit (3 at
 100% display scaling), exactly the height the old pixel art had. Model
 coordinates run across from the centre (`u`, positive towards where it
 faces) and up from the soles (`v`); the geometry constants at the top of the
@@ -535,10 +574,11 @@ The code is split into four layers; dependencies point downwards only.
 │ Platform     SpriteWindow · MonitorWorld · FramePump             │  Win32: windows, monitors,
 │              StartupRegistration · UserSettings · Native         │  registry, vsync
 ├──────────────────────────────────────────────────────────────────┤
-│ Rendering    FrameRenderer · MinionPainter · Surface             │  pixels, no Win32
+│ Rendering    FrameRenderer · MinionPainter · BeanPainter         │  pixels, no Win32
+│              SolidPainter · Surface                              │
 ├──────────────────────────────────────────────────────────────────┤
 │ Domain       Troupe · Walker · Personality · Pose · Expression   │  the characters; pure C#
-│              Look · Puff · IWorld                                │
+│              Look · Anatomy · Puff · IWorld                      │
 └──────────────────────────────────────────────────────────────────┘
                               Settings (constants, used by all)
 ```
@@ -620,8 +660,8 @@ is what a 32-bpp `BI_RGB` DIB holds).
 
 1. The shadow (a soft ellipse) and the dust puffs are drawn directly into
    the canvas.
-2. `MinionPainter` shades the character into a separate layer, one pixel at
-   a time. Each pixel is mapped into model units (undoing squash, stretch
+2. `MinionPainter` (or `BeanPainter`, for Mr. Bean) shades the character
+   into a separate layer, one pixel at a time. Each pixel is mapped into model units (undoing squash, stretch
    and facing), every solid contributes a coverage from its signed distance
    (`0.5 - d / pixel`, clamped, which is a one-pixel anti-aliased edge) and a
    colour from its lit normal, and the solids are composited back to front:
@@ -723,7 +763,7 @@ option is on.
 `UserSettings` stores the walker count as a DWORD `WalkerCount`, the rest
 time as a DWORD `IdleSeconds`, the overalls colour as a DWORD `Dress`
 (any 0xRRGGBB, from the menu or the picker, or -1 for random), the two
-switches as DWORDs `MinionsEnabled` and `HotCornersEnabled` (1 or 0), the
+switches as DWORDs `MinionsEnabled`, `MrBeanEnabled` and `HotCornersEnabled` (1 or 0), the
 corner actions as DWORDs `CornerTopLeft`, `CornerTopRight`,
 `CornerBottomLeft` and `CornerBottomRight` (a `CornerAction` value), the
 corner dwell as a DWORD `HotCornerDelayMs` and, once "Start with Windows"
@@ -739,6 +779,13 @@ their defaults next time.
 - A new character: add an entry to `Personality.Roster` (name, temperament,
   look, resting faces, speed, gait, hop/idle ranges, weighted habits) and,
   if you want more than ten, raise `Settings.MaxWalkers`.
+- A new kind of figure (as Mr. Bean is): a `Figure` value and an `Anatomy`
+  in `Look.cs`, a painter built on `SolidPainter` and chosen in
+  `FrameRenderer.DrawPose`, and any new `Pose` fields it needs (Mr. Bean
+  added the head turn and nod, tiptoe, the arms' reach and Teddy; the
+  Minion painter ignores them). The walker then needs its own place in the
+  `Troupe` - Mr. Bean is always index 0 of `Walkers`, hidden unless
+  switched on, so the Minions keep their indices and windows.
 - A new temperament: add it to the `Temperament` enum and teach
   `Troupe.TryGreet` / `ConsiderCharging` how it behaves towards others,
   `Walker.React` / `Smell` how it responds to a shove or a toot,

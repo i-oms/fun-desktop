@@ -48,6 +48,7 @@ namespace IdleWalker.Domain
                     case Temperament.Calm: return 1.25;        // unhurried
                     case Temperament.Aggressive: return 1.5;   // stares people down
                     case Temperament.Goofy: return 0.85;
+                    case Temperament.Eccentric: return 0.9;
                     default: return 1;
                 }
             }
@@ -110,6 +111,7 @@ namespace IdleWalker.Domain
                         case Temperament.Aggressive: target = Expression.Suspicious; rate = 10; break;
                         case Temperament.Goofy: target = Expression.Smug; rate = 10; break;
                         case Temperament.Friendly: target = Expression.Happy; rate = 10; break;
+                        case Temperament.Eccentric: target = Expression.Suspicious; rate = 10; break;
                     }
                     break;
                 }
@@ -161,6 +163,7 @@ namespace IdleWalker.Domain
                         case Temperament.Friendly: target = Expression.Happy; break;
                         case Temperament.Goofy: target = Expression.Silly; break;
                         case Temperament.Aggressive: target = Expression.Stern; break;
+                        case Temperament.Eccentric: target = Expression.Gormless; break;
                         default: target = Expression.Knowing; break;
                     }
                     rate = 10;
@@ -229,6 +232,9 @@ namespace IdleWalker.Domain
                     break;
                 case Temperament.Friendly:
                     eyeBeat = r < 0.55 ? EyeBeat.Viewer : EyeBeat.SideEye;
+                    break;
+                case Temperament.Eccentric:
+                    eyeBeat = r < 0.4 ? EyeBeat.Shifty : r < 0.7 ? EyeBeat.SideEye : EyeBeat.Viewer;
                     break;
                 default:
                     eyeBeat = r < 0.6 ? EyeBeat.SideEye : r < 0.9 ? EyeBeat.Viewer : EyeBeat.EyeRoll;

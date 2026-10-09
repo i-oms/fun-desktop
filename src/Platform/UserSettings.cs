@@ -13,6 +13,7 @@ namespace IdleWalker.Platform
         const string StartupValue = "StartupDecided";
         const string DressValue = "Dress";
         const string MinionsValue = "MinionsEnabled";
+        const string BeanValue = "MrBeanEnabled";
         const string CornersValue = "HotCornersEnabled";
         const string DelayValue = "HotCornerDelayMs";
         static readonly string[] CornerValues = { "CornerTopLeft", "CornerTopRight", "CornerBottomLeft", "CornerBottomRight" };
@@ -76,6 +77,16 @@ namespace IdleWalker.Platform
         public static void SaveMinionsEnabled(bool on)
         {
             Save(MinionsValue, on ? 1 : 0);
+        }
+
+        public static bool LoadBeanEnabled()
+        {
+            return Load(BeanValue, Settings.MrBeanByDefault ? 1 : 0) != 0;
+        }
+
+        public static void SaveBeanEnabled(bool on)
+        {
+            Save(BeanValue, on ? 1 : 0);
         }
 
         public static bool LoadHotCornersEnabled()

@@ -9,8 +9,9 @@ namespace IdleWalker.Rendering
     /// cylinders for the limbs, a sphere behind glass for each eye, a torus
     /// for each goggle rim. Every pixel gets a signed distance to each solid
     /// (for an anti-aliased edge) and a surface normal (for lighting), and
-    /// the solids are composited back to front. Because poses and faces are
-    /// numbers rather than pictures, everything blends smoothly.
+    /// the solids are composited back to front (the machinery is in
+    /// <see cref="SolidPainter"/>). Because poses and faces are numbers
+    /// rather than pictures, everything blends smoothly.
     ///
     /// Model space: u runs across in "units", 0 at the centre, positive
     /// towards where the Minion faces; v runs up from the soles. The figure
@@ -26,14 +27,9 @@ namespace IdleWalker.Rendering
     /// surface, so a hand slides behind the body or comes out in front of
     /// it continuously instead of the whole arm flipping over at once.
     /// </summary>
-    sealed class MinionPainter
+    sealed class MinionPainter : SolidPainter
     {
         public const double Height = 18;
-
-        // Light direction (towards the light), screen terms: upper left, in front.
-        const double Lx = -0.45, Ly = 0.72, Lz = 0.53;
-        // Half vector between the light and the viewer, for highlights.
-        const double Hx = -0.257, Hy = 0.411, Hz = 0.874;
 
         // Body: a capsule of radius BodyR with its axis from BodyBottom to BodyTop.
         const double BodyR = 5.4, BodyBottom = 7.6, BodyTop = 12.6;
@@ -56,7 +52,6 @@ namespace IdleWalker.Rendering
         const double ArmR = 0.72, ForeR = 0.66, GloveR = 0.95;
         const double FingerLen = 0.55, FingerR = 0.3;    // an index finger past the glove when pointing
 
-        const double Deg = Math.PI / 180;
         const double StrapShade = 0.78;                   // straps and pocket relative to the overalls
 
         readonly Pose pose;
@@ -64,8 +59,6 @@ namespace IdleWalker.Rendering
         readonly Expression face;
         readonly double dressR, dressG, dressB;        // the overalls
         readonly double strapR, strapG, strapB;        // their straps and pocket, a shade darker
-        readonly double flip;   // -1 when facing left, so the light stays on the screen's left
-        readonly double px;     // one pixel in units, for anti-aliasing
         readonly double yaw, sinY, cosY;
         readonly double lean;
 
@@ -90,22 +83,11 @@ namespace IdleWalker.Rendering
         readonly bool decorated;             // anything floating about the figure this frame
         readonly double topV;                // nothing of the figure is drawn above this height
 
-        // Depth of the body's surface at the pixel being shaded, and how far
-        // in front of it a limb has to be to count as in front: a soft band
-        // rather than a knife edge, so the join does not shimmer.
-        double bodyZ;
-        readonly double depthBlend;
+        // Where the shoulders sit, and how far forward an arm can come.
         const double ArmRadius = BodyR + ShoulderOut;
 
-        // Limb pieces that turned out to be in front of the body at this
-        // pixel, held back until the face has been painted.
-        readonly double[] frontR = new double[6], frontG = new double[6], frontB = new double[6], frontCov = new double[6];
-        int frontCount;
-
-        // The pixel being shaded, premultiplied.
-        double ca, cr, cg, cb;
-
         MinionPainter(Pose pose, Look look, int dress, bool faceLeft, double px)
+            : base(faceLeft, px, ArmRadius)
         {
             this.pose = pose;
             this.look = look;
@@ -116,8 +98,6 @@ namespace IdleWalker.Rendering
             strapG = dressG * StrapShade;
             strapB = dressB * StrapShade;
             face = pose.Face;
-            flip = faceLeft ? -1 : 1;
-            this.px = px;
             lean = pose.Lean;
             // A spin can carry the yaw past a full turn; bring it back to
             // (-180, 180] so the body's arc lengths stay in range.
@@ -126,7 +106,6 @@ namespace IdleWalker.Rendering
             yaw = turn * Deg;
             sinY = Math.Sin(yaw);
             cosY = Math.Cos(yaw);
-            depthBlend = 2.5 * px;
 
             // Eyes sit on the surface at +-EyeAngle from the front (one eye: dead ahead).
             if (look.OneEye)
@@ -432,7 +411,7 @@ namespace IdleWalker.Rendering
 
         int Shade(double u, double v)
         {
-            ca = cr = cg = cb = 0;
+            Begin();
 
             // The upper body bobs and leans; the legs stay planted.
             double vb = v + pose.BodyDy;
@@ -453,7 +432,6 @@ namespace IdleWalker.Rendering
             int backLeg = legZ[0] < legZ[1] ? 0 : 1;
             Leg(u, v, backLeg);
             Leg(u, v, 1 - backLeg);
-            frontCount = 0;
             Limb(ub, vb, 0);
             Limb(ub, vb, 1);
             Body(ub, vb, bdy, bodyDist);
@@ -462,104 +440,24 @@ namespace IdleWalker.Rendering
             Brows(ub, vb);
             Mouth(ub, vb);
             Hair(ub, vb);
-            for (int i = 0; i < frontCount; i++) Over(frontR[i], frontG[i], frontB[i], frontCov[i]);
+            LayFront();
 
-            // Things floating about the figure, in front of everything.
+            // Things floating about the figure, in front of everything: the
+            // sweat beside the head, the note and the heart from the mouth,
+            // the Zzz and the "!" above the dome.
             if (decorated)
             {
-                if (pose.Sweat > 0) Sweat(ub, vb);
-                if (pose.Note) Note(ub, vb);
-                if (pose.Zzz) Zzz(u, v);
-                if (pose.Bubble) Bubble(ub, vb);
-                if (pose.Heart) Heart(ub, vb);
+                if (pose.Sweat > 0) Sweat(ub, vb, pose.Sweat, -(BodyR + 1.1), 15.0);
+                if (pose.Note) Note(ub, vb, pose.DecorPhase, BodyR * 0.93 * sinY, MouthV);
+                if (pose.Zzz) Zzz(u, v, pose.DecorPhase, 3.4, 19.8);
+                if (pose.Bubble) Bubble(ub, vb, 18.5, 19.3, 20.8, 23.4);
+                if (pose.Heart) Heart(ub, vb, pose.DecorPhase, BodyR * 0.93 * sinY, MouthV);
             }
 
-            if (ca <= 0.003) return 0;
-            if (ca > 1) ca = 1;
-            int a = (int)(ca * 255 + 0.5);
-            int r = (int)(Clamp(cr) * 255 + 0.5);
-            int g = (int)(Clamp(cg) * 255 + 0.5);
-            int b = (int)(Clamp(cb) * 255 + 0.5);
-            return (a << 24) | (r << 16) | (g << 8) | b;
-        }
-
-        // ---- Compositing and lighting ---------------------------------------------
-
-        double Cov(double d)
-        {
-            double c = 0.5 - d / px;
-            return c < 0 ? 0 : c > 1 ? 1 : c;
-        }
-
-        static double Clamp(double x)
-        {
-            return x < 0 ? 0 : x > 1 ? 1 : x;
-        }
-
-        void Over(double r, double g, double b, double cov)
-        {
-            if (cov <= 0) return;
-            double keep = 1 - cov;
-            cr = r * cov + cr * keep;
-            cg = g * cov + cg * keep;
-            cb = b * cov + cb * keep;
-            ca = cov + ca * keep;
-        }
-
-        /// <summary>Lights an albedo with a normal (nx right, ny up, nz towards the viewer).</summary>
-        void Lit(double r, double g, double b, double nx, double ny, double nz, double spec, double shine,
-                 out double lr, out double lg, out double lb)
-        {
-            nx *= flip;
-            double diffuse = nx * Lx + ny * Ly + nz * Lz;
-            if (diffuse < 0) diffuse = 0;
-            double k = (0.40 + 0.62 * diffuse) * (0.6 + 0.4 * Math.Sqrt(nz < 0 ? 0 : nz));
-            double h = nx * Hx + ny * Hy + nz * Hz;
-            double s = h > 0 ? spec * Math.Pow(h, shine) : 0;
-            lr = r * k + s;
-            lg = g * k + s;
-            lb = b * k + s;
-        }
-
-        /// <summary>Normal of a sphere (or a tube seen side on) from the offset to its axis.</summary>
-        static void Normal(double dx, double dy, double radius, out double nx, out double ny, out double nz)
-        {
-            nx = dx / radius;
-            ny = dy / radius;
-            double m = nx * nx + ny * ny;
-            if (m > 0.995)
-            {
-                double f = Math.Sqrt(0.995 / m);
-                nx *= f;
-                ny *= f;
-                m = 0.995;
-            }
-            nz = Math.Sqrt(1 - m);
-        }
-
-        /// <summary>Turns a normal about the vertical axis by angle a.</summary>
-        static void Turn(ref double nx, ref double nz, double a)
-        {
-            double c = Math.Cos(a), s = Math.Sin(a);
-            double x = nx * c + nz * s;
-            nz = -nx * s + nz * c;
-            nx = x;
+            return Finish();
         }
 
         // ---- Distance fields ----------------------------------------------------------
-
-        static double Seg(double x, double y, double ax, double ay, double bx, double by,
-                          out double qx, out double qy, out double t)
-        {
-            double abx = bx - ax, aby = by - ay;
-            double len2 = abx * abx + aby * aby;
-            t = len2 > 0 ? ((x - ax) * abx + (y - ay) * aby) / len2 : 0;
-            if (t < 0) t = 0; else if (t > 1) t = 1;
-            qx = ax + abx * t;
-            qy = ay + aby * t;
-            double dx = x - qx, dy = y - qy;
-            return Math.Sqrt(dx * dx + dy * dy);
-        }
 
         // One strap as a polyline in (|arc|, v): the bib corner, the shoulder
         // front, the top of the shoulder just above the arm, down the back,
@@ -598,43 +496,7 @@ namespace IdleWalker.Rendering
             return Math.Sqrt(best);
         }
 
-        static double RoundRect(double x, double y, double hw, double hh, double r)
-        {
-            double qx = Math.Abs(x) - (hw - r), qy = Math.Abs(y) - (hh - r);
-            double ox = qx > 0 ? qx : 0, oy = qy > 0 ? qy : 0;
-            double inside = Math.Min(Math.Max(qx, qy), 0);
-            return Math.Sqrt(ox * ox + oy * oy) + inside - r;
-        }
-
-        /// <summary>
-        /// Distance to a circle of radius r that has been squeezed to k of
-        /// its width: dx is already divided by k. First-order exact.
-        /// </summary>
-        static double Squeezed(double dx, double dy, double k, double r)
-        {
-            double dist = Math.Sqrt(dx * dx + dy * dy);
-            if (dist < 1e-6) return -r;
-            double grad = Math.Sqrt(dx * dx / (k * k) + dy * dy) / dist;
-            return (dist - r) / grad;
-        }
-
         // ---- The parts, back to front ---------------------------------------------------
-
-        /// <summary>A cylinder between two points, lit as a tube.</summary>
-        void Tube(double x, double y, double ax, double ay, double bx, double by, double radius,
-                  double r, double g, double b, double spec, double shine)
-        {
-            double qx, qy, t;
-            double dist = Seg(x, y, ax, ay, bx, by, out qx, out qy, out t);
-            double cov = Cov(dist - radius);
-            if (cov <= 0) return;
-            double nx, ny, nz;
-            Normal(x - qx, y - qy, radius, out nx, out ny, out nz);
-            double lr, lg, lb;
-            Lit(r, g, b, nx, ny, nz, spec, shine, out lr, out lg, out lb);
-            Over(lr, lg, lb, cov);
-        }
-
 
         void Leg(double u, double v, int i)
         {
@@ -714,17 +576,6 @@ namespace IdleWalker.Rendering
             double lr, lg, lb;
             Lit(r, g, b, nx, ny, nz, spec, shine, out lr, out lg, out lb);
             Over(lr, lg, lb, cov);
-        }
-
-        static void Mix(ref double r, ref double g, ref double b, ref double spec, ref double shine,
-                        double mr, double mg, double mb, double mspec, double mshine, double w)
-        {
-            if (w <= 0) return;
-            r += (mr - r) * w;
-            g += (mg - g) * w;
-            b += (mb - b) * w;
-            spec += (mspec - spec) * w;
-            shine += (mshine - shine) * w;
         }
 
         void Eye(double u, double v, int i)
@@ -992,148 +843,6 @@ namespace IdleWalker.Rendering
             double lr, lg, lb;
             Lit(0.11 * k, 0.10 * k, 0.13 * k, nx, ny, nz, 0.7, 18, out lr, out lg, out lb);
             Sort(lr, lg, lb, cov, handZ[i] + nz * GloveR);
-        }
-
-        void ArmTube(double x, double y, double ax, double ay, double az, double bx, double by, double bz, double radius,
-                     double r, double g, double b, double spec, double shine)
-        {
-            double qx, qy, t;
-            double dist = Seg(x, y, ax, ay, bx, by, out qx, out qy, out t);
-            double cov = Cov(dist - radius);
-            if (cov <= 0) return;
-            double nx, ny, nz;
-            Normal(x - qx, y - qy, radius, out nx, out ny, out nz);
-            double z = az + (bz - az) * t;
-            double k = Depth(z);
-            double lr, lg, lb;
-            Lit(r * k, g * k, b * k, nx, ny, nz, spec, shine, out lr, out lg, out lb);
-            Sort(lr, lg, lb, cov, z + nz * radius);
-        }
-
-        /// <summary>How much darker something gets with distance from the viewer.</summary>
-        static double Depth(double z)
-        {
-            double k = 0.89 + 0.11 * z / ArmRadius;
-            return k < 0.78 ? 0.78 : k > 1 ? 1 : k;
-        }
-
-        /// <summary>
-        /// Composites a limb piece at depth z against the body: the part
-        /// behind the body's surface now, the part in front later. Across
-        /// the surface the two blend over a band a couple of pixels deep,
-        /// which reads as the arm sinking into the body.
-        /// </summary>
-        void Sort(double r, double g, double b, double cov, double z)
-        {
-            double f = 0.5 + (z - bodyZ) / depthBlend;
-            if (f <= 0)
-            {
-                Over(r, g, b, cov);
-                return;
-            }
-            if (f < 1) Over(r, g, b, cov * (1 - f)); else f = 1;
-            int n = frontCount++;
-            frontR[n] = r;
-            frontG[n] = g;
-            frontB[n] = b;
-            frontCov[n] = cov * f;
-        }
-
-        // ---- Things floating about the figure ---------------------------------------------
-
-        // A drop of sweat beside the head on the side away from where it
-        // faces, sliding down and fading as Pose.Sweat goes 0..1.
-        void Sweat(double u, double v)
-        {
-            double s = pose.Sweat;
-            double x = -(BodyR + 1.1), y = 15.0 - 2.6 * s;
-            if (Math.Abs(u - x) > 1.0 || Math.Abs(v - y - 0.3) > 1.3) return;
-            double qx, qy, t;
-            double dx = u - x, dy = v - y;
-            double d = Math.Min(Math.Sqrt(dx * dx + dy * dy) - 0.42,
-                                Seg(u, v, x, y + 1.0, x, y, out qx, out qy, out t) - (0.04 + 0.36 * t));
-            double a = s < 0.75 ? 1 : (1 - s) / 0.25;
-            Over(0.10, 0.22, 0.42, Cov(Math.Abs(d) - 0.07) * 0.5 * a);
-            Over(0.55, 0.78, 0.98, Cov(d) * a);
-            double hx = dx + 0.15, hy = dy - 0.12;
-            Over(1, 1, 1, Cov(Math.Sqrt(hx * hx + hy * hy) - 0.12) * 0.9 * a);
-        }
-
-        // A music note drifting up and forward from the mouth.
-        void Note(double u, double v)
-        {
-            double ph = pose.DecorPhase;
-            double x = BodyR * 0.93 * sinY + 2.2 + 1.2 * ph, y = MouthV + 1.0 + 5.0 * ph;
-            if (Math.Abs(u - x - 0.3) > 1.4 || Math.Abs(v - y - 0.8) > 1.6) return;
-            const double s = 0.85;
-            double dx = (u - x) / (0.5 * s), dy = (v - y) / (0.38 * s);
-            double d = (Math.Sqrt(dx * dx + dy * dy) - 1) * 0.38 * s;          // the head
-            double qx, qy, t;
-            double sx = x + 0.42 * s;
-            d = Math.Min(d, Seg(u, v, sx, y, sx, y + 1.7 * s, out qx, out qy, out t) - 0.1 * s);                    // the stem
-            d = Math.Min(d, Seg(u, v, sx, y + 1.7 * s, sx + 0.6 * s, y + 1.15 * s, out qx, out qy, out t) - 0.12 * s); // the flag
-            double a = ph < 0.75 ? 1 : (1 - ph) / 0.25;
-            Over(0.98, 0.98, 1.0, Cov(d - 0.22) * 0.85 * a);
-            Over(0.12, 0.10, 0.18, Cov(d) * a);
-        }
-
-        // Two "z"s floating up and away from the top of the head, growing
-        // as they go; the second is half a drift behind the first.
-        void Zzz(double u, double v)
-        {
-            if (v < 17.5 || u < 1.0 || u > 9.5) return;
-            double ph = pose.DecorPhase;
-            ZGlyph(u, v, ph);
-            ZGlyph(u, v, ph >= 0.5 ? ph - 0.5 : ph + 0.5);
-        }
-
-        void ZGlyph(double u, double v, double ph)
-        {
-            double s = 1.0 + 0.6 * ph;
-            double x = 3.4 + 2.4 * ph, y = 19.8 + 3.2 * ph;
-            double h = s * 0.5;
-            if (Math.Abs(u - x) > h + 0.6 || Math.Abs(v - y) > h + 0.6) return;
-            double qx, qy, t;
-            double d = Seg(u, v, x - h, y + h, x + h, y + h, out qx, out qy, out t);
-            d = Math.Min(d, Seg(u, v, x + h, y + h, x - h, y - h, out qx, out qy, out t));
-            d = Math.Min(d, Seg(u, v, x - h, y - h, x + h, y - h, out qx, out qy, out t));
-            double r = 0.08 + 0.1 * s;
-            double a = ph < 0.8 ? 1 : (1 - ph) / 0.2;
-            Over(0.12, 0.10, 0.14, Cov(d - r - 0.25) * 0.8 * a);
-            Over(0.95, 0.96, 1.0, Cov(d - r) * a);
-        }
-
-        void Bubble(double u, double v)
-        {
-            if (v < 18.5 || Math.Abs(u) > 1.5) return;
-            double qx, qy, t;
-            double bar = Seg(u, v, 0, 20.8, 0, 23.4, out qx, out qy, out t) - (0.78 - 0.18 * (1 - t));
-            double dot = Math.Sqrt(u * u + (v - 19.3) * (v - 19.3)) - 0.75;
-            double d = Math.Min(bar, dot);
-            Over(0.12, 0.10, 0.14, Cov(d - 0.3) * 0.85);
-            Over(0.98, 0.98, 0.98, Cov(d));
-        }
-
-        // A small pink heart drifting up and forward from the mouth, like
-        // the note: two round lobes over a point.
-        void Heart(double u, double v)
-        {
-            double ph = pose.DecorPhase;
-            double x = BodyR * 0.93 * sinY + 2.4 + 1.6 * ph, y = MouthV + 1.2 + 5.0 * ph;
-            if (Math.Abs(u - x) > 1.4 || Math.Abs(v - y) > 1.4) return;
-            const double s = 0.8;
-            double hx = Math.Abs(u - x) / s, hy = (v - y) / s;
-            double lx = hx - 0.45, ly = hy - 0.3;
-            double lobe = Math.Sqrt(lx * lx + ly * ly) - 0.5;
-            // The point: inside the triangle between the lobes' centres and the tip.
-            double edge = (1.2 * hx - 0.95 * (hy + 0.85)) / 1.53;
-            double tri = Math.Max(edge, hy - 0.3);
-            double d = Math.Min(lobe, tri) * s;
-            double a = ph < 0.75 ? 1 : (1 - ph) / 0.25;
-            Over(0.14, 0.08, 0.12, Cov(d - 0.22) * 0.85 * a);
-            Over(0.96, 0.28, 0.42, Cov(d) * a);
-            double gx = (u - x) / s + 0.35, gy = hy - 0.5;
-            Over(1, 0.85, 0.9, Cov(Math.Sqrt(gx * gx + gy * gy) - 0.14) * 0.8 * a);
         }
     }
 }

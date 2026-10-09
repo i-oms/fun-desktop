@@ -15,7 +15,9 @@ namespace IdleWalker.Domain
         Jeer,      // laughing and pointing
         Chuckle,   // laughing, hands on the belly
         Huff,      // turned away, hands on hips, grumpy
-        Cower      // crouched with the arms over the head, trembling
+        Cower,     // crouched with the arms over the head, trembling
+        Wince,     // hands clapped to the cheeks, one eye screwed shut: that looked painful (Mr. Bean)
+        Waft       // recoiling, fanning a hand in front of the nose (Mr. Bean)
     }
 
     /// <summary>Something a walker has set out to do that means walking somewhere first.</summary>
@@ -45,11 +47,7 @@ namespace IdleWalker.Domain
     /// </summary>
     sealed partial class Walker
     {
-        const double StrideCells = 10;    // distance covered by one full walk cycle (short legs, quick steps)
         const double BlinkSeconds = 0.16;
-        const int HalfBodyCells = 9;
-        const int HiddenDepthCells = 20;  // feet this far underground hides everything
-        const int PeekDepthCells = 10;    // feet this far underground shows the eyes
         const double GreetSeconds = 1.3;
         const double DanceGreetSeconds = 2.6;
         const double GloatSeconds = 0.7;
@@ -76,6 +74,8 @@ namespace IdleWalker.Domain
         readonly IWorld world;
         readonly Random rng;
         readonly Personality personality;
+        readonly Anatomy body;      // its measurements: eye height, stride, how deep it hides, ...
+        readonly bool bean;         // it is Mr. Bean: a head on a neck, long arms, his own ways
         readonly List<Puff> puffs = new List<Puff>();
 
         Mode mode = Mode.Hidden;
@@ -88,7 +88,7 @@ namespace IdleWalker.Domain
         int cursorX, cursorY;
         Walker company;             // the nearest other walker on the same ground, if any
         bool companyNearby;         // ... and it is close
-        double companyX;
+        double companyX, companyEyeY;
         bool waveAtCursor;          // the current wave is for the cursor rather than company
 
         Expression face = Expression.Neutral;  // what the face is doing, eased towards a target each frame
@@ -163,6 +163,8 @@ namespace IdleWalker.Domain
             this.world = world;
             this.rng = rng;
             this.personality = personality;
+            body = personality.Anatomy;
+            bean = personality.Figure == Figure.Bean;
         }
 
         // ---- What others need to know ----------------------------------------------
@@ -181,8 +183,12 @@ namespace IdleWalker.Domain
         public double FeetY { get { return feetY; } }
         public int Facing { get { return facing; } }
         public bool FacesLeft { get { return facing < 0; } }
-        public double BodyWidth { get { return 2 * HalfBodyCells * scale; } }
+        public double BodyWidth { get { return 2 * body.HalfWidth * scale; } }
         public IList<Puff> Puffs { get { return puffs; } }
+
+        /// <summary>Where its eyes and shoulders are on screen, for others to look at or reach for.</summary>
+        public double EyeY { get { return feetY - body.EyeV * scale; } }
+        public double ShoulderY { get { return feetY - body.ShoulderV * scale; } }
 
         /// <summary>The ground line under the character; nothing shows below it.</summary>
         public double GroundLine { get { return clipY; } }
@@ -225,7 +231,8 @@ namespace IdleWalker.Domain
                 if (mode != Mode.Antic) return false;
                 return antic == Antic.Doze || antic == Antic.Whistle || antic == Antic.Scratch ||
                        antic == Antic.Yawn || antic == Antic.Hiccups || antic == Antic.Daydream ||
-                       antic == Antic.Fret || antic == Antic.Dig || antic == Antic.Sleepwalk;
+                       antic == Antic.Fret || antic == Antic.Dig || antic == Antic.Sleepwalk ||
+                       antic == Antic.Teddy || antic == Antic.Ponder;
             }
         }
 
@@ -279,7 +286,7 @@ namespace IdleWalker.Domain
             gazeY = 0;
             yaw = 0;
             clipY = world.GroundAt(cx);
-            feetY = clipY + HiddenDepthCells * scale;
+            feetY = clipY + body.HiddenDepth * scale;
             vx = vy = 0;
             squash = 0;
             walkPhase = 0;
@@ -354,6 +361,7 @@ namespace IdleWalker.Domain
             company = nearest;
             companyNearby = nearest != null && Math.Abs(nearest.CentreX - cx) < 350 * sizeFactor;
             companyX = nearest != null ? nearest.CentreX : 0;
+            companyEyeY = nearest != null ? nearest.EyeY : 0;
         }
 
         /// <summary>Stop and face `direction` to greet someone there.</summary>
@@ -385,6 +393,9 @@ namespace IdleWalker.Domain
                 case Temperament.Goofy:
                     ReactWith(Reaction.Chuckle, x, 1.6, false);
                     break;
+                case Temperament.Eccentric:
+                    ReactWith(Reaction.Wince, x, 1.8, false);
+                    break;
                 default:
                     ReactWith(Reaction.Jeer, x, 1.8, false);
                     break;
@@ -406,6 +417,9 @@ namespace IdleWalker.Domain
                     break;
                 case Temperament.Goofy:
                     ReactWith(Reaction.Chuckle, x, 1.4, false);
+                    break;
+                case Temperament.Eccentric:
+                    ReactWith(Reaction.Waft, x, 1.6, false);
                     break;
                 default:
                     ReactWith(Reaction.Huff, x, 1.2, true);
@@ -493,7 +507,7 @@ namespace IdleWalker.Domain
                     // Ease the top of the head up over the edge.
                     double t = Math.Min(1, modeTime / 0.4);
                     double eased = 1 - Math.Pow(1 - t, 3);
-                    feetY = clipY + (HiddenDepthCells + (PeekDepthCells - HiddenDepthCells) * eased) * scale;
+                    feetY = clipY + (body.HiddenDepth + (body.PeekDepth - body.HiddenDepth) * eased) * scale;
                     if (t >= 1) Enter(Mode.PeekLook);
                     break;
                 }
@@ -508,7 +522,7 @@ namespace IdleWalker.Domain
                 {
                     // Dip down, then spring out.
                     double t = Math.Min(1, modeTime / 0.12);
-                    feetY = clipY + (PeekDepthCells + 3 * t) * scale;
+                    feetY = clipY + (body.PeekDepth + 3 * t) * scale;
                     if (t >= 1)
                     {
                         double rise = feetY - clipY + 10 * scale;
@@ -644,7 +658,7 @@ namespace IdleWalker.Domain
                 {
                     vy += Settings.ExitGravity * sizeFactor * dt;
                     feetY += vy * dt;
-                    double tall = (HiddenDepthCells + (startled ? 8 : 0)) * scale * 1.2;
+                    double tall = (body.HiddenDepth + (startled ? 8 : 0)) * scale * 1.2;
                     if (feetY - clipY >= tall)
                     {
                         puffs.Clear();
@@ -688,7 +702,7 @@ namespace IdleWalker.Domain
         /// <summary>Gaze towards a screen point, as -1..1 with +X ahead and +Y up.</summary>
         void LookAt(double x, double y, out double gx, out double gy)
         {
-            double eyeY = feetY - 12.5 * scale;
+            double eyeY = feetY - body.EyeV * scale;
             double reach = 260 * sizeFactor;
             gx = Math.Max(-1, Math.Min(1, (x - cx) / reach)) * facing;
             gy = Math.Max(-1, Math.Min(1, (eyeY - y) / reach));
@@ -728,7 +742,7 @@ namespace IdleWalker.Domain
 
                 case Mode.Charge:
                     target = playful ? Expression.Laugh : Expression.Determined;
-                    if (chargeTarget != null) LookAt(chargeTarget.CentreX, chargeTarget.FeetY - 12 * scale, out gx, out gy);
+                    if (chargeTarget != null) LookAt(chargeTarget.CentreX, chargeTarget.EyeY, out gx, out gy);
                     break;
 
                 case Mode.Flee:
@@ -772,7 +786,7 @@ namespace IdleWalker.Domain
                     target = personality.Warm
                         ? (modeTime > 0.5 && modeTime < 1.0 ? Expression.Winking : Expression.Grin)
                         : personality.Temperament == Temperament.Timid ? Expression.Nervous : Expression.Happy;
-                    if (!waveAtCursor && companyNearby) LookAt(companyX, feetY - 12 * scale, out gx, out gy);
+                    if (!waveAtCursor && companyNearby) LookAt(companyX, companyEyeY, out gx, out gy);
                     else atCursor = true;
                     steady = true;
                     break;
@@ -791,7 +805,7 @@ namespace IdleWalker.Domain
                             target = Expression.Happy;
                             break;
                     }
-                    LookAt(companyX, feetY - 12 * scale, out gx, out gy);
+                    LookAt(companyX, companyEyeY, out gx, out gy);
                     steady = true;
                     break;
 
@@ -913,7 +927,7 @@ namespace IdleWalker.Domain
                 case Mode.Turn:
                     return headTurned ? -45 : 58;
                 case Mode.Look:
-                    return headTurned ? -45 : 0;
+                    return headTurned ? (bean ? -15 : -45) : 0;   // Mr. Bean turns his head, not his whole body
                 case Mode.Wave:
                     return waveAtCursor || !companyNearby ? 0 : 45;
                 case Mode.Greet:
@@ -948,6 +962,8 @@ namespace IdleWalker.Domain
                     return 15;
                 case Temperament.Timid:
                     return -12;   // half turned away, ready to run
+                case Temperament.Eccentric:
+                    return 5;     // square on; the head does the looking about
                 default:
                     return (cursorX - cx) * facing >= 0 ? 10 : -10;
             }
@@ -1111,6 +1127,12 @@ namespace IdleWalker.Domain
                         pose.ForeFar = 76 - wring;
                         pose.Lean = 0.1;
                     }
+                    else if (personality.Temperament == Temperament.Eccentric)
+                    {
+                        // Mr. Bean: hands clasped in front, rocking on his heels.
+                        HandsClasped(ref pose);
+                        pose.Lean = Math.Round(0.12 * Math.Sin(time * 1.1) * 8) / 8;
+                    }
                     breathe = true;
                     break;
 
@@ -1133,6 +1155,7 @@ namespace IdleWalker.Domain
             }
 
             if (breathe) pose.BodyDy = Quantise(0.3 * (1 + Math.Sin(time * 2.6)) / 2);
+            if (bean) BeanTouch(ref pose);
             pose.StretchY *= (1 - 0.22 * squash) * personality.BuildY;
             pose.StretchX *= (1 + 0.16 * squash) * personality.BuildX;
             if (sweat > 0) pose.Sweat = Math.Ceiling(sweat * 12) / 12;
@@ -1169,6 +1192,11 @@ namespace IdleWalker.Domain
 
         void WaveArm(ref Pose pose)
         {
+            if (bean)
+            {
+                HelloPose(ref pose, modeTime);
+                return;
+            }
             // Arm up, forearm out to the side so the hand clears the goggles.
             // Turned sideways the goggles swing out to the edge, so open the
             // arm up (more horizontal) to stay past them instead of waving
@@ -1184,6 +1212,86 @@ namespace IdleWalker.Domain
             pose.ArmFar = -40;
             pose.ForeNear = -85;
             pose.ForeFar = 85;
+        }
+
+        // Mr. Bean's hands clasped in front of him at the belly.
+        static void HandsClasped(ref Pose pose)
+        {
+            pose.ArmNear = 10;
+            pose.ArmFar = -10;
+            pose.ForeNear = -30;
+            pose.ForeFar = 30;
+            pose.ReachNear = 50;
+            pose.ReachFar = 50;
+        }
+
+        // Mr. Bean's hands behind his back.
+        static void HandsBehind(ref Pose pose)
+        {
+            pose.ArmNear = -25;
+            pose.ArmFar = 25;
+            pose.ForeNear = -60;
+            pose.ForeFar = 60;
+        }
+
+        // Mr. Bean's touches on whatever the pose is: the head moves on its
+        // own (the body stays put), he creeps on tiptoe when up to something,
+        // and a nod is a nod of the head rather than a dip of the whole body.
+        void BeanTouch(ref Pose pose)
+        {
+            switch (mode)
+            {
+                case Mode.PeekLook:
+                    pose.HeadTurn = modeTime < 0.3 ? 0 : modeTime < 0.8 ? -40 : 40;
+                    break;
+
+                case Mode.Look:
+                    pose.HeadTurn = headTurned ? -40 : 0;
+                    break;
+
+                case Mode.Walk:
+                    pose.HeadDip = 0.15;
+                    if (goal == Goal.Prank)
+                    {
+                        // Creeping up on tiptoe, hunched, hands up like a cartoon burglar.
+                        pose.Tiptoe = 1;
+                        pose.Lean = 0.3;
+                        pose.ArmNear = 45;
+                        pose.ForeNear = 100;
+                        pose.ArmFar = 45;
+                        pose.ForeFar = 100;
+                        pose.HeadDip = 0.3;
+                        pose.BodyDy = Quantise(0.3 + 0.3 * (1 - Math.Cos(walkPhase * 4 * Math.PI)) / 2);
+                    }
+                    break;
+
+                case Mode.Rest:
+                    // Looking slowly about, in steps so a rest is not repainted every frame.
+                    pose.HeadTurn = Math.Round(20 * Math.Sin(time * 0.9) / 4) * 4;
+                    break;
+
+                case Mode.Greet:
+                    if (greetStyle == GreetStyle.Nod)
+                    {
+                        pose.HeadDip = Quantise(0.7 * (1 - Math.Cos(modeTime * 2 * Math.PI / 0.5)) / 2);
+                        pose.BodyDy = 0;
+                    }
+                    break;
+
+                case Mode.Chat:
+                    if (chatStyle == ChatStyle.Chat && !Talking)
+                    {
+                        // Nodding along with the head.
+                        pose.HeadDip = Quantise(0.5 * (1 - Math.Cos(2 * Math.PI * modeTime / 0.6)) / 2);
+                        pose.BodyDy = 0;
+                    }
+                    break;
+
+                case Mode.Air:
+                case Mode.Exit:
+                    pose.HeadDip = vy < 0 ? -0.2 : 0.2;
+                    break;
+            }
         }
 
         // Slow motions are stepped in eighths of a unit, so a walker that is
@@ -1215,7 +1323,7 @@ namespace IdleWalker.Domain
         // higher ground (a neighbouring monitor whose bottom edge is higher).
         bool MoveX(double dx)
         {
-            double half = HalfBodyCells * scale;
+            double half = body.HalfWidth * scale;
             double next = Math.Max(worldLeft + half, Math.Min(worldRight - half, cx + dx));
             if (world.GroundAt(next) < feetY - scale) return false;
             cx = next;
@@ -1341,7 +1449,7 @@ namespace IdleWalker.Domain
             double target = braking ? 0 : facing * full;
             vx = Approach(vx, target, (braking ? Settings.Braking : Settings.Acceleration) * sizeFactor * dt);
             bool blocked = !MoveX(vx * dt);
-            walkPhase += Math.Abs(vx) * dt / (StrideCells * scale);
+            walkPhase += Math.Abs(vx) * dt / (body.StrideCells * scale);
 
             if (braking)
             {
@@ -1355,7 +1463,7 @@ namespace IdleWalker.Domain
 
             // Turn around at the outer edge of the first and last monitor,
             // slowing down in time to stop right at it.
-            double half = HalfBodyCells * scale;
+            double half = body.HalfWidth * scale;
             double room = facing > 0 ? worldRight - half - cx : cx - (worldLeft + half);
             if (room <= vx * vx / (2 * Settings.Braking * sizeFactor) + 1)
             {
@@ -1486,6 +1594,10 @@ namespace IdleWalker.Domain
                             vx = 0;
                             StartAntic(Antic.Faint);
                             return;
+                        case Temperament.Eccentric:
+                            // A long hard stare at whoever did that.
+                            SetMood(Expression.Glare, 2.5);
+                            break;
                         default:
                             SetMood(Expression.Furious, 2);
                             ChargeCooldown = 0;   // and may well go for whoever did it

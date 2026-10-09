@@ -93,6 +93,18 @@ namespace IdleWalker.Domain
         /// <summary>Lids a touch lowered, brows a little up, a small closed smile: a look straight at you.</summary>
         public static readonly Expression Knowing = new Expression(lid: 0.2, browRaise: 0.25, mouthCurve: 0.35, mouthWidth: 1.6);
 
+        /// <summary>Eyes wide, brows up, lips just parted: Mr. Bean's everyday stare at the world.</summary>
+        public static readonly Expression Gormless = new Expression(browRaise: 0.3, mouthCurve: 0.05, mouthOpen: 0.1, mouthWidth: 1.5);
+
+        /// <summary>Lids half down, brows soft, a small warm smile: looking at Teddy.</summary>
+        public static readonly Expression Fond = new Expression(lid: 0.35, browRaise: 0.2, browAngle: -0.2, mouthCurve: 0.7, mouthWidth: 1.3);
+
+        /// <summary>Brows down, lids heavy, mouth tight: Mr. Bean's hard stare at whoever did that.</summary>
+        public static readonly Expression Glare = new Expression(lid: 0.45, browRaise: -0.3, browAngle: 0.7, mouthCurve: -0.2, mouthWidth: 1.3);
+
+        /// <summary>Brows up in the middle, bottom lip out: a sulk.</summary>
+        public static readonly Expression Sulky = new Expression(lid: 0.3, browRaise: -0.2, browAngle: -0.5, mouthCurve: -0.55, mouthOpen: 0.05, mouthWidth: 1.2);
+
         // ---- Pleased ---------------------------------------------------------------
 
         /// <summary>A toothy grin.</summary>
@@ -176,6 +188,12 @@ namespace IdleWalker.Domain
 
         /// <summary>Cross-eyed and reeling.</summary>
         public static readonly Expression Dizzy = new Expression(lid: 0.35, pupilDy: 0.3, crossEye: 1, mouthCurve: -0.2, mouthOpen: 0.15, wobble: 1);
+
+        /// <summary>One eye screwed shut, teeth bared: that looked painful.</summary>
+        public static readonly Expression Wince = new Expression(lid: 0.5, squint: 0.6, wink: 1, browRaise: 0.3, browAngle: -0.4, mouthCurve: -0.5, mouthOpen: 0.3, mouthWidth: 1.8, teeth: 1);
+
+        /// <summary>Squinting, brows down, mouth pulled aside with the tongue out: what is that smell?</summary>
+        public static readonly Expression Disgust = new Expression(squint: 0.5, browRaise: -0.1, browAngle: 0.5, mouthCurve: -0.6, mouthOpen: 0.3, mouthWidth: 1.5, mouthDx: 0.3, tongue: 0.5);
 
         // ---- Cross and sad ---------------------------------------------------------
 

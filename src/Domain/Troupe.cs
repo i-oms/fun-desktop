@@ -19,6 +19,8 @@ namespace IdleWalker.Domain
         readonly IWorld world;
         readonly Random rng;
         readonly List<Walker> walkers = new List<Walker>();
+        readonly Walker bean;          // Mr. Bean, always first in the list, out only when switched on
+        bool beanEnabled;
         int count = 1;
         int dress = Settings.DressColors[0];
         double spawnTimer;
@@ -27,16 +29,29 @@ namespace IdleWalker.Domain
         {
             this.world = world;
             this.rng = rng;
+            bean = new Walker(world, rng, Personality.Bean);
+            walkers.Add(bean);
         }
 
-        /// <summary>Every walker created so far, in roster order.</summary>
+        /// <summary>
+        /// Every walker created so far: Mr. Bean first (hidden unless he is
+        /// switched on), then the Minions in roster order. The list only ever
+        /// grows, so each walker keeps its index and its window.
+        /// </summary>
         public IList<Walker> Walkers { get { return walkers; } }
 
-        /// <summary>How many walkers should be out; the rest are sent away.</summary>
+        /// <summary>How many Minions should be out; the rest are sent away.</summary>
         public int Count
         {
             get { return count; }
             set { count = Math.Max(1, Math.Min(Settings.MaxWalkers, value)); }
+        }
+
+        /// <summary>Whether Mr. Bean comes out with the Minions. Switching him off sends him away at once.</summary>
+        public bool BeanEnabled
+        {
+            get { return beanEnabled; }
+            set { beanEnabled = value; }
         }
 
         /// <summary>
@@ -74,8 +89,8 @@ namespace IdleWalker.Domain
         /// <param name="disturbed">The cursor just moved, or we were paused.</param>
         public void Step(double dt, Point cursor, bool wantOut, bool disturbed)
         {
-            while (walkers.Count < count)
-                walkers.Add(new Walker(world, rng, Personality.Roster[walkers.Count]));
+            while (walkers.Count < count + 1)
+                walkers.Add(new Walker(world, rng, Personality.Roster[walkers.Count - 1]));
 
             if (disturbed)
             {
@@ -102,7 +117,8 @@ namespace IdleWalker.Domain
                 spawnTimer = 0;
             }
 
-            for (int i = count; i < walkers.Count; i++) walkers[i].Leave();
+            for (int i = count + 1; i < walkers.Count; i++) walkers[i].Leave();
+            if (!beanEnabled) bean.Leave();
 
             foreach (Walker walker in walkers)
                 if (walker.IsVisible) walker.Step(dt, cursor);
@@ -111,10 +127,12 @@ namespace IdleWalker.Domain
             Spread();
         }
 
+        // The Minions in roster order, then Mr. Bean, if he is wanted.
         Walker NextToAppear()
         {
-            for (int i = 0; i < count; i++)
+            for (int i = 1; i <= count; i++)
                 if (walkers[i].IsHidden) return walkers[i];
+            if (beanEnabled && bean.IsHidden) return bean;
             return null;
         }
 
@@ -321,7 +339,8 @@ namespace IdleWalker.Domain
         }
 
         // A yawn or a dance that has just begun spreads to whoever is near
-        // enough to see it, each according to their nature.
+        // enough to see it, each according to their nature; so does Mr. Bean
+        // bringing Teddy out.
         void Spread()
         {
             foreach (Walker walker in walkers)

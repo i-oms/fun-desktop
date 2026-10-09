@@ -22,6 +22,7 @@ namespace IdleWalker.App
         readonly ToolStripMenuItem idleMenu = new ToolStripMenuItem("Appear after");
         readonly ToolStripMenuItem dressMenu = new ToolStripMenuItem("Dress");
         readonly ToolStripMenuItem customItem = new ToolStripMenuItem("Custom...");
+        readonly ToolStripMenuItem beanItem = new ToolStripMenuItem("Mr. Bean");
         int[] customPalette;         // the colour dialog's own swatches, kept between openings
 
         // The hot corners.
@@ -43,6 +44,7 @@ namespace IdleWalker.App
         public event EventHandler CountChanged;
         public event EventHandler IdleChanged;
         public event EventHandler DressChanged;
+        public event EventHandler BeanToggled;
         public event EventHandler HotCornersToggled;
         public event Action<Corner> CornerChanged;
         public event EventHandler DelayChanged;
@@ -72,6 +74,12 @@ namespace IdleWalker.App
             get { return dress; }
         }
 
+        /// <summary>True while Mr. Bean is switched on.</summary>
+        public bool BeanEnabled
+        {
+            get { return beanItem.Checked; }
+        }
+
         /// <summary>True while the hot corners are switched on.</summary>
         public bool HotCornersEnabled
         {
@@ -90,13 +98,18 @@ namespace IdleWalker.App
             get { return delayMs; }
         }
 
-        public TrayMenu(int initialCount, int initialIdleSeconds, int initialDress, bool minionsOn,
+        public TrayMenu(int initialCount, int initialIdleSeconds, int initialDress, bool minionsOn, bool beanOn,
                         bool cornersOn, CornerAction[] initialActions, int initialDelayMs)
         {
             // ---- The Minions ----
             minionsItem.Checked = minionsOn;
             minionsItem.CheckOnClick = true;
             minionsItem.CheckedChanged += OnMinionsToggled;
+
+            // ---- Mr. Bean ----
+            beanItem.Checked = beanOn;
+            beanItem.CheckOnClick = true;
+            beanItem.CheckedChanged += delegate { Raise(BeanToggled); };
 
             count = initialCount;
             for (int n = 1; n <= Settings.MaxWalkers; n++)
@@ -174,6 +187,7 @@ namespace IdleWalker.App
             menu.Items.Add(countMenu);
             menu.Items.Add(idleMenu);
             menu.Items.Add(dressMenu);
+            menu.Items.Add(beanItem);
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(cornersItem);
             foreach (ToolStripMenuItem cornerMenu in cornerMenus) menu.Items.Add(cornerMenu);
@@ -216,6 +230,7 @@ namespace IdleWalker.App
             countMenu.Enabled = minions;
             idleMenu.Enabled = minions;
             dressMenu.Enabled = minions;
+            beanItem.Enabled = minions;
 
             bool corners = cornersItem.Checked;
             foreach (ToolStripMenuItem cornerMenu in cornerMenus) cornerMenu.Enabled = corners;

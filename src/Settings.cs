@@ -40,6 +40,9 @@ namespace IdleWalker
         /// <summary>Whether the Minions are on until the tray menu says otherwise.</summary>
         public const bool MinionsEnabledByDefault = true;
 
+        /// <summary>Whether Mr. Bean comes out with them until the tray menu says otherwise.</summary>
+        public const bool MrBeanByDefault = false;
+
         /// <summary>Whether the hot corners are on until the tray menu says otherwise.</summary>
         public const bool HotCornersByDefault = true;
 

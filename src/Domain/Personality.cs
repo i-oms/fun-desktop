@@ -15,7 +15,10 @@ namespace IdleWalker.Domain
         Timid,
 
         /// <summary>The clown: everything is a joke, and it copies whatever it sees.</summary>
-        Goofy
+        Goofy,
+
+        /// <summary>Mr. Bean: a child in a grown man's body - fidgets, sneaks, pokes, shows off Teddy.</summary>
+        Eccentric
     }
 
     /// <summary>The things a walker gets up to when it stops walking for a moment.</summary>
@@ -56,7 +59,17 @@ namespace IdleWalker.Domain
         Dig,       // dig at the ground in a cloud of dust, find nothing, shrug
         Sleepwalk, // wander forward fast asleep, arms out, Zzz, until it bumps into something
         Daydream,  // gaze off into the distance with a dreamy smile, then snap out of it
-        Kiss       // blow a kiss at the cursor, a heart floating off
+        Kiss,      // blow a kiss at the cursor, a heart floating off
+
+        // Mr. Bean's own.
+        Teddy,     // bring Teddy out of the jacket, gaze at him, make him wave at you, tuck him back
+        Hello,     // the awkward hello: arm straight up beside the head, hand wagging stiffly, up on the toes
+        Waggle,    // lean in, hands behind the back, and waggle the eyebrows at you
+        Sneak,     // look both ways, then creep forward on tiptoe, hands up, and freeze with an innocent face
+        Fuss,      // straighten the tie, brush the lapels, pat the hair
+        Ponder,    // finger to the chin, eyes rolled up, then: an idea, finger in the air
+        Jive,      // the Bean dance: elbows pumping, hips twisting, knees bouncing
+        Poke       // creep up and prod somebody (or the cursor) with one finger, then look innocent
     }
 
     /// <summary>One antic and how often, relative to the others, the walker picks it.</summary>
@@ -150,11 +163,40 @@ namespace IdleWalker.Domain
             Habits = habits;
         }
 
-        /// <summary>Friendly or goofy: waves, dances, plays tag, chats.</summary>
+        /// <summary>Friendly, goofy or Mr. Bean: waves, dances, plays tag, chats.</summary>
         public bool Warm
         {
-            get { return Temperament == Temperament.Friendly || Temperament == Temperament.Goofy; }
+            get { return Temperament == Temperament.Friendly || Temperament == Temperament.Goofy || Temperament == Temperament.Eccentric; }
         }
+
+        /// <summary>Which painter draws it and which body it has.</summary>
+        public Figure Figure
+        {
+            get { return Look.Figure; }
+        }
+
+        public Anatomy Anatomy
+        {
+            get { return Look.Anatomy; }
+        }
+
+        /// <summary>
+        /// Mr. Bean. Not one of the Minions: he comes out alongside them when
+        /// switched on in the menu. Tall, thin, in his tweed jacket and red
+        /// tie. Shows off Teddy (the Minions come to look), says hello with
+        /// a stiff wave, waggles his eyebrows at you, creeps about on tiptoe,
+        /// fusses with his tie and hair, ponders, does the Bean dance, and
+        /// pokes anyone standing quietly - and your cursor - with one finger.
+        /// </summary>
+        public static readonly Personality Bean =
+            new Personality("Mr. Bean", Temperament.Eccentric, Look.Bean,
+                            Expression.Gormless, Expression.Knowing,
+                            0.95, 0.22, 0.05, 60, 120, 4, 9,
+                            0.9, 0.7, 1.0, 0, 1, 1, false, Antic.Poke,
+                            H(Antic.Teddy, 3), H(Antic.Hello, 2), H(Antic.Waggle, 2), H(Antic.Sneak, 2),
+                            H(Antic.Fuss, 2), H(Antic.Ponder, 1.5), H(Antic.Jive, 1.5), H(Antic.Look, 1.5),
+                            H(Antic.Rest, 1), H(Antic.Doze, 1), H(Antic.Whistle, 0.5), H(Antic.Hiccups, 0.5),
+                            H(Antic.Sneeze, 0.4));
 
         static Habit H(Antic antic, double weight)
         {

@@ -10,7 +10,6 @@ namespace IdleWalker.Domain
     /// </summary>
     partial class Walker
     {
-        const double ShoulderV = 10.2;   // height of the shoulders in units, for aiming an arm (matches the painter)
         const double DanceBeat = 0.32;   // seconds
 
         // ---- Starting, stepping, ending -----------------------------------------------
@@ -65,6 +64,26 @@ namespace IdleWalker.Domain
                     StopFacing(cursorX, Mode.Antic);
                     return;
 
+                // Mr. Bean's: the hello and the eyebrows are for you; the poke
+                // is for whoever he has crept up on, or the cursor.
+                case Antic.Hello:
+                    anticSeconds = 2.2;
+                    StopFacing(cursorX, Mode.Antic);
+                    return;
+                case Antic.Waggle:
+                    anticSeconds = 2.4;
+                    StopFacing(cursorX, Mode.Antic);
+                    return;
+                case Antic.Poke:
+                    anticSeconds = 2.8;
+                    StopFacing(goalTarget != null ? goalTarget.CentreX : cursorX, Mode.Antic);
+                    return;
+                case Antic.Teddy: anticSeconds = 3.6; broadcast = Antic.Teddy; break;   // the Minions come to look
+                case Antic.Sneak: anticSeconds = 3.4; break;
+                case Antic.Fuss: anticSeconds = 2.8; break;
+                case Antic.Ponder: anticSeconds = 3.0; break;
+                case Antic.Jive: anticSeconds = 3.2; broadcast = Antic.Dance; break;
+
                 // The busker's playing is catching: whoever is near wants to dance.
                 case Antic.Strum: anticSeconds = 3.4; broadcast = Antic.Dance; break;
                 case Antic.Pushups: anticSeconds = 3.2; broadcast = Antic.Pushups; break;
@@ -102,7 +121,7 @@ namespace IdleWalker.Domain
         // Stops, turning round first if the target is behind.
         void StopFacing(double targetX, Mode then)
         {
-            bool behind = (targetX - cx) * facing < -2 * HalfBodyCells * scale;
+            bool behind = (targetX - cx) * facing < -BodyWidth;
             if (behind && mode == Mode.Walk)
             {
                 afterTurn = then;
@@ -162,7 +181,7 @@ namespace IdleWalker.Domain
                     if (anticStage == 0 && t >= 0.75)
                     {
                         anticStage = 1;
-                        EmitDust(cx + facing * 7 * scale, feetY - 8 * scale, 3, 0.9);
+                        EmitDust(cx + facing * 7 * scale, feetY - body.MouthV * scale, 3, 0.9);
                         StartSweat();
                     }
                     break;
@@ -187,7 +206,7 @@ namespace IdleWalker.Domain
                     // Still travelling as it goes over, then skidding to a halt.
                     vx = Approach(vx, 0, Settings.Braking * 1.5 * sizeFactor * dt);
                     MoveX(vx * dt);
-                    walkPhase += Math.Abs(vx) * dt / (StrideCells * scale);
+                    walkPhase += Math.Abs(vx) * dt / (body.StrideCells * scale);
                     if (anticStage == 0 && t >= 0.12)
                     {
                         anticStage = 1;
@@ -218,7 +237,7 @@ namespace IdleWalker.Domain
                     {
                         double slide = 0.5 * Settings.WalkSpeed * sizeFactor * dt;
                         if (!MoveX(-facing * slide)) modeTime = anticSeconds;   // ran out of floor
-                        walkPhase += slide / (StrideCells * scale);
+                        walkPhase += slide / (body.StrideCells * scale);
                     }
                     break;
 
@@ -228,7 +247,26 @@ namespace IdleWalker.Domain
                     {
                         double shuffle = 0.35 * Settings.WalkSpeed * sizeFactor * dt;
                         if (!MoveX(facing * shuffle)) modeTime = anticSeconds;
-                        walkPhase += shuffle / (StrideCells * scale);
+                        walkPhase += shuffle / (body.StrideCells * scale);
+                    }
+                    break;
+
+                case Antic.Sneak:
+                    // Creeping forward on tiptoe, small quick steps, until the floor runs out.
+                    if (t > 0.9 && t < 2.6)
+                    {
+                        double creep = 0.3 * Settings.WalkSpeed * sizeFactor * dt;
+                        if (!MoveX(facing * creep)) modeTime = Math.Max(modeTime, 2.6);
+                        walkPhase += 1.5 * creep / (body.StrideCells * scale);
+                    }
+                    break;
+
+                case Antic.Poke:
+                    // The prod lands: whoever it was jumps.
+                    if (anticStage == 0 && t >= 0.7)
+                    {
+                        anticStage = 1;
+                        if (goalTarget != null) goalTarget.Spook(cx);
                     }
                     break;
 
@@ -237,7 +275,7 @@ namespace IdleWalker.Domain
                     {
                         anticStage = 1;
                         squash = 0.25;
-                        EmitDust(cx - facing * 5 * scale, feetY - 3 * scale, 3, 0.5);
+                        EmitDust(cx - facing * 5 * scale, feetY - body.SeatV * scale, 3, 0.5);
                     }
                     break;
 
@@ -316,6 +354,15 @@ namespace IdleWalker.Domain
                 case Antic.Faint: SetMood(Expression.Dizzy, 1.2); break;
                 case Antic.Daydream: SetMood(Expression.Curious, 1.0); break;
                 case Antic.Kiss: SetMood(Expression.Happy, 1.5); break;
+
+                case Antic.Teddy: SetMood(Expression.Fond, 1.5); break;
+                case Antic.Hello: SetMood(Expression.Grin, 1.0); break;
+                case Antic.Waggle: SetMood(Expression.Knowing, 1.2); break;
+                case Antic.Sneak: SetMood(Expression.Mischievous, 1.5); break;
+                case Antic.Fuss: SetMood(Expression.Proud, 1.5); break;
+                case Antic.Ponder: SetMood(Expression.Happy, 1.2); break;
+                case Antic.Jive: SetMood(Expression.Grin, 1.2); break;
+                case Antic.Poke: SetMood(Expression.Mischievous, 1.5); goalTarget = null; break;
             }
             Enter(Mode.Walk);
         }
@@ -449,7 +496,7 @@ namespace IdleWalker.Domain
                 case Antic.Boo:
                     target = t < 0.6 ? Expression.Excited : Expression.Laugh;
                     rate = 40;
-                    if (goalTarget != null) LookAt(goalTarget.CentreX, goalTarget.FeetY - 12 * scale, out gx, out gy);
+                    if (goalTarget != null) LookAt(goalTarget.CentreX, goalTarget.EyeY, out gx, out gy);
                     else gx = 0.7;
                     break;
 
@@ -556,6 +603,135 @@ namespace IdleWalker.Domain
                     rate = 16;
                     atCursor = true;
                     break;
+
+                // ---- Mr. Bean's ----
+
+                case Antic.Teddy:
+                    if (t < 0.6)
+                    {
+                        // Rummaging in the jacket.
+                        target = Expression.Gormless;
+                        gx = 0.3;
+                        gy = -0.4;
+                    }
+                    else if (t < 1.5 || t >= 2.4)
+                    {
+                        // Gazing fondly at Teddy.
+                        target = Expression.Fond;
+                        rate = 10;
+                        gx = 0.45;
+                        gy = -0.4;
+                    }
+                    else
+                    {
+                        // Making Teddy wave at you.
+                        target = Expression.Grin;
+                        rate = 18;
+                        atCursor = true;
+                    }
+                    break;
+
+                case Antic.Hello:
+                    target = t < 0.35 ? Expression.Surprised : Expression.Grin;
+                    rate = 22;
+                    atCursor = true;
+                    break;
+
+                case Antic.Waggle:
+                {
+                    // The eyebrows go up and down on the beat, over the knowing smirk.
+                    Expression e = Expression.Knowing;
+                    e.BrowRaise = (int)(t / 0.25) % 2 == 0 ? 0.95 : -0.15;
+                    e.MouthDx = 0.4;
+                    target = e;
+                    rate = 40;
+                    atCursor = true;
+                    break;
+                }
+
+                case Antic.Sneak:
+                    if (t < 0.9)
+                    {
+                        // Is the coast clear? Eyes one way, then the other.
+                        target = Expression.Shifty;
+                        rate = 16;
+                        gx = t < 0.45 ? -0.9 : 0.9;
+                        gy = 0.05;
+                    }
+                    else if (t < 2.6)
+                    {
+                        target = Expression.Mischievous;
+                        rate = 16;
+                        gx = 0.6;
+                        gy = -0.1;
+                    }
+                    else
+                    {
+                        // Caught in the act: the picture of innocence.
+                        target = Expression.Whistling;
+                        rate = 20;
+                        atCursor = true;
+                    }
+                    break;
+
+                case Antic.Fuss:
+                    target = t < 1.8 ? Expression.Serious : Expression.Smug;
+                    rate = 12;
+                    gx = 0.2;
+                    gy = t < 1.8 ? -0.5 : 0.1;
+                    break;
+
+                case Antic.Ponder:
+                    if (t < 2.1)
+                    {
+                        target = Expression.Thinking;
+                        rate = 10;
+                        gx = 0.2;
+                        gy = 0.6;
+                    }
+                    else if (t < 2.4)
+                    {
+                        target = Expression.Surprised;
+                        rate = 40;
+                        gx = 0.2;
+                        gy = 0.1;
+                    }
+                    else
+                    {
+                        target = Expression.Happy;
+                        rate = 20;
+                        atCursor = true;
+                    }
+                    break;
+
+                case Antic.Jive:
+                    target = (int)(t / 0.8) % 2 == 0 ? Expression.Grin : Expression.Laugh;
+                    rate = 18;
+                    atCursor = true;
+                    break;
+
+                case Antic.Poke:
+                    if (t < 1.2)
+                    {
+                        target = Expression.Mischievous;
+                        if (goalTarget != null) LookAt(goalTarget.CentreX, goalTarget.EyeY, out gx, out gy);
+                        else atCursor = true;
+                    }
+                    else if (t < 1.9)
+                    {
+                        // Examining the finger.
+                        target = Expression.Curious;
+                        gx = 0.5;
+                        gy = -0.3;
+                    }
+                    else
+                    {
+                        // Wasn't me.
+                        target = Expression.Whistling;
+                        rate = 12;
+                        atCursor = true;
+                    }
+                    break;
             }
         }
 
@@ -603,7 +779,15 @@ namespace IdleWalker.Domain
                 case Antic.Sleepwalk: return 58;
                 case Antic.Daydream: return 20;
                 case Antic.Kiss: return 10;
-                default: return 0;   // yawning, dozing, whistling, taunting, laughing, hiccuping, peekaboo, hiding: facing you
+
+                case Antic.Teddy: return t >= 1.5 && t < 2.4 ? 5 : 20;
+                case Antic.Hello: return 5;
+                case Antic.Sneak: return t < 0.9 ? 15 : t < 2.6 ? 58 : 0;
+                case Antic.Fuss: return 10;
+                case Antic.Ponder: return 20;
+                case Antic.Jive: return DanceYaw(t, 0);
+                case Antic.Poke: return t < 1.2 ? 40 : t < 1.9 ? 25 : 0;
+                default: return 0;   // yawning, dozing, whistling, taunting, laughing, hiccuping, peekaboo, hiding, eyebrows: facing you
             }
         }
 
@@ -676,6 +860,7 @@ namespace IdleWalker.Domain
                         double droop = n < 0.35 ? n / 0.35 : n < 0.42 ? 1 - (n - 0.35) / 0.07 : 0;
                         pose.BodyDy = Quantise(0.45 + 0.6 * droop);
                         pose.Lean = 0.2 + Math.Floor(droop * 4) / 16;
+                        pose.HeadDip = Quantise(0.3 + 0.9 * droop);   // (a head on a neck nods right off)
                         pose.Zzz = true;
                         pose.DecorPhase = Q16(((t - 2.1) / 1.6) % 1);
                     }
@@ -1142,7 +1327,256 @@ namespace IdleWalker.Domain
                         pose.Lean = -0.1;
                     }
                     break;
+
+                // ---- Mr. Bean's ----
+
+                case Antic.Teddy:
+                    if (t < 0.6)
+                    {
+                        // The near hand goes into the jacket.
+                        double e = Ease(t / 0.6);
+                        pose.ArmNear = Q2(20 * e);
+                        pose.ForeNear = Q2(220 * e);
+                        pose.ReachNear = Q2(60 * e);
+                        pose.HeadDip = Quantise(0.4 * e);
+                    }
+                    else if (t < 3.1)
+                    {
+                        // Out comes Teddy, held up in front of the chest.
+                        double e = Ease(Math.Min(1, (t - 0.6) / 0.4));
+                        TeddyPose(ref pose, e);
+                        pose.Teddy = e > 0.4;
+                        pose.HeadDip = Quantise(0.4 + 0.2 * e);
+                        if (t >= 1.5 && t < 2.4)
+                        {
+                            // Teddy waves at you; so does his owner's grin.
+                            pose.TeddyWave = Q16(0.5 + 0.5 * Math.Sin((t - 1.5) * 2 * Math.PI * 3));
+                            pose.HeadDip = 0;
+                        }
+                        Breathe(ref pose);
+                    }
+                    else
+                    {
+                        // Back into the jacket.
+                        double e = 1 - Ease(Math.Min(1, (t - 3.1) / 0.5));
+                        TeddyPose(ref pose, e);
+                        pose.Teddy = e > 0.4;
+                        pose.HeadDip = Quantise(0.4 * e);
+                    }
+                    break;
+
+                case Antic.Hello:
+                    HelloPose(ref pose, t);
+                    break;
+
+                case Antic.Waggle:
+                    // Leaning in with the hands behind the back, head cocked forward.
+                    HandsBehind(ref pose);
+                    pose.Lean = 0.2;
+                    pose.HeadDip = 0.25;
+                    Breathe(ref pose);
+                    break;
+
+                case Antic.Sneak:
+                    if (t < 0.9)
+                    {
+                        // A look over each shoulder, hands up at the chest.
+                        pose.HeadTurn = t < 0.45 ? -55 : 55;
+                        pose.ArmNear = 35;
+                        pose.ForeNear = 95;
+                        pose.ArmFar = 35;
+                        pose.ForeFar = 95;
+                        Breathe(ref pose);
+                    }
+                    else if (t < 2.6)
+                    {
+                        // Tiptoeing: hunched, knees high, hands up like a cartoon burglar.
+                        pose.Tiptoe = 1;
+                        pose.Lean = 0.35;
+                        pose.Walking = true;
+                        pose.WalkPhase = walkPhase;
+                        pose.ArmNear = 45;
+                        pose.ForeNear = 100;
+                        pose.ArmFar = 45;
+                        pose.ForeFar = 100;
+                        pose.HeadDip = 0.3;
+                        pose.BodyDy = Quantise(0.4 + 0.3 * (1 - Math.Cos(walkPhase * 4 * Math.PI)) / 2);
+                    }
+                    else
+                    {
+                        // Frozen: hands behind the back, rocking on the heels, whistling.
+                        HandsBehind(ref pose);
+                        pose.Lean = -Math.Round(0.1 * Math.Sin(t * 2.2) * 8) / 8;
+                        pose.HeadDip = -0.15;
+                        Breathe(ref pose);
+                    }
+                    break;
+
+                case Antic.Fuss:
+                    if (t < 1.0)
+                    {
+                        // Both hands at the collar, straightening the tie, chin up.
+                        double e = Ease(Math.Min(1, t / 0.3));
+                        double jig = t > 0.3 ? Q2(5 * Math.Sin(t * 2 * Math.PI * 3)) : 0;
+                        pose.ArmNear = Q2(10 * e);
+                        pose.ForeNear = Q2(205 * e) + jig;
+                        pose.ReachNear = Q2(70 * e);
+                        pose.ArmFar = -Q2(10 * e);
+                        pose.ForeFar = -Q2(205 * e) + jig;
+                        pose.ReachFar = Q2(70 * e);
+                        pose.HeadDip = -Quantise(0.35 * e);
+                    }
+                    else if (t < 1.8)
+                    {
+                        // The near hand brushes down the lapel, twice.
+                        double f = ((t - 1.0) / 0.4) % 1;
+                        pose.ArmNear = Q2(10 + 15 * f);
+                        pose.ForeNear = Q2(205 - 55 * f);
+                        pose.ReachNear = 70;
+                        pose.ArmFar = -10;
+                        pose.ForeFar = -205;
+                        pose.ReachFar = 70;
+                        pose.HeadDip = -0.2;
+                    }
+                    else
+                    {
+                        // A pat of the hair.
+                        double e = Ease(Math.Min(1, (t - 1.8) / 0.3));
+                        double pat = t > 2.1 ? Q2(6 * Math.Sin(t * 2 * Math.PI * 3)) : 0;
+                        pose.ArmNear = Q2(25 + 125 * e);
+                        pose.ForeNear = Q2(150 - 108 * e) + pat;
+                        pose.ReachNear = Q2(40 * e);
+                        pose.Lean = -Math.Round(0.1 * e * 8) / 8;
+                        pose.HeadTurn = Q2(-12 * e);
+                    }
+                    break;
+
+                case Antic.Ponder:
+                    if (t < 2.1)
+                    {
+                        // Finger to the chin, other arm across the belly, tapping.
+                        double e = Ease(Math.Min(1, t / 0.4));
+                        double tap = t > 0.5 && Math.Sin(t * 2 * Math.PI * 2) > 0 ? 4 : 0;
+                        pose.ArmNear = Q2(10 * e);
+                        pose.ForeNear = Q2(212 * e) + tap;
+                        pose.ReachNear = Q2(75 * e);
+                        pose.PointNear = e > 0.5;
+                        pose.ArmFar = -Q2(10 * e);
+                        pose.ForeFar = Q2(30 * e);
+                        pose.ReachFar = Q2(50 * e);
+                        pose.HeadDip = -Quantise(0.3 * e);
+                        pose.HeadTurn = Q2(15 * e);
+                        Breathe(ref pose);
+                    }
+                    else
+                    {
+                        // An idea: finger in the air, up on the toes, "!".
+                        double e = Ease(Math.Min(1, (t - 2.1) / 0.2));
+                        pose.ArmNear = Q2(10 + 150 * e);
+                        pose.ForeNear = Q2(212 - 232 * e);
+                        pose.ReachNear = Q2(75 * (1 - e));
+                        pose.PointNear = true;
+                        pose.ArmFar = -10;
+                        pose.ForeFar = 30;
+                        pose.ReachFar = 50;
+                        pose.Bubble = t < 2.7;
+                        pose.StretchY = 1 + 0.03 * e;
+                        pose.BodyDy = -Quantise(0.2 * e);
+                        pose.Tiptoe = Math.Round(e * 4) / 4;
+                    }
+                    break;
+
+                case Antic.Jive:
+                    JivePose(ref pose, t);
+                    break;
+
+                case Antic.Poke:
+                {
+                    double aim = goalTarget != null ? AimAt(goalTarget.CentreX, goalTarget.ShoulderY) : AimAt(cursorX, cursorY);
+                    if (t < 0.5)
+                    {
+                        // The finger comes out and the arm extends.
+                        double e = Ease(t / 0.5);
+                        pose.ArmNear = Q2(aim * e);
+                        pose.PointNear = e > 0.4;
+                        pose.Lean = Math.Round(0.3 * e * 8) / 8;
+                    }
+                    else if (t < 1.2)
+                    {
+                        // Two prods.
+                        double f = ((t - 0.5) / 0.35) % 1;
+                        double jab = f < 0.5 ? f / 0.5 : 1 - (f - 0.5) / 0.5;
+                        pose.ArmNear = aim;
+                        pose.ForeNear = -Q2(25 * (1 - jab));
+                        pose.PointNear = true;
+                        pose.Lean = Math.Round((0.3 + 0.2 * jab) * 8) / 8;
+                    }
+                    else if (t < 1.9)
+                    {
+                        // Examining the finger.
+                        pose.ArmNear = 40;
+                        pose.ForeNear = 120;
+                        pose.ReachNear = 50;
+                        pose.PointNear = true;
+                        pose.HeadDip = 0.35;
+                        pose.HeadTurn = 10;
+                    }
+                    else
+                    {
+                        // Hands behind the back: wasn't me.
+                        HandsBehind(ref pose);
+                        pose.Lean = -Math.Round(0.12 * Math.Sin(t * 2.2) * 8) / 8;
+                        pose.HeadDip = -0.2;
+                        Breathe(ref pose);
+                    }
+                    break;
+                }
             }
+        }
+
+        // Teddy held up beside the chest in the near hand, where he can be
+        // seen (e is how far the arm has come out of the jacket, 0..1).
+        static void TeddyPose(ref Pose pose, double e)
+        {
+            pose.ArmNear = Q2(20 + 40 * e);
+            pose.ForeNear = Q2(220 - 70 * e);
+            pose.ReachNear = Q2(60 * (1 - e));
+            pose.ArmFar = Q2(15 * e);
+            pose.ForeFar = Q2(20 * e);
+        }
+
+        // Mr. Bean's hello: the arm shoots straight up beside the head and
+        // the hand wags stiffly from the wrist, up on the toes, chin up.
+        static void HelloPose(ref Pose pose, double t)
+        {
+            double e = Ease(Math.Min(1, t / 0.25));
+            pose.ArmNear = Q2(160 * e);
+            pose.ForeNear = t > 0.3 ? Q2(-15 + 14 * Math.Sin(t * 2 * Math.PI * 4)) : Q2(-15 * e);
+            pose.Tiptoe = Math.Round(e * 4) / 4;
+            pose.HeadDip = -Quantise(0.3 * e);
+            pose.StretchY = 1 + 0.02 * e;
+        }
+
+        // The Bean dance: elbows tucked and pumping, hips twisting, knees
+        // bouncing, head bobbing, a note on every other beat.
+        static void JivePose(ref Pose pose, double t)
+        {
+            double b = t / DanceBeat;
+            double bounce = (1 - Math.Cos(b * 2 * Math.PI)) / 2;
+            double side = Math.Sin(b * Math.PI);
+            pose.BodyDy = Quantise(0.6 * bounce);
+            pose.ArmNear = Q2(35 + 25 * side);
+            pose.ForeNear = Q2(100 - 20 * side);
+            pose.ReachNear = Q2(30 * side);
+            pose.ArmFar = -Q2(35 - 25 * side);
+            pose.ForeFar = -Q2(100 + 20 * side);
+            pose.ReachFar = -Q2(30 * side);
+            pose.Walking = true;
+            pose.WalkPhase = Math.Floor(b * 12) / 24;
+            pose.HeadDip = Quantise(0.3 * bounce);
+            pose.Lean = Math.Round(0.15 * side * 8) / 8;
+            pose.Note = true;
+            pose.DecorPhase = Q16((b / 2) % 1);
         }
 
         // Both hands clapped over the goggles, shaking by `tremble` degrees.
@@ -1158,6 +1592,11 @@ namespace IdleWalker.Domain
         // pumping up and down in turn, a note floating off every two beats.
         void DancePose(ref Pose pose, double t)
         {
+            if (bean)
+            {
+                JivePose(ref pose, t);
+                return;
+            }
             double b = t / DanceBeat;
             double bounce = (1 - Math.Cos(b * 2 * Math.PI)) / 2; // down on the beat, up between
             double side = Math.Sin(b * Math.PI);                  // which arm is up, swapping each beat
@@ -1208,6 +1647,7 @@ namespace IdleWalker.Domain
             pose.StretchY = 1 + 0.06 * up;
             pose.BodyDy = -Quantise(0.3 * up);
             pose.Lean = -Math.Round(0.25 * up * 8) / 8;
+            pose.HeadDip = -Quantise(0.3 * up);
         }
 
         // The hiccups come at 0.4, 1.0, 1.7 and 2.3 s; each is a sharp jolt
@@ -1229,7 +1669,7 @@ namespace IdleWalker.Domain
         double AimAt(double x, double y)
         {
             double dx = (x - cx) * facing / scale;
-            double dy = (feetY - y) / scale - ShoulderV;
+            double dy = (feetY - y) / scale - body.ShoulderV;
             double raise = Math.Atan2(dx, -dy) * 180 / Math.PI;
             if (raise < 15) raise = 15; else if (raise > 165) raise = 165;
             return Q2(raise);
@@ -1259,6 +1699,14 @@ namespace IdleWalker.Domain
                 case Reaction.Cower:
                     target = t < 1.3 ? Expression.Scared : Expression.Worried;
                     rate = t < 1.3 ? 30 : 10;
+                    break;
+                case Reaction.Wince:
+                    target = t < 1.0 ? Expression.Wince : Expression.Disapproving;
+                    rate = t < 1.0 ? 30 : 10;
+                    break;
+                case Reaction.Waft:
+                    target = Expression.Disgust;
+                    rate = 20;
                     break;
                 default:
                     target = Expression.Laugh;
@@ -1314,6 +1762,33 @@ namespace IdleWalker.Domain
                     pose.Lean = 0.2;
                     break;
                 }
+                case Reaction.Wince:
+                {
+                    // Both hands fly up to the cheeks and stay there.
+                    double up = t < 0.15 ? Ease(t / 0.15) : 1;
+                    pose.ArmNear = Q2(150 * up);
+                    pose.ForeNear = Q2(100 * up);
+                    pose.ReachNear = Q2(60 * up);
+                    pose.ArmFar = -Q2(150 * up);
+                    pose.ForeFar = -Q2(100 * up);
+                    pose.ReachFar = Q2(60 * up);
+                    pose.Lean = -Math.Round(0.2 * up * 8) / 8;
+                    pose.HeadDip = Quantise(0.2 * up);
+                    break;
+                }
+                case Reaction.Waft:
+                {
+                    // Recoiling, head turned away, one hand fanning in front of the nose.
+                    double up = Ease(Math.Min(1, t / 0.2));
+                    double fan = t > 0.2 ? Q2(12 * Math.Sin(t * 2 * Math.PI * 3)) : 0;
+                    pose.ArmNear = Q2(120 * up);
+                    pose.ForeNear = Q2(120 * up) + fan;
+                    pose.ReachNear = Q2(50 * up);
+                    pose.Lean = -Math.Round(0.25 * up * 8) / 8;
+                    pose.HeadTurn = Q2(-25 * up);
+                    pose.HeadDip = -Quantise(0.2 * up);
+                    break;
+                }
                 default:
                     LaughPose(ref pose, t, true);
                     break;
@@ -1341,6 +1816,10 @@ namespace IdleWalker.Domain
                     return 20;
                 case Reaction.Cower:
                     return 10;
+                case Reaction.Wince:
+                    return 10;
+                case Reaction.Waft:
+                    return 25;
                 default:
                     return 35;
             }

@@ -44,6 +44,7 @@ namespace IdleWalker.App
             troupe = new Troupe(monitors, new Random());
             troupe.Count = UserSettings.LoadWalkerCount();
             troupe.Dress = UserSettings.LoadDress();
+            troupe.BeanEnabled = UserSettings.LoadBeanEnabled();
 
             CornerAction[] actions = new CornerAction[4];
             for (int c = 0; c < actions.Length; c++) actions[c] = UserSettings.LoadCornerAction((Corner)c);
@@ -54,7 +55,8 @@ namespace IdleWalker.App
             StartupRegistration.ApplyDefault();
 
             tray = new TrayMenu(troupe.Count, UserSettings.LoadIdleSeconds(), troupe.Dress,
-                                UserSettings.LoadMinionsEnabled(), UserSettings.LoadHotCornersEnabled(), actions, delayMs);
+                                UserSettings.LoadMinionsEnabled(), troupe.BeanEnabled,
+                                UserSettings.LoadHotCornersEnabled(), actions, delayMs);
             tray.ExitRequested += delegate { ExitThread(); };
             tray.MinionsToggled += delegate { UserSettings.SaveMinionsEnabled(tray.MinionsEnabled); };
             tray.CountChanged += delegate
@@ -67,6 +69,11 @@ namespace IdleWalker.App
             {
                 troupe.Dress = tray.Dress;
                 UserSettings.SaveDress(tray.Dress);
+            };
+            tray.BeanToggled += delegate
+            {
+                troupe.BeanEnabled = tray.BeanEnabled;
+                UserSettings.SaveBeanEnabled(tray.BeanEnabled);
             };
             tray.HotCornersToggled += delegate
             {

@@ -57,12 +57,15 @@ namespace IdleWalker.Domain
                         case Antic.Dance: case Antic.Twirl: case Antic.Joy: case Antic.Box: case Antic.Flex:
                         case Antic.Stomp: case Antic.Laugh: case Antic.Boo: case Antic.Trip:
                         case Antic.Strum: case Antic.Pushups: case Antic.Jog: case Antic.Flap:
-                        case Antic.Dig: case Antic.Moonwalk:
+                        case Antic.Dig: case Antic.Moonwalk: case Antic.Jive: case Antic.Sneak:
                             drain = 0.08;
                             gain = 0;
                             break;
                         case Antic.Doze:
                             if (modeTime > 2.1) gain = 0.3;
+                            break;
+                        case Antic.Teddy:
+                            gain = 0.04;   // a comfort
                             break;
                         case Antic.Sleepwalk:
                             gain = 0.2;
@@ -106,9 +109,10 @@ namespace IdleWalker.Domain
                 return;
             }
 
-            // A bully with somebody standing quietly in range creeps up on them.
-            if (same && tm == Temperament.Aggressive && other.IsQuiet && d > 1.6 * BodyWidth && d < 450 * sizeFactor &&
-                energy > 0.4 && rng.NextDouble() < 0.6)
+            // A bully with somebody standing quietly in range creeps up on
+            // them to shout boo; Mr. Bean creeps up to give them a poke.
+            if (same && (tm == Temperament.Aggressive || tm == Temperament.Eccentric) && other.IsQuiet &&
+                d > 1.6 * BodyWidth && d < 450 * sizeFactor && energy > 0.4 && rng.NextDouble() < (bean ? 0.5 : 0.6))
             {
                 SetGoal(Goal.Prank, other);
                 return;
@@ -189,12 +193,15 @@ namespace IdleWalker.Domain
                 case Antic.Flap:
                 case Antic.Moonwalk:
                 case Antic.Dig:
+                case Antic.Jive:
                     return habit.Weight * (0.25 + 1.2 * energy);
                 case Antic.Wave:
                 case Antic.Point:
                 case Antic.Look:
                 case Antic.Peekaboo:
                 case Antic.Kiss:
+                case Antic.Hello:
+                case Antic.Waggle:
                     return habit.Weight * (0.5 + curiosity);
                 default:
                     return habit.Weight;
@@ -306,9 +313,9 @@ namespace IdleWalker.Domain
                     break;
                 }
                 case Goal.Prank:
-                    // The target is kept for the shout itself.
-                    antic = Antic.Boo;
-                    anticSeconds = 1.6;
+                    // The target is kept for the shout (or the poke) itself.
+                    antic = bean ? Antic.Poke : Antic.Boo;
+                    anticSeconds = bean ? 2.8 : 1.6;
                     anticStage = 0;
                     StopFacing(goalTarget.CentreX, Mode.Antic);
                     break;
@@ -326,11 +333,11 @@ namespace IdleWalker.Domain
             {
                 case Goal.Prank:
                     target = Expression.Mischievous;
-                    if (goalTarget != null) LookAt(goalTarget.CentreX, goalTarget.FeetY - 12 * scale, out gx, out gy);
+                    if (goalTarget != null) LookAt(goalTarget.CentreX, goalTarget.EyeY, out gx, out gy);
                     break;
                 case Goal.Visit:
                     target = personality.Warm ? Expression.Happy : Expression.Curious;
-                    if (goalTarget != null) LookAt(goalTarget.CentreX, goalTarget.FeetY - 12 * scale, out gx, out gy);
+                    if (goalTarget != null) LookAt(goalTarget.CentreX, goalTarget.EyeY, out gx, out gy);
                     break;
                 default:
                     target = Expression.Curious;
@@ -444,7 +451,7 @@ namespace IdleWalker.Domain
         {
             double t = modeTime;
             bool friendly = personality.Warm;
-            if (chatPartner != null) LookAt(chatPartner.CentreX, chatPartner.FeetY - 12 * scale, out gx, out gy);
+            if (chatPartner != null) LookAt(chatPartner.CentreX, chatPartner.EyeY, out gx, out gy);
             else
             {
                 gx = 0.6;
@@ -509,7 +516,7 @@ namespace IdleWalker.Domain
                     if (chatLead)
                     {
                         // A hand reaching for the other's shoulder.
-                        pose.ArmNear = chatPartner != null ? AimAt(chatPartner.CentreX, chatPartner.FeetY - 10 * scale) : 90;
+                        pose.ArmNear = chatPartner != null ? AimAt(chatPartner.CentreX, chatPartner.ShoulderY) : 90;
                         Breathe(ref pose);
                     }
                     else
@@ -604,7 +611,8 @@ namespace IdleWalker.Domain
 
         /// <summary>
         /// Saw somebody start to yawn or dance: maybe do the same, a moment
-        /// later. The mimic copies most anything it sees.
+        /// later. The mimic copies most anything it sees. Mr. Bean showing
+        /// off Teddy draws a wave, a look or a laugh, depending on who sees.
         /// </summary>
         public void Catch(Antic what)
         {
@@ -620,9 +628,20 @@ namespace IdleWalker.Domain
                 switch (personality.Temperament)
                 {
                     case Temperament.Friendly: case Temperament.Goofy: chance = 0.85; break;
+                    case Temperament.Eccentric: chance = 0.8; what = Antic.Jive; break;   // his own dance
                     case Temperament.Calm: chance = 0.45; break;
                     case Temperament.Timid: chance = 0.25; break;
                     default: chance = 0; break;
+                }
+            }
+            else if (what == Antic.Teddy)
+            {
+                switch (personality.Temperament)
+                {
+                    case Temperament.Friendly: case Temperament.Goofy: chance = 0.7; what = Antic.Wave; break;
+                    case Temperament.Aggressive: chance = 0.5; what = Antic.Laugh; break;
+                    case Temperament.Calm: case Temperament.Timid: chance = 0.5; what = Antic.Look; break;
+                    default: return;
                 }
             }
             else if (personality.Mimic && what != Antic.Toot)

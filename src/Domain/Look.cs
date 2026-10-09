@@ -13,7 +13,57 @@ namespace IdleWalker.Domain
         Wild      // long strands sticking out every which way, as if it had a fright
     }
 
-    /// <summary>What a Minion is born with: how many eyes, their colour, its hair.</summary>
+    /// <summary>What kind of figure a walker is: which painter draws it and which body it has.</summary>
+    enum Figure
+    {
+        Minion,   // a yellow capsule in overalls and goggles
+        Bean      // a tall thin man in a tweed jacket: Mr. Bean
+    }
+
+    /// <summary>
+    /// The measurements of a kind of figure that the behaviour needs: how
+    /// tall it is, where its eyes and shoulders are, how wide it stands,
+    /// how far underground it hides. All in units (one unit is one sprite
+    /// cell on screen).
+    /// </summary>
+    sealed class Anatomy
+    {
+        public readonly double Height;        // soles to crown
+        public readonly double EyeV;          // height of the eyes
+        public readonly double MouthV;        // height of the mouth
+        public readonly double ShoulderV;     // height of the shoulders, for aiming an arm
+        public readonly double SeatV;         // height a toot comes from
+        public readonly int HalfWidth;        // half the body width in cells, for keeping a distance
+        public readonly int HiddenDepth;      // feet this far underground hides everything
+        public readonly int PeekDepth;        // feet this far underground shows the eyes
+        public readonly double StrideCells;   // distance covered by one full walk cycle
+        public readonly int CanvasRows;       // rows of the frame canvas it is drawn in
+        public readonly double ShadowRadius;  // half-width of the shadow under the feet
+
+        Anatomy(double height, double eyeV, double mouthV, double shoulderV, double seatV, int halfWidth,
+                int hiddenDepth, int peekDepth, double strideCells, int canvasRows, double shadowRadius)
+        {
+            Height = height;
+            EyeV = eyeV;
+            MouthV = mouthV;
+            ShoulderV = shoulderV;
+            SeatV = seatV;
+            HalfWidth = halfWidth;
+            HiddenDepth = hiddenDepth;
+            PeekDepth = peekDepth;
+            StrideCells = strideCells;
+            CanvasRows = canvasRows;
+            ShadowRadius = shadowRadius;
+        }
+
+        /// <summary>Short legs, quick steps, eyes in the middle of the body.</summary>
+        public static readonly Anatomy Minion = new Anatomy(18, 12.5, 8, 10.2, 3, 9, 20, 10, 10, 48, 6.4);
+
+        /// <summary>Tall and thin, long legs, a head on a neck.</summary>
+        public static readonly Anatomy Bean = new Anatomy(28, 24.9, 23.0, 19.4, 11, 8, 30, 22, 16, 56, 5.0);
+    }
+
+    /// <summary>What a walker is born with: its kind of figure and, for a Minion, how many eyes, their colour, its hair.</summary>
     sealed class Look
     {
         public const int Brown = 0x6B4423;
@@ -21,6 +71,7 @@ namespace IdleWalker.Domain
         public const int Blue = 0x4A72B5;
         public const int Amber = 0xB07A2A;
 
+        public readonly Figure Figure;
         public readonly bool OneEye;
         public readonly HairStyle Hair;
 
@@ -29,6 +80,7 @@ namespace IdleWalker.Domain
 
         public Look(bool oneEye, HairStyle hair, int farIris, int nearIris)
         {
+            Figure = Figure.Minion;
             OneEye = oneEye;
             Hair = hair;
             FarIris = farIris;
@@ -43,6 +95,23 @@ namespace IdleWalker.Domain
         public Look(bool oneEye, HairStyle hair)
             : this(oneEye, hair, Brown, Brown)
         {
+        }
+
+        Look(Figure figure)
+        {
+            Figure = figure;
+            OneEye = false;
+            Hair = HairStyle.None;
+            FarIris = NearIris = Brown;
+        }
+
+        /// <summary>Mr. Bean: the painter knows what he looks like.</summary>
+        public static readonly Look Bean = new Look(Figure.Bean);
+
+        /// <summary>The body this figure has.</summary>
+        public Anatomy Anatomy
+        {
+            get { return Figure == Figure.Bean ? Anatomy.Bean : Anatomy.Minion; }
         }
 
         /// <summary>

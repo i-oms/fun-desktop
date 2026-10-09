@@ -12,7 +12,6 @@ namespace IdleWalker.Rendering
     sealed class FrameRenderer
     {
         const int CanvasColumns = 40;
-        const int CanvasRows = 48;
         const int RowsBelowFeet = 18; // canvas kept under the feet during high jumps
 
         readonly Surface surface = new Surface();
@@ -42,8 +41,9 @@ namespace IdleWalker.Rendering
             // The canvas rests on the ground line, so anything underground is
             // simply cut off. In a high jump it follows the character up.
             int scale = walker.Scale;
+            Anatomy anatomy = walker.Personality.Anatomy;
             int width = CanvasColumns * scale;
-            int height = CanvasRows * scale;
+            int height = anatomy.CanvasRows * scale;
             int ground = Round(walker.GroundLine);
             int top = Round(Math.Min(walker.GroundLine, walker.FeetY + RowsBelowFeet * scale)) - height;
             int left = Round(walker.CentreX) - width / 2;
@@ -78,7 +78,7 @@ namespace IdleWalker.Rendering
             if (lift >= 0 && lift < 1)
             {
                 surface.Shadow(walker.CentreX - left, walker.GroundLine - top,
-                               (6.4 - 2.2 * lift) * scale * pose.StretchX, 1.4 * scale, 0.42 * (1 - lift));
+                               (anatomy.ShadowRadius - 2.2 * lift) * scale * pose.StretchX, 1.4 * scale, 0.42 * (1 - lift));
             }
 
             foreach (Puff puff in walker.Puffs)
@@ -95,12 +95,14 @@ namespace IdleWalker.Rendering
 
         /// <summary>
         /// Draws a pose with its soles resting on soleY, centred on centreX,
-        /// and commits it to the canvas. Also used for the tray icon.
+        /// and commits it to the canvas, with the painter the look calls
+        /// for. Also used for the tray icon.
         /// </summary>
         public static void DrawPose(Surface surface, Pose pose, Look look, int dress, bool faceLeft,
                                     double centreX, double soleY, double scale)
         {
-            MinionPainter.Draw(surface, pose, look, dress, faceLeft, centreX, soleY, scale);
+            if (look.Figure == Figure.Bean) BeanPainter.Draw(surface, pose, faceLeft, centreX, soleY, scale);
+            else MinionPainter.Draw(surface, pose, look, dress, faceLeft, centreX, soleY, scale);
             surface.CommitCharacter(1);
         }
 
