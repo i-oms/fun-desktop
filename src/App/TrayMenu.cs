@@ -8,7 +8,8 @@ using IdleWalker.Rendering;
 namespace IdleWalker.App
 {
     /// <summary>
-    /// The notification-area icon and its right-click menu: the Minions and
+    /// The notification-area icon and its right-click menu: the walkers (a
+    /// master switch, then the Minions and Mr. Bean each with their own) and
     /// their settings, the hot corners and theirs, and the program itself.
     /// </summary>
     sealed class TrayMenu : IDisposable
@@ -16,9 +17,10 @@ namespace IdleWalker.App
         readonly NotifyIcon icon = new NotifyIcon();
         readonly ContextMenuStrip menu = new ContextMenuStrip();
 
-        // The Minions.
+        // The walkers.
+        readonly ToolStripMenuItem walkersItem = new ToolStripMenuItem("Walkers");
         readonly ToolStripMenuItem minionsItem = new ToolStripMenuItem("Minions");
-        readonly ToolStripMenuItem countMenu = new ToolStripMenuItem("Walkers");
+        readonly ToolStripMenuItem countMenu = new ToolStripMenuItem("Minions");
         readonly ToolStripMenuItem idleMenu = new ToolStripMenuItem("Appear after");
         readonly ToolStripMenuItem dressMenu = new ToolStripMenuItem("Dress");
         readonly ToolStripMenuItem customItem = new ToolStripMenuItem("Custom...");
@@ -40,6 +42,7 @@ namespace IdleWalker.App
         int delayMs;
 
         public event EventHandler ExitRequested;
+        public event EventHandler WalkersToggled;
         public event EventHandler MinionsToggled;
         public event EventHandler CountChanged;
         public event EventHandler IdleChanged;
@@ -50,13 +53,19 @@ namespace IdleWalker.App
         public event EventHandler DelayChanged;
         public event EventHandler AboutRequested;
 
-        /// <summary>True while the Minions are switched on.</summary>
+        /// <summary>True while the master switch is on: nobody comes out while it is off.</summary>
+        public bool WalkersEnabled
+        {
+            get { return walkersItem.Checked; }
+        }
+
+        /// <summary>True while the Minions are switched on (independently of Mr. Bean).</summary>
         public bool MinionsEnabled
         {
             get { return minionsItem.Checked; }
         }
 
-        /// <summary>How many walkers the user wants (1..Settings.MaxWalkers).</summary>
+        /// <summary>How many Minions the user wants (1..Settings.MaxWalkers).</summary>
         public int Count
         {
             get { return count; }
@@ -74,7 +83,7 @@ namespace IdleWalker.App
             get { return dress; }
         }
 
-        /// <summary>True while Mr. Bean is switched on.</summary>
+        /// <summary>True while Mr. Bean is switched on (independently of the Minions).</summary>
         public bool BeanEnabled
         {
             get { return beanItem.Checked; }
@@ -98,9 +107,14 @@ namespace IdleWalker.App
             get { return delayMs; }
         }
 
-        public TrayMenu(int initialCount, int initialIdleSeconds, int initialDress, bool minionsOn, bool beanOn,
+        public TrayMenu(int initialCount, int initialIdleSeconds, int initialDress, bool walkersOn, bool minionsOn, bool beanOn,
                         bool cornersOn, CornerAction[] initialActions, int initialDelayMs)
         {
+            // ---- The walkers: the master switch ----
+            walkersItem.Checked = walkersOn;
+            walkersItem.CheckOnClick = true;
+            walkersItem.CheckedChanged += OnWalkersToggled;
+
             // ---- The Minions ----
             minionsItem.Checked = minionsOn;
             minionsItem.CheckOnClick = true;
@@ -183,9 +197,11 @@ namespace IdleWalker.App
             startupItem.Checked = StartupRegistration.IsEnabled();
             startupItem.Click += OnStartupClick;
 
+            menu.Items.Add(walkersItem);
+            menu.Items.Add(idleMenu);
+            menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(minionsItem);
             menu.Items.Add(countMenu);
-            menu.Items.Add(idleMenu);
             menu.Items.Add(dressMenu);
             menu.Items.Add(beanItem);
             menu.Items.Add(new ToolStripSeparator());
@@ -223,18 +239,29 @@ namespace IdleWalker.App
             }
         }
 
-        // A feature's settings are greyed out while it is off.
+        // A feature's settings are greyed out while it is off: everything
+        // under the master switch while that is off, the Minions' own
+        // settings while they are off. Mr. Bean's tick is his own.
         void ShowEnabled()
         {
-            bool minions = minionsItem.Checked;
+            bool walkers = walkersItem.Checked;
+            idleMenu.Enabled = walkers;
+            minionsItem.Enabled = walkers;
+            beanItem.Enabled = walkers;
+
+            bool minions = walkers && minionsItem.Checked;
             countMenu.Enabled = minions;
-            idleMenu.Enabled = minions;
             dressMenu.Enabled = minions;
-            beanItem.Enabled = minions;
 
             bool corners = cornersItem.Checked;
             foreach (ToolStripMenuItem cornerMenu in cornerMenus) cornerMenu.Enabled = corners;
             delayMenu.Enabled = corners;
+        }
+
+        void OnWalkersToggled(object sender, EventArgs e)
+        {
+            ShowEnabled();
+            Raise(WalkersToggled);
         }
 
         void OnMinionsToggled(object sender, EventArgs e)
@@ -253,7 +280,7 @@ namespace IdleWalker.App
 
         void ShowCount()
         {
-            countMenu.Text = "Walkers: " + count;
+            countMenu.Text = "Minions: " + count;
             foreach (ToolStripMenuItem item in countMenu.DropDownItems)
                 item.Checked = (int)item.Tag == count;
         }

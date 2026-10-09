@@ -37,10 +37,13 @@ namespace IdleWalker
         /// <summary>The Dress menu's "Random" entry: every Minion picks its own colour each time it comes out.</summary>
         public const int RandomDress = -1;
 
+        /// <summary>The master switch: whether anyone comes out at all until the tray menu says otherwise.</summary>
+        public const bool WalkersEnabledByDefault = true;
+
         /// <summary>Whether the Minions are on until the tray menu says otherwise.</summary>
         public const bool MinionsEnabledByDefault = true;
 
-        /// <summary>Whether Mr. Bean comes out with them until the tray menu says otherwise.</summary>
+        /// <summary>Whether Mr. Bean is on until the tray menu says otherwise. He and the Minions are independent of each other.</summary>
         public const bool MrBeanByDefault = false;
 
         /// <summary>Whether the hot corners are on until the tray menu says otherwise.</summary>

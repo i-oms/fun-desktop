@@ -44,6 +44,7 @@ namespace IdleWalker.App
             troupe = new Troupe(monitors, new Random());
             troupe.Count = UserSettings.LoadWalkerCount();
             troupe.Dress = UserSettings.LoadDress();
+            troupe.MinionsEnabled = UserSettings.LoadMinionsEnabled();
             troupe.BeanEnabled = UserSettings.LoadBeanEnabled();
 
             CornerAction[] actions = new CornerAction[4];
@@ -55,10 +56,15 @@ namespace IdleWalker.App
             StartupRegistration.ApplyDefault();
 
             tray = new TrayMenu(troupe.Count, UserSettings.LoadIdleSeconds(), troupe.Dress,
-                                UserSettings.LoadMinionsEnabled(), troupe.BeanEnabled,
+                                UserSettings.LoadWalkersEnabled(), troupe.MinionsEnabled, troupe.BeanEnabled,
                                 UserSettings.LoadHotCornersEnabled(), actions, delayMs);
             tray.ExitRequested += delegate { ExitThread(); };
-            tray.MinionsToggled += delegate { UserSettings.SaveMinionsEnabled(tray.MinionsEnabled); };
+            tray.WalkersToggled += delegate { UserSettings.SaveWalkersEnabled(tray.WalkersEnabled); };
+            tray.MinionsToggled += delegate
+            {
+                troupe.MinionsEnabled = tray.MinionsEnabled;
+                UserSettings.SaveMinionsEnabled(tray.MinionsEnabled);
+            };
             tray.CountChanged += delegate
             {
                 troupe.Count = tray.Count;
@@ -112,7 +118,7 @@ namespace IdleWalker.App
                 if (corners.Step(now, cursor.Latest, monitors.MonitorBounds, CornerActions.MouseButtonDown(), out corner))
                 {
                     CornerAction action = tray.CornerActionFor(corner);
-                    if (action == CornerAction.CallMinions) summoned = tray.MinionsEnabled;
+                    if (action == CornerAction.CallMinions) summoned = tray.WalkersEnabled;
                     else CornerActions.Perform(action);
                 }
             }
@@ -127,7 +133,8 @@ namespace IdleWalker.App
                 pump.HalfRate = SystemInformation.PowerStatus.PowerLineStatus == PowerLineStatus.Offline;
             }
 
-            bool enabled = tray.MinionsEnabled && !fullScreen;
+            // The master switch; which of the Minions and Mr. Bean actually come out is the troupe's business.
+            bool enabled = tray.WalkersEnabled && !fullScreen;
             bool wantOut = enabled && (summoned || cursor.IdleFor(now, tray.IdleSeconds));
             troupe.Step(dt, cursor.Position, wantOut, moved || !enabled);
 

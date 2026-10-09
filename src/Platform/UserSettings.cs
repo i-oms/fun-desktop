@@ -12,6 +12,7 @@ namespace IdleWalker.Platform
         const string IdleValue = "IdleSeconds";
         const string StartupValue = "StartupDecided";
         const string DressValue = "Dress";
+        const string WalkersValue = "WalkersEnabled";
         const string MinionsValue = "MinionsEnabled";
         const string BeanValue = "MrBeanEnabled";
         const string CornersValue = "HotCornersEnabled";
@@ -67,6 +68,17 @@ namespace IdleWalker.Platform
         public static void SaveDress(int dress)
         {
             Save(DressValue, dress);
+        }
+
+        /// <summary>The master switch over the Minions and Mr. Bean.</summary>
+        public static bool LoadWalkersEnabled()
+        {
+            return Load(WalkersValue, Settings.WalkersEnabledByDefault ? 1 : 0) != 0;
+        }
+
+        public static void SaveWalkersEnabled(bool on)
+        {
+            Save(WalkersValue, on ? 1 : 0);
         }
 
         public static bool LoadMinionsEnabled()

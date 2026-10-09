@@ -20,6 +20,7 @@ namespace IdleWalker.Domain
         readonly Random rng;
         readonly List<Walker> walkers = new List<Walker>();
         readonly Walker bean;          // Mr. Bean, always first in the list, out only when switched on
+        bool minionsEnabled = true;
         bool beanEnabled;
         int count = 1;
         int dress = Settings.DressColors[0];
@@ -47,7 +48,14 @@ namespace IdleWalker.Domain
             set { count = Math.Max(1, Math.Min(Settings.MaxWalkers, value)); }
         }
 
-        /// <summary>Whether Mr. Bean comes out with the Minions. Switching him off sends him away at once.</summary>
+        /// <summary>Whether the Minions come out. Switching them off sends them away at once; Mr. Bean is not affected.</summary>
+        public bool MinionsEnabled
+        {
+            get { return minionsEnabled; }
+            set { minionsEnabled = value; }
+        }
+
+        /// <summary>Whether Mr. Bean comes out. Switching him off sends him away at once; the Minions are not affected.</summary>
         public bool BeanEnabled
         {
             get { return beanEnabled; }
@@ -117,7 +125,9 @@ namespace IdleWalker.Domain
                 spawnTimer = 0;
             }
 
-            for (int i = count + 1; i < walkers.Count; i++) walkers[i].Leave();
+            // The Minions beyond the count - all of them, if they are switched off - and Mr. Bean, if he is, go home.
+            int wanted = minionsEnabled ? count : 0;
+            for (int i = wanted + 1; i < walkers.Count; i++) walkers[i].Leave();
             if (!beanEnabled) bean.Leave();
 
             foreach (Walker walker in walkers)
@@ -127,11 +137,12 @@ namespace IdleWalker.Domain
             Spread();
         }
 
-        // The Minions in roster order, then Mr. Bean, if he is wanted.
+        // The Minions in roster order, if they are wanted, then Mr. Bean, if he is.
         Walker NextToAppear()
         {
-            for (int i = 1; i <= count; i++)
-                if (walkers[i].IsHidden) return walkers[i];
+            if (minionsEnabled)
+                for (int i = 1; i <= count; i++)
+                    if (walkers[i].IsHidden) return walkers[i];
             if (beanEnabled && bean.IsHidden) return bean;
             return null;
         }

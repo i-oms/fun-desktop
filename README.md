@@ -162,11 +162,12 @@ Minion appears.
 
 | Item | Effect |
 |---|---|
-| Minions | Ticked (the default): the Minions come out when the cursor rests. Untick it to switch them off; any on screen leave at once, and their settings below are greyed out. Remembered between runs. |
-| Walkers: *n* → 1…10 | How many Minions come out (five by default). Raising it brings the new ones out straight away (one at a time); lowering it sends the extras away. Remembered between runs. |
+| Walkers | The master switch. Ticked (the default): whoever is switched on below comes out when the cursor rests. Untick it and nobody comes out at all; anyone on screen leaves at once, and every walker setting below is greyed out. Remembered between runs. |
 | Appear after: *t* → 1…5 seconds, 1…5 minutes | How long the mouse must be still before they come out. Takes effect at once: shorten it and they appear sooner, lengthen it while they are out and they stay (they only ever leave when the mouse moves). Remembered between runs. |
+| Minions | Ticked (the default): the Minions come out. Untick it to switch just them off; any on screen leave at once (Mr. Bean stays if he is on), and their count and Dress are greyed out. Remembered between runs. |
+| Minions: *n* → 1…10 | How many Minions come out (five by default). Raising it brings the new ones out straight away (one at a time); lowering it sends the extras away. Remembered between runs. |
 | Dress: *colour* → Classic blue, Red, Green, Purple, Orange, Pink, Teal, Black, Random, Custom… | The colour of their overalls. Classic blue is the default. A fixed colour applies to everyone at once, even while they are out. Random gives each Minion its own colour every time it comes out; picking Random again re-rolls the ones on screen. Custom… opens the Windows colour picker; the menu then shows the colour as "Custom #RRGGBB". Remembered between runs. |
-| Mr. Bean | Unticked by default. Tick it and Mr. Bean comes out with the Minions (after them, as an extra; the Walkers count is still the number of Minions). Untick it and he leaves at once. Greyed out while the Minions are off. Remembered between runs. See [Mr. Bean](#mr-bean). |
+| Mr. Bean | Unticked by default. Tick it and Mr. Bean comes out (after the Minions, as an extra; the Minions count is not his). Untick it and he leaves at once; the Minions stay. He and the Minions are independent: either, both or neither can be on. Remembered between runs. See [Mr. Bean](#mr-bean). |
 | Start with Windows | Ticked: the program starts when you sign in. On by default; untick it to switch it off. See below. |
 | Hot corners | Ticked (the default): pushing the cursor into a corner of any monitor and leaving it there fires that corner's action. Untick it to switch the corners off. Remembered between runs. See [Hot corners](#hot-corners). |
 | Top-left / Top-right / Bottom-left / Bottom-right: *action* | What each corner does: Nothing, Task view, Show desktop, Start menu, Notification centre, Quick settings, Lock screen, Screen saver, Monitor off, or Call the Minions. Defaults: Task view, Notification centre, Start menu, Show desktop. |
@@ -206,7 +207,7 @@ whatever he sees; the **eccentric** one is Mr. Bean.
 ### Mr. Bean
 
 Off by default; tick **Mr. Bean** in the tray menu and he comes out after
-the Minions, as an extra on top of the Walkers count. He is drawn by the
+the Minions, as an extra on top of the Minions count, and with or without them: the two switches are independent. He is drawn by the
 same method as the Minions (lit solids, anti-aliased, see
 [Editing the character](#editing-the-character)) but is a different figure:
 28 units tall to their 18, with long legs that bend at the knee, a brown
@@ -403,7 +404,7 @@ Stop-Process -Name IdleWalker
    up onto it, timing the take-off so the top of the arc is over the edge.
    When it is lower, it walks off the edge and falls, landing with a bigger
    squash and more dust. See [Multiple monitors](#multiple-monitors).
-7. **Exit.** As soon as the cursor moves (or Minions is unticked) a "!" appears
+7. **Exit.** As soon as the cursor moves (or Walkers or Minions is unticked) a "!" appears
    over its head, it does a small startled hop and drops through the ground
    line in about 0.4 seconds. The idle timer then starts again.
 
@@ -427,11 +428,12 @@ running copy, rebuild.
 | `RandomDress` | `-1` | The menu's "Random" entry: a fresh colour per Minion per appearance (`Look.RandomDress`, any hue but yellow). |
 | `MoveTolerance` | `2` | Cursor movement (pixels) below this does not count as moving. |
 | `BasePixelSize` | `3` | Size in screen pixels of one art pixel at 100% display scaling. `4` makes it a third bigger. |
-| `MaxWalkers` | `10` | Upper limit of the Walkers menu. The cast in `Personality.Roster` must have at least this many entries. |
+| `MaxWalkers` | `10` | Upper limit of the Minions count menu. The cast in `Personality.Roster` must have at least this many entries. |
 | `DefaultWalkers` | `5` | How many come out until a number is picked from the menu. |
 | `StartWithWindowsByDefault` | `true` | Whether the first run registers the program to start at sign-in. |
+| `WalkersEnabledByDefault` | `true` | The master switch: whether anyone comes out at all until the menu says otherwise. |
 | `MinionsEnabledByDefault` | `true` | Whether the Minions are on until the menu says otherwise. |
-| `MrBeanByDefault` | `false` | Whether Mr. Bean comes out with them until the menu says otherwise. |
+| `MrBeanByDefault` | `false` | Whether Mr. Bean is on until the menu says otherwise; independent of the Minions. |
 | `HotCornersByDefault` | `true` | Whether the hot corners are on until the menu says otherwise. |
 | `DefaultCornerActions` | Task view, Notification centre, Start menu, Show desktop | What the four corners do until the menu says otherwise (top-left, top-right, bottom-left, bottom-right). |
 | `HotCornerReach` | `2` | How far in from a corner's two edges, in pixels, still counts as being in the corner. |
@@ -762,8 +764,8 @@ option is on.
 
 `UserSettings` stores the walker count as a DWORD `WalkerCount`, the rest
 time as a DWORD `IdleSeconds`, the overalls colour as a DWORD `Dress`
-(any 0xRRGGBB, from the menu or the picker, or -1 for random), the two
-switches as DWORDs `MinionsEnabled`, `MrBeanEnabled` and `HotCornersEnabled` (1 or 0), the
+(any 0xRRGGBB, from the menu or the picker, or -1 for random), the four
+switches as DWORDs `WalkersEnabled`, `MinionsEnabled`, `MrBeanEnabled` and `HotCornersEnabled` (1 or 0), the
 corner actions as DWORDs `CornerTopLeft`, `CornerTopRight`,
 `CornerBottomLeft` and `CornerBottomRight` (a `CornerAction` value), the
 corner dwell as a DWORD `HotCornerDelayMs` and, once "Start with Windows"
@@ -811,7 +813,7 @@ their defaults next time.
   a distance function, a normal, an albedo, and a place in the back-to-front
   order.
 - A new menu item: `TrayMenu` owns the menu; expose state as a property or
-  an event like `MinionsEnabled` / `Count` / `ExitRequested`.
+  an event like `WalkersEnabled` / `MinionsEnabled` / `Count` / `ExitRequested`.
 - Anything needing a new Win32 call goes in `Native.cs` and is used only
   from the Platform layer.
 - Testing group behaviour: the Domain layer runs headless. A `Troupe` with a
