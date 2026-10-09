@@ -84,6 +84,15 @@ namespace IdleWalker.Domain
         /// <summary>Lids heavy, mouth hanging open in a vacant smile.</summary>
         public static readonly Expression Dopey = new Expression(lid: 0.45, browRaise: 0.25, mouthCurve: 0.5, mouthOpen: 0.3, mouthWidth: 1.5, tongue: 0.3);
 
+        /// <summary>Lids lowered, one brow up, mouth pulled aside: a sideways look at someone not to be trusted.</summary>
+        public static readonly Expression Suspicious = new Expression(lid: 0.4, squint: 0.25, browAngle: 0.45, browAsym: 0.4, mouthCurve: -0.15, mouthWidth: 1.4, mouthDx: 0.3);
+
+        /// <summary>Brows up and worried, pupils small, mouth tight: checking over both shoulders.</summary>
+        public static readonly Expression Shifty = new Expression(lid: 0.15, browRaise: 0.3, browAngle: -0.3, pupilSize: 0.8, mouthCurve: -0.1, mouthWidth: 1.1);
+
+        /// <summary>Lids a touch lowered, brows a little up, a small closed smile: a look straight at you.</summary>
+        public static readonly Expression Knowing = new Expression(lid: 0.2, browRaise: 0.25, mouthCurve: 0.35, mouthWidth: 1.6);
+
         // ---- Pleased ---------------------------------------------------------------
 
         /// <summary>A toothy grin.</summary>

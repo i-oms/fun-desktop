@@ -295,6 +295,7 @@ namespace IdleWalker.Domain
             blinkAgain = false;
             glanceTimer = Between(0.5, 1.5);
             glanceLeft = 0;
+            ResetEyes();
             energy = Between(0.7, 1);
             social = Between(0, 0.4);
             curiosity = Between(0, 0.4);
@@ -679,7 +680,7 @@ namespace IdleWalker.Domain
                 blinkLeft = BlinkSeconds * (heavy ? 1.9 : tense ? 0.8 : 1);
                 blinkAgain = !heavy && rng.NextDouble() < 0.2;
             }
-            blinkTimer = Between(1.8, 4.5) * (tense ? 0.4 : 1);
+            blinkTimer = Between(1.8, 4.5) * (tense ? 0.4 : 1) * BlinkPace;
         }
 
         // ---- The face --------------------------------------------------------------
@@ -703,6 +704,7 @@ namespace IdleWalker.Domain
             double gx = 0.55, gy = -0.05;
             bool atCursor = false;
             bool steady = false;   // standing about: the eyes may wander a little
+            bool watching = false; // the eyes are on another walker
 
             switch (mode)
             {
@@ -718,7 +720,9 @@ namespace IdleWalker.Domain
                     else
                     {
                         if (moodLeft > 0) target = moodFace;
-                        atCursor = Math.Abs(cursorX - cx) < 260 * sizeFactor;
+                        // Passing someone: meet their eyes; otherwise the cursor if it is near.
+                        watching = WatchCompany(false, ref gx, ref gy);
+                        if (!watching) atCursor = Math.Abs(cursorX - cx) < 260 * sizeFactor;
                     }
                     break;
 
@@ -839,10 +843,22 @@ namespace IdleWalker.Domain
                 gx = -0.8;
                 gy = 0;
             }
-            Glance(dt, steady && target.Lid < 0.9, ref gx, ref gy);
+
+            // Standing about: the eyes follow a passer-by, and now and then
+            // act a little (WalkerEyes.cs). The darting only while they are free.
+            bool standing = (mode == Mode.Rest || mode == Mode.Look) && !headTurned;
+            bool strolling = mode == Mode.Walk && goal == Goal.None && moodLeft <= 0;
+            if (standing) watching = WatchCompany(true, ref gx, ref gy);
+            NoticePasser(standing && watching);
+            double gazeRate = GazeRate;
+            if (standing || strolling) gazeRate = EyeBeats(dt, watching, strolling, ref target, ref rate, ref gx, ref gy);
+            else EndEyeBeat();
+            Glance(dt, steady && target.Lid < 0.9 && eyeBeat == EyeBeat.None && !watching, ref gx, ref gy);
+            GazeBlink(gx, gy);
+            StepEyeExtras(dt, atCursor && !watching, watching);
 
             face = Expression.Towards(face, target, 1 - Math.Exp(-dt * rate));
-            double k = 1 - Math.Exp(-dt * 10);
+            double k = 1 - Math.Exp(-dt * gazeRate);
             gazeX = Settle(gazeX, gx, k);
             gazeY = Settle(gazeY, gy, k);
 
@@ -922,6 +938,7 @@ namespace IdleWalker.Domain
         // cursor, the aggressive ones stand half turned away.
         double RestYaw()
         {
+            if (eyeBeat == EyeBeat.Viewer) return 0;   // the head comes round for a look at you
             switch (personality.Temperament)
             {
                 case Temperament.Friendly:
@@ -1126,6 +1143,11 @@ namespace IdleWalker.Domain
                 double blink = Math.Sin(Math.PI * (1 - blinkLeft / BlinkSeconds));
                 if (blink > pose.Face.Lid) pose.Face.Lid = blink;
             }
+
+            // Eyes crossing on a cursor under the nose (or for fun), and
+            // pupils that grow for something liked and shrink for a stare.
+            if (crossEye > 0.01) pose.Face.CrossEye = Math.Max(pose.Face.CrossEye, Math.Round(crossEye * 16) / 16);
+            if (pupilInterest != 0) pose.Face.PupilSize *= 1 + 0.2 * Math.Round(pupilInterest * 8) / 8;
 
             // Talking: the mouth flaps over whatever the face is doing.
             if (mode == Mode.Chat && chatStyle != ChatStyle.Pat && Talking)

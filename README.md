@@ -39,6 +39,7 @@ fun/
     │   ├── Walker.cs         one character: state machine, physics, face
     │   ├── WalkerAntics.cs   the same class, continued: the idle antics and reactions
     │   ├── WalkerBrain.cs    the same class, continued: wants, errands, chats, pranks, tag
+    │   ├── WalkerEyes.cs     the same class, continued: where the eyes go - following, side-eyes, eye-rolls, blinks in character
     │   └── Troupe.cs         the group: entrances, greetings, shoving, tag, onlookers, contagion
     ├── Rendering/            pixels
     │   ├── MinionPainter.cs  draws a Minion from solids: distance fields, normals, lighting
@@ -351,8 +352,21 @@ Stop-Process -Name IdleWalker
    dance, twirl, doze, whistle, box, taunt, and so on. Now and then, with
    energy to spare, it does a little hop. It blinks every few seconds
    regardless - quick, frequent blinks when frightened, slow heavy ones when
-   drowsy, sometimes two in a row - and while standing about its eyes dart a
-   little way off and back every second or two.
+   drowsy, sometimes two in a row, more often for the timid one and seldom
+   for the aggressive ones, who stare - and while standing about its eyes
+   dart a little way off and back every second or two. The eyes have a life
+   of their own beyond that (`src\Domain\WalkerEyes.cs`): they follow
+   whoever walks past and meet the eyes of the one they pass, they move
+   first and the head follows, a long jump of the gaze brings a blink with
+   it, and every ten seconds or so comes a beat of eye acting in character:
+   a glance straight at you while walking (the timid one checks over his
+   shoulder instead); standing, a side-eye towards the company (suspicious
+   and narrowed for Stuart and Mel), an eye-roll from the aggressive ones,
+   a look at you with a smile from the friendly ones, Phil going cross-eyed
+   until a double blink shakes it off, Carl checking both ways, and a double
+   take when a friend walks by. The pupils grow a little for a cursor or a
+   friend close by and shrink for an aggressive stare. Both eyes always
+   point the same way: only Phil's beat and the dizzy faces cross them.
 6. **Other monitors.** When the next monitor's bottom edge is higher it jumps
    up onto it, timing the take-off so the top of the arc is over the edge.
    When it is lower, it walks off the edge and falls, landing with a bigger
@@ -402,7 +416,9 @@ each antic is in `src\Domain\WalkerAntics.cs` (`StartAntic` sets how long
 it lasts); how fast the drives rise and fall, and the odds of each errand,
 are in `src\Domain\WalkerBrain.cs` (`StepMood` and `Decide`).
 Timings that live in the state machine (`src\Domain\Walker.cs`): blink every
-`Between(1.8, 4.5)` s in `Step`; peek/look/duck durations in the
+`Between(1.8, 4.5)` s in `Step`, scaled by `BlinkPace` per temperament (the
+gaps between eye beats and the length of each are in `src\Domain\WalkerEyes.cs`);
+peek/look/duck durations in the
 `PeekRise`/`PeekLook`/`PeekDuck` cases; greet, gloat and flee durations at
 the top of the class. Meeting distances and cooldowns are at the top of
 `src\Domain\Troupe.cs`.
@@ -464,8 +480,10 @@ twirl, panting after boxing, mischievous after a taunt). The body turns the same
 walking, turns to face you when it stops to rest or wave at the cursor, and
 towards the other Minion when greeting, charging or gloating
 (`Walker.YawTarget`). The pupils follow a gaze point: your cursor when it is near, another
-Minion when greeting or charging, ahead when walking, back over the shoulder
-when the head is turned.
+Minion when greeting, charging, passing or walking by, ahead when walking, back over the shoulder
+when the head is turned, and wherever an eye beat sends them (`WalkerEyes.cs`,
+which also eases Phil's eyes crossing and the pupils widening or shrinking
+over the chosen expression).
 
 **Looks.** A `Look` (`src\Domain\Look.cs`) is what a Minion is born with:
 one eye or two, the iris colour of each, and a hair style (`None`, `Sprouts`,
