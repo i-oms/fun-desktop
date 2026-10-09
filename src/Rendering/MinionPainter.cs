@@ -38,6 +38,9 @@ namespace IdleWalker.Rendering
         // Body: a capsule of radius BodyR with its axis from BodyBottom to BodyTop.
         const double BodyR = 5.4, BodyBottom = 7.6, BodyTop = 12.6;
         const double WaistV = 4.6;                        // overalls below this
+        const double StrapR = 0.42;                       // half the width of a strap
+        const double StrapTop = 11.0;                     // where it passes over the shoulder
+        const double ButtonArc = 2.2, ButtonV = 7.3, ButtonR = 0.4;  // the bib's buttons
         const double BandBottom = 11.85, BandTop = 13.25; // the goggle strap
         const double EyeV = 12.55, MouthV = 9.0;
         const double EyeAngle = 26;                       // each eye this far round from the front, degrees
@@ -549,6 +552,43 @@ namespace IdleWalker.Rendering
             return Math.Sqrt(dx * dx + dy * dy);
         }
 
+        // One strap as a polyline in (|arc|, v): the bib corner, the shoulder
+        // front, the top of the shoulder just above the arm, down the back,
+        // and the waistband at the back. Stored per segment as start, span
+        // and 1 / span² so the distance needs one square root in all.
+        static readonly double[] StrapPath = BuildStrap(new double[] { 2.2, 7.4, 4.4, 9.6, 7.35, StrapTop, 12.4, 8.4, 13.9, WaistV });
+
+        static double[] BuildStrap(double[] points)
+        {
+            int segments = points.Length / 2 - 1;
+            double[] s = new double[segments * 5];
+            for (int i = 0; i < segments; i++)
+            {
+                double ax = points[2 * i], ay = points[2 * i + 1];
+                double dx = points[2 * i + 2] - ax, dy = points[2 * i + 3] - ay;
+                s[5 * i] = ax; s[5 * i + 1] = ay; s[5 * i + 2] = dx; s[5 * i + 3] = dy;
+                s[5 * i + 4] = 1 / (dx * dx + dy * dy);
+            }
+            return s;
+        }
+
+        /// <summary>Distance from (x, y) to the strap's centre line.</summary>
+        static double StrapDist(double x, double y)
+        {
+            double[] s = StrapPath;
+            double best = double.MaxValue;
+            for (int i = 0; i < s.Length; i += 5)
+            {
+                double rx = x - s[i], ry = y - s[i + 1];
+                double t = (rx * s[i + 2] + ry * s[i + 3]) * s[i + 4];
+                if (t < 0) t = 0; else if (t > 1) t = 1;
+                double dx = rx - s[i + 2] * t, dy = ry - s[i + 3] * t;
+                double d2 = dx * dx + dy * dy;
+                if (d2 < best) best = d2;
+            }
+            return Math.Sqrt(best);
+        }
+
         static double RoundRect(double x, double y, double hw, double hh, double r)
         {
             double qx = Math.Abs(x) - (hw - r), qy = Math.Abs(y) - (hh - r);
@@ -623,19 +663,44 @@ namespace IdleWalker.Rendering
             if (phi > Math.PI) phi -= 2 * Math.PI; else if (phi < -Math.PI) phi += 2 * Math.PI;
             double arc = BodyR * phi;
 
-            // Yellow skin, with the overalls and the goggle strap painted on.
+            // Yellow skin, with the overalls painted on below the goggle strap
+            // and the strap itself above: the two never share a row.
             double r = 0.98, g = 0.84, b = 0.11, spec = 0.35, shine = 26;
-            double denim = Math.Max(Cov(v - WaistV), Cov(RoundRect(arc, v - 6.1, 2.5, 1.5, 0.45)));
-            Mix(ref r, ref g, ref b, ref spec, ref shine, dressR, dressG, dressB, 0.06, 8, denim);
+            if (v < BandBottom - 0.2)
+            {
+                // Trousers all round, and the bib on the front.
+                double above = Cov(WaistV - v);
+                double denim = 1 - above;
+                if (v < 7.9) denim = Math.Max(denim, Cov(RoundRect(arc, v - 6.1, 2.5, 1.5, 0.45)));
+                Mix(ref r, ref g, ref b, ref spec, ref shine, dressR, dressG, dressB, 0.06, 8, denim);
 
-            double qx, qy, t;
-            double straps = Math.Max(Cov(Seg(arc, v, 2.2, 7.4, 4.4, 9.6, out qx, out qy, out t) - 0.42),
-                                     Cov(Seg(arc, v, -2.2, 7.4, -4.4, 9.6, out qx, out qy, out t) - 0.42));
-            double pocket = Cov(RoundRect(arc, v - 6.0, 0.85, 0.6, 0.2));
-            Mix(ref r, ref g, ref b, ref spec, ref shine, strapR, strapG, strapB, 0.06, 8, Math.Max(straps, pocket));
-
-            double band = Cov(Math.Max(BandBottom - v, v - BandTop));
-            Mix(ref r, ref g, ref b, ref spec, ref shine, 0.30, 0.31, 0.34, 0.2, 10, band);
+                // A strap on each side, from the bib corner over the shoulder
+                // and down the back to the waistband, where it is cut flush;
+                // the bib pocket in the same darker shade; a button on each
+                // corner of the bib.
+                if (v > WaistV - 0.3)
+                {
+                    double a = Math.Abs(arc);
+                    double trim = Math.Min(Cov(StrapDist(a, v) - StrapR), above);
+                    if (v < 7.9)
+                    {
+                        trim = Math.Max(trim, Cov(RoundRect(arc, v - 6.0, 0.85, 0.6, 0.2)));
+                        Mix(ref r, ref g, ref b, ref spec, ref shine, strapR, strapG, strapB, 0.06, 8, trim);
+                        double bx = a - ButtonArc, by = v - ButtonV;
+                        double button = Cov(Math.Sqrt(bx * bx + by * by) - ButtonR);
+                        Mix(ref r, ref g, ref b, ref spec, ref shine, 0.08, 0.08, 0.10, 0.5, 20, button);
+                    }
+                    else
+                    {
+                        Mix(ref r, ref g, ref b, ref spec, ref shine, strapR, strapG, strapB, 0.06, 8, trim);
+                    }
+                }
+            }
+            else
+            {
+                double band = Cov(Math.Max(BandBottom - v, v - BandTop));
+                Mix(ref r, ref g, ref b, ref spec, ref shine, 0.30, 0.31, 0.34, 0.2, 10, band);
+            }
 
             double lr, lg, lb;
             Lit(r, g, b, nx, ny, nz, spec, shine, out lr, out lg, out lb);

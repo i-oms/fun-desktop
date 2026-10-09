@@ -597,7 +597,11 @@ is what a 32-bpp `BI_RGB` DIB holds).
    (`0.5 - d / pixel`, clamped, which is a one-pixel anti-aliased edge) and a
    colour from its lit normal, and the solids are composited back to front:
    far leg, near leg, the parts of the arms behind the body, body with the
-   overalls and goggle strap painted on, eyes and rims, brows, mouth, hair,
+   overalls and goggle strap painted on (the overalls are drawn in body
+   arc-length, so the bib, its buttons and pocket sit on the front and each
+   strap is one polyline that climbs from a bib corner over the shoulder and
+   down the back to the waistband, visible from every angle), eyes and rims,
+   brows, mouth, hair,
    the parts of the arms in front, the "!". The arms are the one place where
    "behind" is decided per pixel rather than per solid: each joint carries
    a depth, every arm pixel compares its depth with the body's surface at
