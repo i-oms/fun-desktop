@@ -18,7 +18,10 @@ namespace IdleWalker.Domain
         Goofy,
 
         /// <summary>Mr. Bean: a child in a grown man's body - fidgets, sneaks, pokes, shows off Teddy.</summary>
-        Eccentric
+        Eccentric,
+
+        /// <summary>An Angry Bird: short-fused and territorial - pecks, flaps, launches, rages, blows up.</summary>
+        Feisty
     }
 
     /// <summary>The things a walker gets up to when it stops walking for a moment.</summary>
@@ -69,7 +72,18 @@ namespace IdleWalker.Domain
         Fuss,      // straighten the tie, brush the lapels, pat the hair
         Ponder,    // finger to the chin, eyes rolled up, then: an idea, finger in the air
         Jive,      // the Bean dance: elbows pumping, hips twisting, knees bouncing
-        Poke       // creep up and prod somebody (or the cursor) with one finger, then look innocent
+        Drive,     // mime driving his Mini: hands on the wheel, leaning into the corners, a honk
+        Photo,     // hold up a camera, take your picture (flash!), study it and show it off
+        Poke,      // creep up and prod somebody (or the cursor) with one finger, then look innocent
+
+        // The Angry Birds' own. Short, loud and physical: nothing like a Minion's habits.
+        Peck,      // hop up and jab somebody (or the cursor) hard with the beak, twice
+        Fly,       // flap off along the ground, wings beating, feet trailing
+        Launch,    // slingshot launch: crouch, spring high across the sky and land running
+        Rage,      // bristle up, shake and stamp, steam coming off the head
+        Egg,       // strain, lay an egg on the ground, gaze at it proudly
+        Inflate,   // blow up huge and round, wobbling, then let it all out
+        Blast      // Bomb goes off: white flash, bang, smoke, ears ringing
     }
 
     /// <summary>One antic and how often, relative to the others, the walker picks it.</summary>
@@ -163,10 +177,10 @@ namespace IdleWalker.Domain
             Habits = habits;
         }
 
-        /// <summary>Friendly, goofy or Mr. Bean: waves, dances, plays tag, chats.</summary>
+        /// <summary>Friendly, goofy, Mr. Bean or a bird: waves, dances, plays tag, chats.</summary>
         public bool Warm
         {
-            get { return Temperament == Temperament.Friendly || Temperament == Temperament.Goofy || Temperament == Temperament.Eccentric; }
+            get { return Temperament == Temperament.Friendly || Temperament == Temperament.Goofy || Temperament == Temperament.Eccentric || Temperament == Temperament.Feisty; }
         }
 
         /// <summary>Which painter draws it and which body it has.</summary>
@@ -185,8 +199,9 @@ namespace IdleWalker.Domain
         /// switched on in the menu. Tall, thin, in his tweed jacket and red
         /// tie. Shows off Teddy (the Minions come to look), says hello with
         /// a stiff wave, waggles his eyebrows at you, creeps about on tiptoe,
-        /// fusses with his tie and hair, ponders, does the Bean dance, and
-        /// pokes anyone standing quietly - and your cursor - with one finger.
+        /// fusses with his tie and hair, ponders, does the Bean dance, mimes
+        /// driving his Mini and takes your picture - and pokes anyone standing
+        /// quietly, and your cursor, with one finger.
         /// </summary>
         public static readonly Personality Bean =
             new Personality("Mr. Bean", Temperament.Eccentric, Look.Bean,
@@ -194,7 +209,8 @@ namespace IdleWalker.Domain
                             0.95, 0.22, 0.05, 60, 120, 4, 9,
                             0.9, 0.7, 1.0, 0, 1, 1, false, Antic.Poke,
                             H(Antic.Teddy, 3), H(Antic.Hello, 2), H(Antic.Waggle, 2), H(Antic.Sneak, 2),
-                            H(Antic.Fuss, 2), H(Antic.Ponder, 1.5), H(Antic.Jive, 1.5), H(Antic.Look, 1.5),
+                            H(Antic.Fuss, 2), H(Antic.Ponder, 1.5), H(Antic.Jive, 1.5), H(Antic.Drive, 2),
+                            H(Antic.Photo, 1.8), H(Antic.Look, 1.5),
                             H(Antic.Rest, 1), H(Antic.Doze, 1), H(Antic.Whistle, 0.5), H(Antic.Hiccups, 0.5),
                             H(Antic.Sneeze, 0.4));
 
@@ -312,6 +328,97 @@ namespace IdleWalker.Domain
                             H(Antic.Daydream, 3), H(Antic.Dig, 2), H(Antic.Sleepwalk, 1.5), H(Antic.Kiss, 1.5),
                             H(Antic.Doze, 1.2), H(Antic.Scratch, 1), H(Antic.Look, 1), H(Antic.Hiccups, 0.8),
                             H(Antic.Rest, 0.8)),
+        };
+
+        /// <summary>
+        /// The Angry Birds flock, in the order they join as the bird count
+        /// goes up. Red is the first out. Round, hoppy and short-fused: they
+        /// hop more than they walk, flutter down slowly, peck quiet sitters
+        /// and your cursor, squabble, launch, lay eggs, inflate and explode -
+        /// nothing like a Minion's habits.
+        /// </summary>
+        public static readonly Personality[] BirdRoster =
+        {
+            // Red, the leader. Bossy and determined: rages, pecks, launches.
+            new Personality("Red", Temperament.Feisty, new Look(BirdKind.Red),
+                            Expression.Grumpy, Expression.Bored,
+                            1.0, 0.50, 0.1, 4, 10, 4, 9,
+                            1.1, 0.6, 0.8, 0, 1, 1, false, Antic.Peck,
+                            H(Antic.Rage, 2.5), H(Antic.Peck, 2), H(Antic.Launch, 2), H(Antic.Fly, 1),
+                            H(Antic.Look, 1.5), H(Antic.Rest, 1), H(Antic.Dance, 1), H(Antic.Yawn, 0.6),
+                            H(Antic.Sneeze, 0.4)),
+
+            // The Blues, small and blue, no brows: mischievous triplets who prank everyone.
+            new Personality("Blues", Temperament.Feisty, new Look(BirdKind.Blues),
+                            Expression.Happy, Expression.Happy,
+                            1.15, 0.55, 0.05, 3, 8, 4, 8,
+                            1.3, 0.9, 0.9, 0.3, 0.8, 0.8, false, Antic.Peck,
+                            H(Antic.Peck, 2), H(Antic.Fly, 2), H(Antic.Dance, 2), H(Antic.Joy, 1.5),
+                            H(Antic.Taunt, 1), H(Antic.Look, 1.5), H(Antic.Rest, 0.8), H(Antic.Hiccups, 0.5)),
+
+            // Chuck, yellow and triangular-fast. Dashes everywhere, shows off.
+            new Personality("Chuck", Temperament.Feisty, new Look(BirdKind.Chuck),
+                            Expression.Determined, Expression.Bored,
+                            1.35, 0.55, 0.15, 3, 8, 4, 8,
+                            1.4, 0.7, 0.7, 0, 0.9, 0.95, false, Antic.Peck,
+                            H(Antic.Fly, 3), H(Antic.Joy, 2), H(Antic.Peck, 1.5), H(Antic.Dance, 1.5),
+                            H(Antic.Taunt, 1), H(Antic.Look, 1), H(Antic.Rest, 0.7)),
+
+            // Bomb, black and round. Simmers, then goes off with a bang.
+            new Personality("Bomb", Temperament.Feisty, new Look(BirdKind.Bomb),
+                            Expression.Stern, Expression.Sleepy,
+                            0.9, 0.45, 0.05, 5, 12, 5, 10,
+                            1.0, 0.4, 0.5, 0, 1.15, 1.1, false, Antic.Peck,
+                            H(Antic.Blast, 2.5), H(Antic.Rage, 2), H(Antic.Doze, 1.5), H(Antic.Rest, 1.5),
+                            H(Antic.Look, 1)),
+
+            // Matilda, white and motherly. Lays eggs, fusses, keeps the peace.
+            new Personality("Matilda", Temperament.Feisty, new Look(BirdKind.Matilda),
+                            Expression.Serious, Expression.Happy,
+                            0.9, 0.45, 0.05, 5, 12, 5, 10,
+                            1.0, 0.8, 0.6, 0, 1.05, 1.0, false, Antic.Peck,
+                            H(Antic.Egg, 3), H(Antic.Rest, 2), H(Antic.Look, 1.5), H(Antic.Dance, 1),
+                            H(Antic.Rage, 1), H(Antic.Hiccups, 0.5)),
+
+            // Hal, green with a huge beak. Loops about, whistles, pecks.
+            new Personality("Hal", Temperament.Feisty, new Look(BirdKind.Hal),
+                            Expression.Cheerful, Expression.Happy,
+                            1.0, 0.50, 0.1, 4, 10, 4, 9,
+                            1.2, 0.6, 0.7, 0, 1, 1, false, Antic.Peck,
+                            H(Antic.Fly, 2.5), H(Antic.Peck, 2), H(Antic.Whistle, 1.5), H(Antic.Look, 1.5),
+                            H(Antic.Rest, 1)),
+
+            // Terence, huge and silent. Stamps, rages, sits like a rock.
+            new Personality("Terence", Temperament.Feisty, new Look(BirdKind.Terence),
+                            Expression.Stern, Expression.Bored,
+                            0.85, 0.40, 0.1, 6, 14, 5, 11,
+                            1.5, 0.3, 0.4, 0, 1.3, 1.25, false, Antic.Peck,
+                            H(Antic.Rage, 2), H(Antic.Stomp, 2), H(Antic.Rest, 2), H(Antic.Look, 1.5),
+                            H(Antic.Peck, 1)),
+
+            // Bubbles, small and orange. Joyful, bouncy, blows up huge.
+            new Personality("Bubbles", Temperament.Feisty, new Look(BirdKind.Bubbles),
+                            Expression.Happy, Expression.Happy,
+                            1.0, 0.55, 0.05, 3, 8, 4, 8,
+                            1.2, 0.9, 0.8, 0, 0.9, 0.9, false, Antic.Peck,
+                            H(Antic.Inflate, 3), H(Antic.Joy, 2), H(Antic.Dance, 1.5), H(Antic.Peck, 1.5),
+                            H(Antic.Look, 1)),
+
+            // Stella, pink and agile. Flits, dances, waves a wing at you.
+            new Personality("Stella", Temperament.Feisty, new Look(BirdKind.Stella),
+                            Expression.Cheerful, Expression.Happy,
+                            1.05, 0.55, 0.05, 3, 8, 4, 8,
+                            1.2, 0.9, 0.8, 0, 0.95, 0.95, false, Antic.Peck,
+                            H(Antic.Fly, 2), H(Antic.Dance, 2), H(Antic.Wave, 1.5), H(Antic.Peck, 1.5),
+                            H(Antic.Look, 1.5)),
+
+            // Silver, grey falcon, hyperactive inventor. Loops the loop and pecks.
+            new Personality("Silver", Temperament.Feisty, new Look(BirdKind.Silver),
+                            Expression.Cheerful, Expression.Happy,
+                            1.1, 0.55, 0.1, 3, 9, 4, 8,
+                            1.2, 0.7, 1.0, 0.2, 1, 1, false, Antic.Peck,
+                            H(Antic.Fly, 2.5), H(Antic.Launch, 2), H(Antic.Peck, 1.5), H(Antic.Dance, 1.5),
+                            H(Antic.Look, 1.5), H(Antic.Rest, 0.8), H(Antic.Whistle, 0.8)),
         };
     }
 }

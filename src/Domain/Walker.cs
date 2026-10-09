@@ -17,7 +17,8 @@ namespace IdleWalker.Domain
         Huff,      // turned away, hands on hips, grumpy
         Cower,     // crouched with the arms over the head, trembling
         Wince,     // hands clapped to the cheeks, one eye screwed shut: that looked painful (Mr. Bean)
-        Waft       // recoiling, fanning a hand in front of the nose (Mr. Bean)
+        Waft,      // recoiling, fanning a hand in front of the nose (Mr. Bean)
+        Bristle    // feathers puffed, wings half out, beak open: back off (Angry Birds)
     }
 
     /// <summary>Something a walker has set out to do that means walking somewhere first.</summary>
@@ -76,6 +77,7 @@ namespace IdleWalker.Domain
         readonly Personality personality;
         readonly Anatomy body;      // its measurements: eye height, stride, how deep it hides, ...
         readonly bool bean;         // it is Mr. Bean: a head on a neck, long arms, his own ways
+        readonly bool bird;         // it is an Angry Bird: round, hoppy, flutters down slowly
         readonly List<Puff> puffs = new List<Puff>();
 
         Mode mode = Mode.Hidden;
@@ -165,6 +167,7 @@ namespace IdleWalker.Domain
             this.personality = personality;
             body = personality.Anatomy;
             bean = personality.Figure == Figure.Bean;
+            bird = personality.Figure == Figure.Bird;
         }
 
         // ---- What others need to know ----------------------------------------------
@@ -232,7 +235,7 @@ namespace IdleWalker.Domain
                 return antic == Antic.Doze || antic == Antic.Whistle || antic == Antic.Scratch ||
                        antic == Antic.Yawn || antic == Antic.Hiccups || antic == Antic.Daydream ||
                        antic == Antic.Fret || antic == Antic.Dig || antic == Antic.Sleepwalk ||
-                       antic == Antic.Teddy || antic == Antic.Ponder;
+                       antic == Antic.Teddy || antic == Antic.Ponder || antic == Antic.Egg;
             }
         }
 
@@ -396,6 +399,9 @@ namespace IdleWalker.Domain
                 case Temperament.Eccentric:
                     ReactWith(Reaction.Wince, x, 1.8, false);
                     break;
+                case Temperament.Feisty:
+                    ReactWith(Reaction.Bristle, x, 1.6, false);
+                    break;
                 default:
                     ReactWith(Reaction.Jeer, x, 1.8, false);
                     break;
@@ -420,6 +426,9 @@ namespace IdleWalker.Domain
                     break;
                 case Temperament.Eccentric:
                     ReactWith(Reaction.Waft, x, 1.6, false);
+                    break;
+                case Temperament.Feisty:
+                    ReactWith(Reaction.Bristle, x, 1.4, false);
                     break;
                 default:
                     ReactWith(Reaction.Huff, x, 1.2, true);
@@ -537,7 +546,8 @@ namespace IdleWalker.Domain
 
                 case Mode.Air:
                 {
-                    vy += Settings.Gravity * sizeFactor * dt;
+                    // Birds flutter: they fall markedly slower, wings out.
+                    vy += Settings.Gravity * sizeFactor * dt * (bird && vy > 0 ? 0.55 : 1);
                     feetY += vy * dt;
                     MoveX(vx * dt);
                     double ground = world.GroundAt(cx);
@@ -964,6 +974,8 @@ namespace IdleWalker.Domain
                     return -12;   // half turned away, ready to run
                 case Temperament.Eccentric:
                     return 5;     // square on; the head does the looking about
+                case Temperament.Feisty:
+                    return 8 * Math.Sin(time * 1.1);   // perched, shifting from foot to foot
                 default:
                     return (cursorX - cx) * facing >= 0 ? 10 : -10;
             }
@@ -1195,6 +1207,14 @@ namespace IdleWalker.Domain
             if (bean)
             {
                 HelloPose(ref pose, modeTime);
+                return;
+            }
+            if (bird)
+            {
+                // No wings to wave with: a happy bouncing bow instead.
+                pose.BodyDy = Quantise(0.4 * (1 - Math.Cos(modeTime * 2 * Math.PI / 0.45)) / 2);
+                pose.Lean = Math.Round(0.2 * Math.Sin(modeTime * 7) * 8) / 8;
+                pose.StretchY = 1.03;
                 return;
             }
             // Arm up, forearm out to the side so the hand clears the goggles.
@@ -1597,6 +1617,10 @@ namespace IdleWalker.Domain
                         case Temperament.Eccentric:
                             // A long hard stare at whoever did that.
                             SetMood(Expression.Glare, 2.5);
+                            break;
+                        case Temperament.Feisty:
+                            // Bristling fury: pecking order to sort out.
+                            SetMood(Expression.Furious, 2.5);
                             break;
                         default:
                             SetMood(Expression.Furious, 2);

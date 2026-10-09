@@ -168,6 +168,8 @@ Minion appears.
 | Minions: *n* → 1…10 | How many Minions come out (five by default). Raising it brings the new ones out straight away (one at a time); lowering it sends the extras away. Remembered between runs. |
 | Dress: *colour* → Classic blue, Red, Green, Purple, Orange, Pink, Teal, Black, Random, Custom… | The colour of their overalls. Classic blue is the default. A fixed colour applies to everyone at once, even while they are out. Random gives each Minion its own colour every time it comes out; picking Random again re-rolls the ones on screen. Custom… opens the Windows colour picker; the menu then shows the colour as "Custom #RRGGBB". Remembered between runs. |
 | Mr. Bean | Unticked by default. Tick it and Mr. Bean comes out (after the Minions, as an extra; the Minions count is not his). Untick it and he leaves at once; the Minions stay. He and the Minions are independent: either, both or neither can be on. Remembered between runs. See [Mr. Bean](#mr-bean). |
+| Angry Birds | Unticked by default. Tick it and the birds come out (after the Minions; the counts are independent). Untick it and they leave at once. Remembered between runs. See [Angry Birds](#angry-birds). |
+| Birds: *n* → 1…10 | How many birds come out (three by default). Raising it brings the new ones out straight away (one at a time); lowering it sends the extras away. Remembered between runs. |
 | Start with Windows | Ticked: the program starts when you sign in. On by default; untick it to switch it off. See below. |
 | Hot corners | Ticked (the default): pushing the cursor into a corner of any monitor and leaving it there fires that corner's action. Untick it to switch the corners off. Remembered between runs. See [Hot corners](#hot-corners). |
 | Top-left / Top-right / Bottom-left / Bottom-right: *action* | What each corner does: Nothing, Task view, Show desktop, Start menu, Notification centre, Quick settings, Lock screen, Screen saver, Monitor off, or Call the Minions. Defaults: Task view, Notification centre, Start menu, Show desktop. |
@@ -212,18 +214,32 @@ same method as the Minions (lit solids, anti-aliased, see
 [Editing the character](#editing-the-character)) but is a different figure:
 28 units tall to their 18, with long legs that bend at the knee, a brown
 tweed jacket with elbow patches over a white shirt and a thin red tie,
-brown trousers, black shoes, and a round head on a neck with heavy
-eyebrows, big eyes, a long nose, a wide mouth, sticking-out ears and dark
-hair swept back from a high forehead. His head turns and nods on its own,
+brown trousers with pressed creases and turn-ups, black shoes with laces
+and soles, and a round head on a neck with heavy bushy eyebrows, big eyes
+with tired bags, a long bulbous nose, a wide mouth with a chin crease,
+sticking-out ears and dark combed hair swept back from a receding hairline.
+Teddy has a belly patch, inner ears, glinting button eyes and a stitched
+smile. His head turns and nods on its own,
 he can go up on tiptoe, and his arms come forward out of the picture to put
 a hand to his chin, his collar or his chest.
 
 | | |
 |---|---|
 | Resting face | wide-eyed and gormless, lips just parted; a knowing look on a rest, hands clasped in front, rocking on his heels, head turning slowly |
-| Habits, most to least often | **Teddy**: fishes Teddy out of his jacket, holds him up and gazes at him fondly, makes him wave his paw at you with a big grin, tucks him away. **Hello**: his stiff wave - arm straight up beside the head, hand wagging from the wrist, up on his toes, chin up. **Eyebrows**: leans in with his hands behind his back and waggles his eyebrows at you over a smirk. **Sneak**: looks over each shoulder, creeps forward on tiptoe hunched with his hands up, then freezes and whistles innocently. **Fuss**: straightens his tie with both hands, brushes down a lapel, pats his hair. **Ponder**: finger to the chin, eyes rolled up, tapping, then an idea - finger in the air and a "!". **The Bean dance**: elbows pumping, hips twisting, knees bouncing, head bobbing, notes flying. Also looks about, rests, dozes (head nodding right off, Zzz), whistles, gets hiccups, sneezes. He never trips and hardly ever hops. |
+| Habits, most to least often | **Teddy**: fishes Teddy out of his jacket, holds him up and gazes at him fondly, makes him wave his paw at you with a big grin, tucks him away. **Hello**: his stiff wave - arm straight up beside the head, hand wagging from the wrist, up on his toes, chin up. **Eyebrows**: leans in with his hands behind his back and waggles his eyebrows at you over a smirk. **Sneak**: looks over each shoulder, creeps forward on tiptoe hunched with his hands up, then freezes and whistles innocently. **Fuss**: straightens his tie with both hands, brushes down a lapel, pats his hair. **Ponder**: finger to the chin, eyes rolled up, tapping, then an idea - finger in the air and a "!". **The Bean dance**: elbows pumping, hips twisting, knees bouncing, head bobbing, notes flying. **Drive**: mimes his Mini - both hands on the wheel, leaning into the bends, then a long honk ("!"). **Photo**: holds up a box camera, takes your picture (flash!), studies the print and shows it off with a grin. Also looks about, rests, dozes (head nodding right off, Zzz), whistles, gets hiccups, sneezes. He never trips and hardly ever hops. |
 | At your cursor | Walks over and prods it with one finger, twice, examines the finger, then hides his hands behind his back and looks innocent. |
 | With the others | Creeps up on tiptoe on anyone standing quietly (dozing, whistling, daydreaming...) and pokes them in the back; they jump with a "!". The Minions react when Teddy comes out: the friendly ones wave, the calm and timid ones stop to look, the bullies laugh. He greets with his stiff wave, nods with his head, chats (mumbling, gesturing), joins dances with the Bean dance, plays tag, comforts the shoved and is comforted himself. He winces with his hands to his cheeks when he sees a shove, recoils fanning his nose at a toot, and glares when pranked. The bullies charge him like anyone else; shoved, he flies, runs off flailing and sulks until Bob comes over. |
+
+### Angry Birds
+
+Off by default; tick **Angry Birds** in the tray menu and the flock comes out after the Minions (Red first, then the Blues, Chuck, Bomb, Matilda, Hal, Terence, Bubbles, Stella and Silver - **Birds: *n*** picks how many, like the Minions count). All three switches are independent. They are drawn by the same method (lit solids, anti-aliased) but are a different figure, faithful to the classic 2009 designs: LIMBLESS balls of feathers about 14 units tall - no wings, no legs, no feet - with a lighter belly, big front eyes under thick angry brows, a beak that opens, and crest and tail feathers per bird. Chuck is triangular with a swept-back mohawk, Matilda egg-shaped with three hair strands, Hal carries a huge long beak, Bomb a sparking fuse, Terence freckles, the ladies eyelashes and blush cheeks - and the Blues alone have no brows at all, just red eyelids, while Silver is square-ish grey with a red-tipped beak. They hop and roll instead of walking.
+
+| | |
+|---|---|
+| How they move | Nothing like a Minion: with no legs they bounce and roll everywhere, hop instead of stepping, flutter down slowly, and Chuck dashes. |
+| Habits | **Peck**: hops up and jabs twice with the beak. **Fly**: flaps along the ground. **Launch**: slingshot crouch, then springs high and far across the sky (neighbours dive for cover). **Rage**: bristles, shakes and stamps (catching, bird to bird). **Egg** (Matilda's favourite): strains, lays a speckled egg and gazes at it - everyone comes to look, like Teddy. **Inflate** (Bubbles): blows up huge and round, then lets it all out. **Blast** (Bomb): crouches with wings over the head, white flash, bang and smoke (neighbours dive). Plus the staples: look, rest, dance, yawn, whistle, sneeze. |
+| At your cursor | Hops over and pecks it, twice. |
+| With the others | Hop up and peck anyone standing quietly (including egg-layers); the pecked jump with a "!". Puff up and shake when they see a shove or smell a toot, glare furiously when pranked, and Carl the Minion is scared of them like he is of the bullies. They greet with a bouncing bow, nod, chat, dance and play tag with Minions and Bean alike - and a launch or blast sends everyone nearby diving. |
 
 **A mind of their own.** Each walker carries three simple drives that rise
 and fall: *energy* (spent by running, dancing, boxing and the like, won

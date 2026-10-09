@@ -15,6 +15,8 @@ namespace IdleWalker.Platform
         const string WalkersValue = "WalkersEnabled";
         const string MinionsValue = "MinionsEnabled";
         const string BeanValue = "MrBeanEnabled";
+        const string BirdsValue = "BirdsEnabled";
+        const string BirdCountValue = "BirdCount";
         const string CornersValue = "HotCornersEnabled";
         const string DelayValue = "HotCornerDelayMs";
         static readonly string[] CornerValues = { "CornerTopLeft", "CornerTopRight", "CornerBottomLeft", "CornerBottomRight" };
@@ -99,6 +101,27 @@ namespace IdleWalker.Platform
         public static void SaveBeanEnabled(bool on)
         {
             Save(BeanValue, on ? 1 : 0);
+        }
+
+        public static bool LoadBirdsEnabled()
+        {
+            return Load(BirdsValue, Settings.BirdsEnabledByDefault ? 1 : 0) != 0;
+        }
+
+        public static void SaveBirdsEnabled(bool on)
+        {
+            Save(BirdsValue, on ? 1 : 0);
+        }
+
+        public static int LoadBirdCount()
+        {
+            int count = Load(BirdCountValue, Settings.DefaultBirds);
+            return Math.Max(1, Math.Min(Settings.MaxBirds, count));
+        }
+
+        public static void SaveBirdCount(int count)
+        {
+            Save(BirdCountValue, count);
         }
 
         public static bool LoadHotCornersEnabled()

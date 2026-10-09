@@ -27,6 +27,13 @@ namespace IdleWalker.Domain
         public double Tiptoe;             // heels off the ground, 0..1 (Mr. Bean)
         public bool Teddy;                // Teddy in the near hand (Mr. Bean)
         public double TeddyWave;          // Teddy's paw raised, 0..1
+        public bool Wheel;                // mimed Mini steering wheel in front of the chest (Mr. Bean)
+        public double WheelTurn;          // wheel turned, -1..1
+        public bool Camera;               // a small camera in the hands (Mr. Bean)
+        public bool Flash;                // the camera flash going off this frame
+        public bool Egg;                  // a laid egg on the ground in front (birds)
+        public double PuffUp;             // blown up round, 0..1 (Bubbles)
+        public bool BlastFlash;           // the explosion flash going off this frame (Bomb)
         public bool Bubble;               // the "!" overhead
         public double Sweat;              // a drop beside the head: 0 none, else how far it has slid, 0..1
         public bool Zzz, Note, Heart;     // sleep letters floating up; a music note from the mouth; a heart from the mouth
@@ -53,7 +60,8 @@ namespace IdleWalker.Domain
                    PointNear == o.PointNear &&
                    Lean == o.Lean && BodyDy == o.BodyDy && StretchX == o.StretchX && StretchY == o.StretchY &&
                    HeadTurn == o.HeadTurn && HeadDip == o.HeadDip && Tiptoe == o.Tiptoe &&
-                   Teddy == o.Teddy && TeddyWave == o.TeddyWave &&
+                     Teddy == o.Teddy && TeddyWave == o.TeddyWave && Wheel == o.Wheel && WheelTurn == o.WheelTurn &&
+                    Camera == o.Camera && Flash == o.Flash && Egg == o.Egg && PuffUp == o.PuffUp && BlastFlash == o.BlastFlash &&
                    Bubble == o.Bubble && Sweat == o.Sweat &&
                    Zzz == o.Zzz && Note == o.Note && Heart == o.Heart && DecorPhase == o.DecorPhase;
         }

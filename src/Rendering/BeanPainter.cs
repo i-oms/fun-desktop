@@ -295,6 +295,8 @@ namespace IdleWalker.Rendering
             }
             LayFront();
             if (pose.Teddy) Teddy(ub, vb);
+            if (pose.Wheel) WheelProp(ub, vb);
+            if (pose.Camera) CameraProp(ub, vb);
 
             // Things floating about him, in front of everything.
             if (decorated)
@@ -320,6 +322,15 @@ namespace IdleWalker.Rendering
             double k = 0.8 + 0.2 * (1 + legZ[i] / HipX) / 2;   // the far leg a shade darker
             Tube(u, v, hipU[i], HipV, kneeU[i], kneeV[i], ThighR, TrouserR * k, TrouserG * k, TrouserB * k, 0.06, 8);
             Tube(u, v, kneeU[i], kneeV[i], ankleU[i], ankleV[i], ShinR, TrouserR * k, TrouserG * k, TrouserB * k, 0.06, 8);
+            // Trouser crease: a faint pressed line down the front of the shin.
+            {
+                double qx, qy, t;
+                double crease = Seg(u, v, kneeU[i] + 0.15, kneeV[i] - 0.3, ankleU[i] + 0.15, ankleV[i] + 0.9, out qx, out qy, out t) - 0.07;
+                Over(0.42 * k, 0.33 * k, 0.25 * k, Cov(Math.Abs(crease) - 0.05) * 0.55);
+                // Turn-up cuff at the ankle.
+                double cuff = Cov(Math.Max(Math.Abs(v - (ankleV[i] + 0.9)) - 0.12, Math.Abs(u - (ankleU[i] + 0.1)) - 0.85));
+                Over(0.24 * k, 0.18 * k, 0.13 * k, cuff * 0.7);
+            }
 
             // The shoe: a glossy black ellipsoid under the ankle, toe forward;
             // on tiptoe it tips so the toe stays down.
@@ -334,6 +345,19 @@ namespace IdleWalker.Rendering
             double lr, lg, lb;
             Lit(0.09 * k, 0.08 * k, 0.09 * k, nx, ny, nz, 0.6, 22, out lr, out lg, out lb);
             Over(lr, lg, lb, cov);
+            // Sole: a dark strip along the bottom; laces: three dots along the top.
+            Over(0.02, 0.02, 0.025, Cov(Math.Abs((v - (sy - ry + 0.12))) - 0.07) * Cov(Math.Abs(u - sx) - (rx - 0.2)) * cov);
+            for (int lace = -1; lace <= 1; lace++)
+            {
+                double lx0 = sx - 0.15 + lace * 0.38, ly0 = sy + 0.30 - Math.Abs(lace) * 0.06;
+                double ldx = u - lx0, ldy = v - ly0;
+                Over(0.16, 0.14, 0.15, Cov(Math.Sqrt(ldx * ldx + ldy * ldy) - 0.09) * 0.8);
+            }
+            // Toe-cap highlight.
+            {
+                double hx0 = u - (sx + rx * 0.55), hy0 = v - (sy + 0.12);
+                Over(0.35, 0.34, 0.36, Cov(Math.Sqrt(hx0 * hx0 + hy0 * hy0) - 0.16) * 0.5);
+            }
         }
 
         /// <summary>The torso at (u, v): dy is the height above the nearest point of the capsule's axis, dist the distance from it, r its radius there.</summary>
@@ -361,13 +385,27 @@ namespace IdleWalker.Rendering
             }
             else
             {
-                // The tweed: brown with a faint fleck.
-                double fleck = 0.035 * Math.Sin(arc * 7.5) * Math.Sin(v * 7.5);
+                // The tweed: brown herringbone with two fleck frequencies.
+                double fleck = 0.035 * Math.Sin(arc * 7.5) * Math.Sin(v * 7.5)
+                             + 0.022 * Math.Sin(arc * 14 + v * 3.2) * Math.Sin(v * 11.3);
                 cr = CoatR + fleck; cg = CoatG + fleck; cb = CoatB + fleck * 0.6; spec = 0.05; shine = 6;
 
-                // A breast pocket: a short dark slit on the far side of the chest.
+                // A breast pocket: a flap with a dark slit under it, on the far side of the chest.
                 double pocket = Cov(Math.Max(Math.Abs(v - 17.6) - 0.09, Math.Max(-2.0 - arc, arc + 1.1)));
                 Mix(ref cr, ref cg, ref cb, ref spec, ref shine, CoatR * 0.7, CoatG * 0.7, CoatB * 0.7, 0.05, 6, pocket);
+                double flap = Cov(Math.Max(Math.Abs(v - 18.05) - 0.14, Math.Max(-1.95 - arc, arc + 1.15)));
+                Mix(ref cr, ref cg, ref cb, ref spec, ref shine, CoatR * 0.88, CoatG * 0.88, CoatB * 0.88, 0.05, 6, flap);
+
+                // Jacket front buttons below the V, down the centre front.
+                if (v <= VBottom - 0.4)
+                {
+                    double b1x = a, b1y = v - 13.55;
+                    double button1 = Cov(Math.Sqrt(b1x * b1x + b1y * b1y) - 0.17);
+                    Mix(ref cr, ref cg, ref cb, ref spec, ref shine, 0.12, 0.09, 0.07, 0.5, 20, button1);
+                    double b2x = a, b2y = v - 14.05;
+                    double button2 = Cov(Math.Sqrt(b2x * b2x + b2y * b2y) - 0.15);
+                    Mix(ref cr, ref cg, ref cb, ref spec, ref shine, 0.12, 0.09, 0.07, 0.5, 20, button2);
+                }
 
                 if (v > VBottom - 0.4)
                 {
@@ -377,14 +415,22 @@ namespace IdleWalker.Rendering
                                             : 1.25 + (v - CollarV) * 1.5;
                     double lapel = Cov(Math.Max(hw - a, a - hw - 0.6));
                     Mix(ref cr, ref cg, ref cb, ref spec, ref shine, CoatR * 0.82, CoatG * 0.82, CoatB * 0.82, 0.05, 6, lapel);
+                    // Lapel topstitch: a light edge where lapel meets jacket.
+                    double edge = Cov(Math.Abs(a - hw - 0.32) - 0.045);
+                    Mix(ref cr, ref cg, ref cb, ref spec, ref shine, CoatR * 1.12, CoatG * 1.12, CoatB * 1.1, 0.08, 8, edge * lapel);
                     double shirt = Cov(a - hw);
                     Mix(ref cr, ref cg, ref cb, ref spec, ref shine, ShirtR, ShirtG, ShirtB, 0.1, 10, shirt);
 
-                    // The tie: thin, pointed at the bottom, a knot at the top.
+                    // The tie: thin, pointed at the bottom, a knot at the top, faint weave.
                     double tieHw = v < VBottom + 0.6 ? 0.38 * (v - VBottom) / 0.6 : v > CollarV - 0.5 ? 0.52 : 0.38;
                     double tie = Cov(Math.Max(a - tieHw, Math.Max(VBottom - v, v - CollarV - 0.5)));
                     double knot = v > CollarV - 0.5 ? 0.85 : 1;
                     Mix(ref cr, ref cg, ref cb, ref spec, ref shine, TieR * knot, TieG * knot, TieB * knot, 0.3, 14, tie);
+                    double weave = 0.5 + 0.5 * Math.Sin((arc * 5 + v * 7) * 2);
+                    double stripe = tie * (0.10 + 0.10 * weave);
+                    cr -= cr * stripe * 0.4;
+                    cg -= cg * stripe * 0.4;
+                    cb -= cb * stripe * 0.2;
 
                     // A button where the lapels meet.
                     double bx = a - 0.75, by = v - VBottom + 0.1;
@@ -418,16 +464,17 @@ namespace IdleWalker.Rendering
         {
             double dx = u - earU[i], dy = v - EarV;
             double d = Math.Sqrt(dx * dx + dy * dy);
-            double cov = Cov(d - EarR);
+            double cov = Cov(d - (EarR + 0.08));
             if (cov <= 0) return;
             double nx, ny, nz;
-            Normal(dx, dy, EarR, out nx, out ny, out nz);
+            Normal(dx, dy, EarR + 0.08, out nx, out ny, out nz);
             double lr, lg, lb;
             Lit(SkinR * 0.96, SkinG * 0.9, SkinB * 0.88, nx, ny, nz, 0.25, 18, out lr, out lg, out lb);
             Over(lr, lg, lb, cov);
-            // The hollow, a little towards the outside.
+            // The hollow, a little towards the outside, with a rim ridge.
             double ox = dx - (earU[i] > 0 ? 0.1 : -0.1), oy = dy - 0.02;
-            Over(SkinR * 0.6, SkinG * 0.5, SkinB * 0.45, Cov(Math.Sqrt(ox * ox + oy * oy) - 0.2) * 0.55 * cov);
+            Over(SkinR * 0.6, SkinG * 0.5, SkinB * 0.45, Cov(Math.Sqrt(ox * ox + oy * oy) - 0.22) * 0.6 * cov);
+            Over(0.75, 0.58, 0.48, Cov(Math.Abs(Math.Sqrt(ox * ox + oy * oy) - 0.34) - 0.05) * 0.5 * cov);
         }
 
         /// <summary>Signed distance to an ellipse of radii rx, ry, first-order exact.</summary>
@@ -467,7 +514,8 @@ namespace IdleWalker.Rendering
             double hx = mx * cosH - mz * sinH;
             double hz = mx * sinH + mz * cosH;
             double hy = my;
-            double line = hz > 0 ? 0.04 + 0.5 * hz : 0.04 + 0.5 * hz;
+            double line = 0.10 + 0.52 * hz;
+            line += 0.10 * Math.Max(0, hz) * Math.Abs(hx);              // receding temples: higher at the corners
             line -= 0.18 * Math.Max(0, -hx) * Math.Max(0, hz);         // swept down over one side of the forehead
             if (Math.Abs(hx) > 0.75 && hz > 0 && hz < 0.5) line = Math.Min(line, -0.15);   // sideburns
             double keep = Cov((line - hy) * HairRy * 0.8);
@@ -475,11 +523,16 @@ namespace IdleWalker.Rendering
             if (hairCov <= 0) return;
 
             double hr = HairR, hg = HairG, hb = HairB;
+            // Combed strands: faint darker grooves running back from the hairline.
+            double strand = 0.5 + 0.5 * Math.Sin(hx * 22 + hy * 6 + hz * 4);
+            hr *= 1 - 0.12 * strand * hairCov;
+            hg *= 1 - 0.12 * strand * hairCov;
+            hb *= 1 - 0.10 * strand * hairCov;
             // The parting: a thin lighter line running back from the hairline.
-            double part = Cov(Math.Abs(hx - 0.32) - 0.03) * Cov(line + 0.05 - hy) * (hz > -0.2 ? 0.5 : 0);
-            hr += (0.4 - hr) * part;
-            hg += (0.3 - hg) * part;
-            hb += (0.22 - hb) * part;
+            double part = Cov(Math.Abs(hx - 0.32) - 0.035) * Cov(line + 0.05 - hy) * (hz > -0.2 ? 0.65 : 0);
+            hr += (0.42 - hr) * part;
+            hg += (0.32 - hg) * part;
+            hb += (0.24 - hb) * part;
             double r, g, b;
             Lit(hr, hg, hb, mx, my, mz, 0.35, 12, out r, out g, out b);
             Over(r, g, b, hairCov);
@@ -567,9 +620,12 @@ namespace IdleWalker.Rendering
             double rim = Cov(Math.Abs(white) - 0.07) * (dy > 0.1 ? 0.85 : 0.4) * vis;
             Over(0.22, 0.13, 0.1, rim);
             double crease = Ellipse(dx, dy - 0.2, EyeRx + 0.12, EyeRy + 0.12);
-            Over(0.62, 0.44, 0.34, Cov(Math.Abs(crease) - 0.05) * (dy > 0.3 ? 0.6 : 0) * vis);
+            Over(0.60, 0.42, 0.32, Cov(Math.Abs(crease) - 0.05) * (dy > 0.3 ? 0.7 : 0) * vis);
             double bag = Ellipse(dx, dy + 0.12, EyeRx + 0.05, EyeRy + 0.1);
-            Over(0.72, 0.54, 0.44, Cov(Math.Abs(bag) - 0.05) * (dy < -0.35 ? 0.45 : 0) * vis);
+            Over(0.70, 0.52, 0.42, Cov(Math.Abs(bag) - 0.05) * (dy < -0.35 ? 0.6 : 0) * vis);
+            // Tired lower bags: a second, fainter fold under each eye.
+            double bag2 = Ellipse(dx, dy + 0.32, EyeRx + 0.02, EyeRy + 0.12);
+            Over(0.74, 0.57, 0.47, Cov(Math.Abs(bag2) - 0.045) * (dy < -0.5 ? 0.4 : 0) * vis);
         }
 
         // Heavy dark brows above each eye, raised, angled and lifted one at
@@ -594,10 +650,13 @@ namespace IdleWalker.Rendering
             double mx = ex + outward * 0.15 * k, my = cy + 0.12;
             double bx = ex + outward * 1.05 * k, by = cy + face.BrowAngle * 0.4 - 0.1;
             double qx, qy, t;
-            double d1 = Seg(u, v, ax, ay, mx, my, out qx, out qy, out t) - (0.3 + 0.06 * t);
-            double d2 = Seg(u, v, mx, my, bx, by, out qx, out qy, out t) - (0.36 - 0.26 * t);
+            double d1 = Seg(u, v, ax, ay, mx, my, out qx, out qy, out t) - (0.38 + 0.07 * t);
+            double d2 = Seg(u, v, mx, my, bx, by, out qx, out qy, out t) - (0.44 - 0.32 * t);
             double cov = Cov(Math.Min(d1, d2)) * show;
-            Over(0.12, 0.08, 0.06, cov);
+            Over(0.11, 0.07, 0.055, cov);
+            // Bushy lower edge: a softer, lighter fringe under the main mass.
+            double fringe = Cov(Math.Min(d1 + 0.22, d2 + 0.22)) * (1 - cov) * show;
+            Over(0.23, 0.15, 0.11, fringe * 0.6);
         }
 
         // A long nose: a tube from the bridge to the tip, standing out from
@@ -612,7 +671,7 @@ namespace IdleWalker.Rendering
             if (Math.Abs(u - tu) > 1.4 || v > bv + 0.6 || v < tv - 0.9) return;
             double qx, qy, t;
             double dist = Seg(u, v, bu, bv, tu, tv, out qx, out qy, out t);
-            double radius = 0.28 + 0.2 * t * t;   // narrow at the bridge, bulbous at the tip
+            double radius = 0.27 + 0.30 * t * t;   // narrow at the bridge, bulbous at the tip
             double cov = Cov(dist - radius) * vis;
             if (cov > 0)
             {
@@ -623,12 +682,15 @@ namespace IdleWalker.Rendering
                 Over(lr, lg, lb, cov);
                 // The shaded side of the bridge, so it stands off the face from the front.
                 Over(0.6, 0.4, 0.3, cov * 0.35 * Math.Max(0, (u - qx) * flip / radius) * (1 - t));
+                // A small highlight on the tip.
+                double hx0 = u - tu + 0.12 * flip, hy0 = v - tv - 0.12;
+                Over(1, 0.9, 0.82, Cov(Math.Sqrt(hx0 * hx0 + hy0 * hy0) - 0.12) * 0.5 * vis);
             }
             // The nostrils' shadows under the tip.
             double sx = u - tu - 0.3 * cosH + 0.1 * sinH, sy = v - tv + 0.36;
-            Over(0.5, 0.28, 0.2, Cov(Math.Sqrt(sx * sx + sy * sy) - 0.14) * 0.5 * vis);
+            Over(0.48, 0.26, 0.19, Cov(Math.Sqrt(sx * sx + sy * sy) - 0.17) * 0.6 * vis);
             sx = u - tu + 0.3 * cosH + 0.1 * sinH;
-            Over(0.5, 0.28, 0.2, Cov(Math.Sqrt(sx * sx + sy * sy) - 0.14) * 0.5 * vis);
+            Over(0.48, 0.26, 0.19, Cov(Math.Sqrt(sx * sx + sy * sy) - 0.17) * 0.6 * vis);
         }
 
         void Mouth(double u, double v)
@@ -655,6 +717,9 @@ namespace IdleWalker.Rendering
                 Over(0.45, 0.2, 0.18, cov * vis);
                 // A thin lower lip catching the light under the line.
                 Over(0.9, 0.62, 0.55, Cov(Math.Sqrt(ox * ox + (oy + 0.22) * (oy + 0.22)) - 0.1) * 0.5 * vis);
+                // Chin crease: a short shadow under the lip so the chin reads.
+                double chx = u - mu, chy = v - line + 0.62;
+                Over(0.68, 0.50, 0.42, Cov(Math.Sqrt(chx * chx * 0.6 + chy * chy) - 0.12) * 0.45 * vis);
                 return;
             }
 
@@ -743,13 +808,17 @@ namespace IdleWalker.Rendering
             Sort(hr, hg, hb, cov, handZ[i] + hnz * HandR);
         }
 
-        // Teddy, sitting in the near hand: a round body, a round head with
-        // two ears, a lighter muzzle, button eyes, and one paw that waves.
+        // Teddy, sitting in the near hand: a round body with a lighter belly,
+        // a round head with two ears, a lighter muzzle, button eyes with a
+        // glint, a stitched nose and smile, and one paw that waves.
         void Teddy(double u, double v)
         {
             double tx = handU[1] + 0.2, ty = handV[1] + 0.55;
             if (Math.Abs(u - tx) > 1.8 || v < ty - 1.2 || v > ty + 2.4) return;
 
+            // The legs dangle below the body.
+            Tube(u, v, tx - 0.35, ty - 0.5, tx - 0.55, ty - 1.0, 0.19, TeddyR * 0.92, TeddyG * 0.92, TeddyB * 0.92, 0.1, 8);
+            Tube(u, v, tx + 0.35, ty - 0.5, tx + 0.55, ty - 1.0, 0.19, TeddyR * 0.92, TeddyG * 0.92, TeddyB * 0.92, 0.1, 8);
             // The paws: one held out, one waving.
             double ang = (25 + 85 * pose.TeddyWave) * Deg;
             double px0 = tx + 0.55, py0 = ty + 0.3;
@@ -757,19 +826,109 @@ namespace IdleWalker.Rendering
             Tube(u, v, tx - 0.55, ty + 0.1, tx - 1.1, ty - 0.35, 0.2, TeddyR, TeddyG, TeddyB, 0.1, 8);
 
             Ball(u, v, tx, ty, 0.85, TeddyR, TeddyG, TeddyB, 0.1, 8);
+            // Belly patch.
+            {
+                double bx = (u - tx) / 0.55, by = (v - (ty - 0.1)) / 0.6;
+                double belly = (Math.Sqrt(bx * bx + by * by) - 1) * 0.6;
+                Over(0.86, 0.71, 0.50, Cov(belly) * 0.9);
+            }
             double hx = tx + 0.05, hy = ty + 1.3;
             Ball(u, v, hx - 0.52, hy + 0.45, 0.23, TeddyR * 0.9, TeddyG * 0.9, TeddyB * 0.9, 0.1, 8);
             Ball(u, v, hx + 0.52, hy + 0.45, 0.23, TeddyR * 0.9, TeddyG * 0.9, TeddyB * 0.9, 0.1, 8);
+            // Inner ears.
+            {
+                double ix = u - (hx - 0.52), iy = v - (hy + 0.45);
+                Over(0.85, 0.68, 0.48, Cov(Math.Sqrt(ix * ix + iy * iy) - 0.11));
+                ix = u - (hx + 0.52);
+                Over(0.85, 0.68, 0.48, Cov(Math.Sqrt(ix * ix + iy * iy) - 0.11));
+            }
             Ball(u, v, hx, hy, 0.65, TeddyR, TeddyG, TeddyB, 0.1, 8);
             Ball(u, v, hx + 0.08, hy - 0.15, 0.28, 0.88, 0.74, 0.52, 0.1, 8);
 
-            // Button eyes and a nose.
+            // Button eyes with a glint, and a stitched nose.
             double ex = u - hx + 0.22, ey = v - hy - 0.15;
-            Over(0.1, 0.07, 0.06, Cov(Math.Sqrt(ex * ex + ey * ey) - 0.08));
+            Over(0.1, 0.07, 0.06, Cov(Math.Sqrt(ex * ex + ey * ey) - 0.085));
+            Over(1, 1, 1, Cov(Math.Sqrt((ex + 0.03) * (ex + 0.03) + (ey - 0.03) * (ey - 0.03)) - 0.025) * 0.9);
             ex = u - hx - 0.26;
-            Over(0.1, 0.07, 0.06, Cov(Math.Sqrt(ex * ex + ey * ey) - 0.08));
+            Over(0.1, 0.07, 0.06, Cov(Math.Sqrt(ex * ex + ey * ey) - 0.085));
+            Over(1, 1, 1, Cov(Math.Sqrt((ex + 0.03) * (ex + 0.03) + (ey - 0.03) * (ey - 0.03)) - 0.025) * 0.9);
             ex = u - hx - 0.08; ey = v - hy + 0.05;
             Over(0.15, 0.09, 0.07, Cov(Math.Sqrt(ex * ex + ey * ey) - 0.09));
+            // Stitched smile under the nose.
+            {
+                double smileY = hy - 0.28;
+                double qx, qy, t;
+                double d1 = Seg(u, v, hx - 0.08, smileY, hx - 0.28, smileY - 0.14, out qx, out qy, out t);
+                double d2 = Seg(u, v, hx - 0.08, smileY, hx + 0.14, smileY - 0.14, out qx, out qy, out t);
+                Over(0.25, 0.14, 0.10, Cov(Math.Min(d1, d2) - 0.02) * 0.8);
+            }
+        }
+
+        // The Mini's steering wheel, held in both hands: a dark rim with
+        // three spokes round a hub, turned by WheelTurn.
+        void WheelProp(double u, double v)
+        {
+            double wx = 0.5, wy = 16.2;
+            if (Math.Abs(u - wx) > 2.6 || Math.Abs(v - wy) > 2.6) return;
+            double dx = u - wx, dy = v - wy;
+            double ring = Math.Abs(Math.Sqrt(dx * dx + dy * dy) - 1.15) - 0.16;
+            double cov = Cov(ring);
+            if (cov > 0)
+            {
+                double nx, ny, nz;
+                Normal(dx, dy, 1.15, out nx, out ny, out nz);
+                double lr, lg, lb;
+                Lit(0.16, 0.15, 0.17, nx, ny, nz, 0.5, 20, out lr, out lg, out lb);
+                Over(lr, lg, lb, cov);
+            }
+            double turn = pose.WheelTurn * 0.9;
+            for (int s = 0; s < 3; s++)
+            {
+                double a = turn + s * 2 * Math.PI / 3;
+                double bx = wx + 1.05 * Math.Cos(a), by = wy + 1.05 * Math.Sin(a);
+                double qx, qy, t;
+                double spoke = Seg(u, v, wx, wy, bx, by, out qx, out qy, out t) - 0.09;
+                Over(0.22, 0.21, 0.23, Cov(spoke) * 0.95);
+            }
+            Ball(u, v, wx, wy, 0.26, 0.25, 0.24, 0.26, 0.5, 20);
+        }
+
+        // A small box camera held up in both hands, with a lens and a flash
+        // that fires white for one beat while pose.Flash is set.
+        void CameraProp(double u, double v)
+        {
+            double cx0 = (handU[0] + handU[1]) / 2;
+            double cy0 = (handV[0] + handV[1]) / 2 + 0.3;
+            if (Math.Abs(u - cx0) > 3.2 || Math.Abs(v - cy0) > 3.2) return;
+            double body = RoundRect(u - cx0, v - cy0, 0.85, 0.55, 0.16);
+            double covBody = Cov(body);
+            if (covBody > 0)
+            {
+                double nx, ny, nz;
+                Normal(u - cx0, v - cy0, 0.9, out nx, out ny, out nz);
+                double lr, lg, lb;
+                Lit(0.18, 0.17, 0.19, nx, ny, nz, 0.55, 22, out lr, out lg, out lb);
+                Over(lr, lg, lb, covBody);
+                // Top strip and shutter button.
+                Over(0.32, 0.31, 0.33, Cov(Math.Abs((v - cy0) - 0.42) - 0.07) * Cov(Math.Abs(u - cx0) - 0.7) * covBody);
+                double shx = u - (cx0 + 0.55), shy = v - (cy0 + 0.62);
+                Over(0.7, 0.12, 0.14, Cov(Math.Sqrt(shx * shx + shy * shy) - 0.11));
+            }
+            // Lens: dark glass with a glint.
+            {
+                double lx = u - cx0, ly = v - cy0;
+                double lens = Math.Sqrt(lx * lx + ly * ly) - 0.34;
+                Over(0.05, 0.07, 0.10, Cov(lens));
+                Over(0.45, 0.6, 0.85, Cov(Math.Sqrt((lx + 0.1) * (lx + 0.1) + (ly - 0.1) * (ly - 0.1)) - 0.08) * 0.8);
+                Over(1, 1, 1, Cov(Math.Sqrt((lx + 0.12) * (lx + 0.12) + (ly - 0.12) * (ly - 0.12)) - 0.035) * 0.9);
+            }
+            if (pose.Flash)
+            {
+                double fx = u - (cx0 - 0.55), fy = v - (cy0 + 0.25);
+                double flash = Math.Sqrt(fx * fx + fy * fy);
+                Over(1, 1, 1, Cov(flash - 0.9));
+                Over(1, 1, 1, Cov(Math.Abs(flash - 1.2) - 0.12) * 0.9);
+            }
         }
 
         /// <summary>A lit sphere, in front of everything.</summary>

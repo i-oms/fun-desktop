@@ -25,6 +25,8 @@ namespace IdleWalker.App
         readonly ToolStripMenuItem dressMenu = new ToolStripMenuItem("Dress");
         readonly ToolStripMenuItem customItem = new ToolStripMenuItem("Custom...");
         readonly ToolStripMenuItem beanItem = new ToolStripMenuItem("Mr. Bean");
+        readonly ToolStripMenuItem birdsItem = new ToolStripMenuItem("Angry Birds");
+        readonly ToolStripMenuItem birdCountMenu = new ToolStripMenuItem("Birds");
         int[] customPalette;         // the colour dialog's own swatches, kept between openings
 
         // The hot corners.
@@ -36,10 +38,12 @@ namespace IdleWalker.App
         readonly ToolStripMenuItem startupItem = new ToolStripMenuItem("Start with Windows");
         IntPtr iconHandle;
         int count;
+        int birdCount;
         int idleSeconds;
         int dress;
         readonly CornerAction[] actions = new CornerAction[CornerNames.Length];
         int delayMs;
+        bool closeAllowed;      // true only for the click that should really dismiss the menu (About / Exit / picker)
 
         public event EventHandler ExitRequested;
         public event EventHandler WalkersToggled;
@@ -48,6 +52,8 @@ namespace IdleWalker.App
         public event EventHandler IdleChanged;
         public event EventHandler DressChanged;
         public event EventHandler BeanToggled;
+        public event EventHandler BirdsToggled;
+        public event EventHandler BirdCountChanged;
         public event EventHandler HotCornersToggled;
         public event Action<Corner> CornerChanged;
         public event EventHandler DelayChanged;
@@ -89,6 +95,18 @@ namespace IdleWalker.App
             get { return beanItem.Checked; }
         }
 
+        /// <summary>True while the Angry Birds are switched on (independently of the rest).</summary>
+        public bool BirdsEnabled
+        {
+            get { return birdsItem.Checked; }
+        }
+
+        /// <summary>How many birds the user wants (1..Settings.MaxBirds).</summary>
+        public int BirdCount
+        {
+            get { return birdCount; }
+        }
+
         /// <summary>True while the hot corners are switched on.</summary>
         public bool HotCornersEnabled
         {
@@ -107,7 +125,8 @@ namespace IdleWalker.App
             get { return delayMs; }
         }
 
-        public TrayMenu(int initialCount, int initialIdleSeconds, int initialDress, bool walkersOn, bool minionsOn, bool beanOn,
+        public TrayMenu(int initialCount, int initialBirdCount, int initialIdleSeconds, int initialDress,
+                        bool walkersOn, bool minionsOn, bool beanOn, bool birdsOn,
                         bool cornersOn, CornerAction[] initialActions, int initialDelayMs)
         {
             // ---- The walkers: the master switch ----
@@ -124,6 +143,21 @@ namespace IdleWalker.App
             beanItem.Checked = beanOn;
             beanItem.CheckOnClick = true;
             beanItem.CheckedChanged += delegate { Raise(BeanToggled); };
+
+            // ---- The Angry Birds ----
+            birdsItem.Checked = birdsOn;
+            birdsItem.CheckOnClick = true;
+            birdsItem.CheckedChanged += OnBirdsToggled;
+
+            birdCount = Math.Max(1, Math.Min(Settings.MaxBirds, initialBirdCount));
+            for (int b = 1; b <= Settings.MaxBirds; b++)
+            {
+                ToolStripMenuItem item = new ToolStripMenuItem(b.ToString());
+                item.Tag = b;
+                item.Click += OnBirdCountClick;
+                birdCountMenu.DropDownItems.Add(item);
+            }
+            ShowBirdCount();
 
             count = initialCount;
             for (int n = 1; n <= Settings.MaxWalkers; n++)
@@ -204,6 +238,8 @@ namespace IdleWalker.App
             menu.Items.Add(countMenu);
             menu.Items.Add(dressMenu);
             menu.Items.Add(beanItem);
+            menu.Items.Add(birdsItem);
+            menu.Items.Add(birdCountMenu);
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(cornersItem);
             foreach (ToolStripMenuItem cornerMenu in cornerMenus) menu.Items.Add(cornerMenu);
@@ -213,6 +249,17 @@ namespace IdleWalker.App
             menu.Items.Add("About", null, OnAboutClick);
             menu.Items.Add("Exit", null, OnExitClick);
             ShowEnabled();
+
+            // Sticky menu: clicks on settings keep it open, only a click
+            // outside (or Esc, About, Exit, the colour picker) dismisses it.
+            menu.Closing += OnDropDownClosing;
+            menu.Closed += delegate { closeAllowed = false; };
+            foreach (ToolStripItem top in menu.Items)
+            {
+                ToolStripMenuItem holder = top as ToolStripMenuItem;
+                if (holder != null && holder.HasDropDownItems)
+                    holder.DropDown.Closing += OnDropDownClosing;
+            }
 
             iconHandle = RenderIcon();
             icon.Icon = Icon.FromHandle(iconHandle);
@@ -248,10 +295,13 @@ namespace IdleWalker.App
             idleMenu.Enabled = walkers;
             minionsItem.Enabled = walkers;
             beanItem.Enabled = walkers;
+            birdsItem.Enabled = walkers;
 
             bool minions = walkers && minionsItem.Checked;
             countMenu.Enabled = minions;
             dressMenu.Enabled = minions;
+
+            birdCountMenu.Enabled = walkers && birdsItem.Checked;
 
             bool corners = cornersItem.Checked;
             foreach (ToolStripMenuItem cornerMenu in cornerMenus) cornerMenu.Enabled = corners;
@@ -268,6 +318,12 @@ namespace IdleWalker.App
         {
             ShowEnabled();
             Raise(MinionsToggled);
+        }
+
+        void OnBirdsToggled(object sender, EventArgs e)
+        {
+            ShowEnabled();
+            Raise(BirdsToggled);
         }
 
         void OnCornersToggled(object sender, EventArgs e)
@@ -292,6 +348,22 @@ namespace IdleWalker.App
             count = chosen;
             ShowCount();
             Raise(CountChanged);
+        }
+
+        void ShowBirdCount()
+        {
+            birdCountMenu.Text = "Birds: " + birdCount;
+            foreach (ToolStripMenuItem item in birdCountMenu.DropDownItems)
+                item.Checked = (int)item.Tag == birdCount;
+        }
+
+        void OnBirdCountClick(object sender, EventArgs e)
+        {
+            int chosen = (int)((ToolStripMenuItem)sender).Tag;
+            if (chosen == birdCount) return;
+            birdCount = chosen;
+            ShowBirdCount();
+            Raise(BirdCountChanged);
         }
 
         /// <summary>"1 second", "2 seconds", "1 minute", "5 minutes".</summary>
@@ -347,6 +419,9 @@ namespace IdleWalker.App
         /// <summary>The standard colour dialog, starting from the current overalls colour.</summary>
         void OnCustomDressClick(object sender, EventArgs e)
         {
+            // A modal dialog cannot share mouse capture with the open menu,
+            // so this one click is allowed to dismiss it first.
+            AllowCloseAndHide();
             int start = IsCustom(dress) ? dress : Settings.DressColors[0];
             using (ColorDialog dialog = new ColorDialog())
             {
@@ -436,15 +511,36 @@ namespace IdleWalker.App
 
         void OnAboutClick(object sender, EventArgs e)
         {
+            AllowCloseAndHide();
             Raise(AboutRequested);
         }
 
         void OnExitClick(object sender, EventArgs e)
         {
+            AllowCloseAndHide();
             Raise(ExitRequested);
         }
 
         // ---- Helpers ----
+
+        /// <summary>
+        /// Cancels the automatic dismissal when a settings item is clicked,
+        /// so the menu stays open. Clicks outside the menu, Esc, and the
+        /// clicks explicitly allowed via <see cref="AllowCloseAndHide"/>
+        /// still close it.
+        /// </summary>
+        void OnDropDownClosing(object sender, ToolStripDropDownClosingEventArgs e)
+        {
+            if (e.CloseReason == ToolStripDropDownCloseReason.ItemClicked && !closeAllowed)
+                e.Cancel = true;
+        }
+
+        /// <summary>Let the in-progress click dismiss the menu (About, Exit, colour picker).</summary>
+        void AllowCloseAndHide()
+        {
+            closeAllowed = true;
+            if (menu.Visible) menu.Close();
+        }
 
         /// <summary>Ticks the submenu entry whose Tag is `value` and unticks the rest.</summary>
         static void Tick(ToolStripMenuItem submenu, int value)

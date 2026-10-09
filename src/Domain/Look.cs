@@ -17,7 +17,23 @@ namespace IdleWalker.Domain
     enum Figure
     {
         Minion,   // a yellow capsule in overalls and goggles
-        Bean      // a tall thin man in a tweed jacket: Mr. Bean
+        Bean,     // a tall thin man in a tweed jacket: Mr. Bean
+        Bird      // a round Angry Bird with a beak, crest and tail
+    }
+
+    /// <summary>Which Angry Bird: its colours and feathers come from this.</summary>
+    enum BirdKind
+    {
+        Red,      // the red leader with black brows and two head feathers
+        Blues,    // Jay, Jake and Jim: small, blue, no brows, two big head feathers
+        Chuck,    // yellow and fast, with a black mohawk
+        Bomb,     // black and round, with a fuse on top
+        Matilda,  // white and motherly, with a pink-cheeked head feather
+        Hal,      // green with a long orange beak
+        Terence,  // huge and dark red with freckles
+        Bubbles,  // small and orange, blows up big
+        Stella,   // pink and agile, with a feather bow
+        Silver    // grey falcon with a red-tipped beak and slicked-back crest
     }
 
     /// <summary>
@@ -61,6 +77,9 @@ namespace IdleWalker.Domain
 
         /// <summary>Tall and thin, long legs, a head on a neck.</summary>
         public static readonly Anatomy Bean = new Anatomy(28, 24.9, 23.0, 19.4, 11, 8, 30, 22, 16, 56, 5.0);
+
+        /// <summary>Round and hoppy: a ball of feathers with its eyes up top and a beak in front.</summary>
+        public static readonly Anatomy Bird = new Anatomy(14, 10.2, 7.6, 8.4, 2.5, 8, 16, 9, 8, 48, 5.2);
     }
 
     /// <summary>What a walker is born with: its kind of figure and, for a Minion, how many eyes, their colour, its hair.</summary>
@@ -74,6 +93,7 @@ namespace IdleWalker.Domain
         public readonly Figure Figure;
         public readonly bool OneEye;
         public readonly HairStyle Hair;
+        public readonly BirdKind Kind;
 
         /// <summary>Iris colours (RGB) of the eye further from the viewer and the nearer one.</summary>
         public readonly int FarIris, NearIris;
@@ -83,8 +103,18 @@ namespace IdleWalker.Domain
             Figure = Figure.Minion;
             OneEye = oneEye;
             Hair = hair;
+            Kind = BirdKind.Red;
             FarIris = farIris;
             NearIris = nearIris;
+        }
+
+        public Look(BirdKind kind)
+        {
+            Figure = Figure.Bird;
+            OneEye = false;
+            Hair = HairStyle.None;
+            Kind = kind;
+            FarIris = NearIris = Brown;
         }
 
         public Look(bool oneEye, HairStyle hair, int iris)
@@ -102,6 +132,7 @@ namespace IdleWalker.Domain
             Figure = figure;
             OneEye = false;
             Hair = HairStyle.None;
+            Kind = BirdKind.Red;
             FarIris = NearIris = Brown;
         }
 
@@ -111,7 +142,7 @@ namespace IdleWalker.Domain
         /// <summary>The body this figure has.</summary>
         public Anatomy Anatomy
         {
-            get { return Figure == Figure.Bean ? Anatomy.Bean : Anatomy.Minion; }
+            get { return Figure == Figure.Bean ? Anatomy.Bean : Figure == Figure.Bird ? Anatomy.Bird : Anatomy.Minion; }
         }
 
         /// <summary>

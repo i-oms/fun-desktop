@@ -43,9 +43,11 @@ namespace IdleWalker.App
         {
             troupe = new Troupe(monitors, new Random());
             troupe.Count = UserSettings.LoadWalkerCount();
+            troupe.BirdCount = UserSettings.LoadBirdCount();
             troupe.Dress = UserSettings.LoadDress();
             troupe.MinionsEnabled = UserSettings.LoadMinionsEnabled();
             troupe.BeanEnabled = UserSettings.LoadBeanEnabled();
+            troupe.BirdsEnabled = UserSettings.LoadBirdsEnabled();
 
             CornerAction[] actions = new CornerAction[4];
             for (int c = 0; c < actions.Length; c++) actions[c] = UserSettings.LoadCornerAction((Corner)c);
@@ -55,8 +57,8 @@ namespace IdleWalker.App
             // Before the menu reads the tick state.
             StartupRegistration.ApplyDefault();
 
-            tray = new TrayMenu(troupe.Count, UserSettings.LoadIdleSeconds(), troupe.Dress,
-                                UserSettings.LoadWalkersEnabled(), troupe.MinionsEnabled, troupe.BeanEnabled,
+            tray = new TrayMenu(troupe.Count, troupe.BirdCount, UserSettings.LoadIdleSeconds(), troupe.Dress,
+                                UserSettings.LoadWalkersEnabled(), troupe.MinionsEnabled, troupe.BeanEnabled, troupe.BirdsEnabled,
                                 UserSettings.LoadHotCornersEnabled(), actions, delayMs);
             tray.ExitRequested += delegate { ExitThread(); };
             tray.WalkersToggled += delegate { UserSettings.SaveWalkersEnabled(tray.WalkersEnabled); };
@@ -80,6 +82,16 @@ namespace IdleWalker.App
             {
                 troupe.BeanEnabled = tray.BeanEnabled;
                 UserSettings.SaveBeanEnabled(tray.BeanEnabled);
+            };
+            tray.BirdsToggled += delegate
+            {
+                troupe.BirdsEnabled = tray.BirdsEnabled;
+                UserSettings.SaveBirdsEnabled(tray.BirdsEnabled);
+            };
+            tray.BirdCountChanged += delegate
+            {
+                troupe.BirdCount = tray.BirdCount;
+                UserSettings.SaveBirdCount(tray.BirdCount);
             };
             tray.HotCornersToggled += delegate
             {

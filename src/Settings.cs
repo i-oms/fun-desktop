@@ -26,6 +26,12 @@ namespace IdleWalker
         /// <summary>How many come out until the user picks another number.</summary>
         public const int DefaultWalkers = 5;
 
+        /// <summary>How many Angry Birds can be out at once (the tray menu offers 1..MaxBirds).</summary>
+        public const int MaxBirds = 10;
+
+        /// <summary>How many birds come out until the user picks another number.</summary>
+        public const int DefaultBirds = 3;
+
         /// <summary>
         /// The overalls colours the Dress menu offers, by name, as 0xRRGGBB. The
         /// first is the default - the classic blue. The menu also offers Random
@@ -45,6 +51,9 @@ namespace IdleWalker
 
         /// <summary>Whether Mr. Bean is on until the tray menu says otherwise. He and the Minions are independent of each other.</summary>
         public const bool MrBeanByDefault = false;
+
+        /// <summary>Whether the Angry Birds are on until the tray menu says otherwise. Independent of the Minions and Mr. Bean.</summary>
+        public const bool BirdsEnabledByDefault = false;
 
         /// <summary>Whether the hot corners are on until the tray menu says otherwise.</summary>
         public const bool HotCornersByDefault = true;

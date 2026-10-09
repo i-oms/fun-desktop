@@ -58,6 +58,9 @@ namespace IdleWalker.Domain
                         case Antic.Stomp: case Antic.Laugh: case Antic.Boo: case Antic.Trip:
                         case Antic.Strum: case Antic.Pushups: case Antic.Jog: case Antic.Flap:
                         case Antic.Dig: case Antic.Moonwalk: case Antic.Jive: case Antic.Sneak:
+                        case Antic.Drive: case Antic.Photo:
+                        case Antic.Peck: case Antic.Fly: case Antic.Launch: case Antic.Rage:
+                        case Antic.Inflate: case Antic.Blast:
                             drain = 0.08;
                             gain = 0;
                             break;
@@ -95,9 +98,12 @@ namespace IdleWalker.Domain
             double d = same ? Math.Abs(other.CentreX - cx) : double.MaxValue;
             Temperament tm = personality.Temperament;
 
-            // The timid one keeps well away from the bullies: hides if one is
-            // close, otherwise turns and walks the other way, glancing back.
-            if (same && tm == Temperament.Timid && other.Temperament == Temperament.Aggressive && d < 380 * sizeFactor)
+            // The timid one keeps well away from the bullies - and the birds,
+            // who are just as scary with a beak: hides if one is close,
+            // otherwise turns and walks the other way, glancing back.
+            if (same && tm == Temperament.Timid &&
+                (other.Temperament == Temperament.Aggressive || other.Temperament == Temperament.Feisty) &&
+                d < 380 * sizeFactor)
             {
                 if (d < 160 * sizeFactor || rng.NextDouble() < 0.35) StartAntic(Antic.Hide);
                 else if ((other.CentreX - cx) * facing > 0)
@@ -110,9 +116,10 @@ namespace IdleWalker.Domain
             }
 
             // A bully with somebody standing quietly in range creeps up on
-            // them to shout boo; Mr. Bean creeps up to give them a poke.
-            if (same && (tm == Temperament.Aggressive || tm == Temperament.Eccentric) && other.IsQuiet &&
-                d > 1.6 * BodyWidth && d < 450 * sizeFactor && energy > 0.4 && rng.NextDouble() < (bean ? 0.5 : 0.6))
+            // them to shout boo; Mr. Bean creeps up to give them a poke, and
+            // a bird hops up to give them a peck.
+            if (same && (tm == Temperament.Aggressive || tm == Temperament.Eccentric || tm == Temperament.Feisty) && other.IsQuiet &&
+                d > 1.6 * BodyWidth && d < 450 * sizeFactor && energy > 0.4 && rng.NextDouble() < (bean || bird ? 0.5 : 0.6))
             {
                 SetGoal(Goal.Prank, other);
                 return;
@@ -194,6 +201,11 @@ namespace IdleWalker.Domain
                 case Antic.Moonwalk:
                 case Antic.Dig:
                 case Antic.Jive:
+                case Antic.Drive:
+                case Antic.Fly:
+                case Antic.Launch:
+                case Antic.Inflate:
+                case Antic.Blast:
                     return habit.Weight * (0.25 + 1.2 * energy);
                 case Antic.Wave:
                 case Antic.Point:
@@ -202,6 +214,7 @@ namespace IdleWalker.Domain
                 case Antic.Kiss:
                 case Antic.Hello:
                 case Antic.Waggle:
+                case Antic.Photo:
                     return habit.Weight * (0.5 + curiosity);
                 default:
                     return habit.Weight;
@@ -313,9 +326,9 @@ namespace IdleWalker.Domain
                     break;
                 }
                 case Goal.Prank:
-                    // The target is kept for the shout (or the poke) itself.
-                    antic = bean ? Antic.Poke : Antic.Boo;
-                    anticSeconds = bean ? 2.8 : 1.6;
+                    // The target is kept for the shout (or the poke, or the peck) itself.
+                    antic = bird ? Antic.Peck : bean ? Antic.Poke : Antic.Boo;
+                    anticSeconds = bird ? 2.2 : bean ? 2.8 : 1.6;
                     anticStage = 0;
                     StopFacing(goalTarget.CentreX, Mode.Antic);
                     break;
@@ -332,7 +345,7 @@ namespace IdleWalker.Domain
             switch (goal)
             {
                 case Goal.Prank:
-                    target = Expression.Mischievous;
+                    target = bird ? Expression.Determined : Expression.Mischievous;
                     if (goalTarget != null) LookAt(goalTarget.CentreX, goalTarget.EyeY, out gx, out gy);
                     break;
                 case Goal.Visit:
@@ -612,7 +625,9 @@ namespace IdleWalker.Domain
         /// <summary>
         /// Saw somebody start to yawn or dance: maybe do the same, a moment
         /// later. The mimic copies most anything it sees. Mr. Bean showing
-        /// off Teddy draws a wave, a look or a laugh, depending on who sees.
+        /// off Teddy draws a wave, a look or a laugh, depending on who sees;
+        /// Matilda laying an egg draws the same crowd, and one bird's rage
+        /// sets the other birds off.
         /// </summary>
         public void Catch(Antic what)
         {
@@ -620,7 +635,8 @@ namespace IdleWalker.Domain
             double chance;
             if (what == Antic.Yawn || what == Antic.Doze)
             {
-                chance = personality.Temperament == Temperament.Aggressive ? 0.3 : 0.7;
+                chance = personality.Temperament == Temperament.Aggressive ? 0.3 :
+                         personality.Temperament == Temperament.Feisty ? 0.5 : 0.7;
                 what = Antic.Yawn;
             }
             else if (what == Antic.Dance)
@@ -629,6 +645,7 @@ namespace IdleWalker.Domain
                 {
                     case Temperament.Friendly: case Temperament.Goofy: chance = 0.85; break;
                     case Temperament.Eccentric: chance = 0.8; what = Antic.Jive; break;   // his own dance
+                    case Temperament.Feisty: chance = 0.6; break;
                     case Temperament.Calm: chance = 0.45; break;
                     case Temperament.Timid: chance = 0.25; break;
                     default: chance = 0; break;
@@ -640,11 +657,32 @@ namespace IdleWalker.Domain
                 {
                     case Temperament.Friendly: case Temperament.Goofy: chance = 0.7; what = Antic.Wave; break;
                     case Temperament.Aggressive: chance = 0.5; what = Antic.Laugh; break;
+                    case Temperament.Feisty: chance = 0.5; what = Antic.Look; break;
                     case Temperament.Calm: case Temperament.Timid: chance = 0.5; what = Antic.Look; break;
                     default: return;
                 }
             }
-            else if (personality.Mimic && what != Antic.Toot)
+            else if (what == Antic.Egg)
+            {
+                // Just like Teddy: everyone comes to look at the egg.
+                switch (personality.Temperament)
+                {
+                    case Temperament.Friendly: case Temperament.Goofy: chance = 0.6; what = Antic.Wave; break;
+                    case Temperament.Aggressive: chance = 0.4; what = Antic.Laugh; break;
+                    case Temperament.Feisty: chance = 0.5; what = Antic.Look; break;
+                    case Temperament.Calm: case Temperament.Timid: chance = 0.5; what = Antic.Look; break;
+                    default: return;
+                }
+            }
+            else if (what == Antic.Rage)
+            {
+                // Anger is catching, but only among birds.
+                if (personality.Temperament != Temperament.Feisty) return;
+                chance = 0.6;
+            }
+            else if (personality.Mimic && what != Antic.Toot && what != Antic.Drive && what != Antic.Photo &&
+                     what != Antic.Peck && what != Antic.Fly && what != Antic.Launch && what != Antic.Rage &&
+                     what != Antic.Egg && what != Antic.Inflate && what != Antic.Blast)
             {
                 chance = 0.65;
             }

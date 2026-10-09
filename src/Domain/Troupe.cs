@@ -22,7 +22,9 @@ namespace IdleWalker.Domain
         readonly Walker bean;          // Mr. Bean, always first in the list, out only when switched on
         bool minionsEnabled = true;
         bool beanEnabled;
+        bool birdsEnabled;
         int count = 1;
+        int birdCount = Settings.DefaultBirds;
         int dress = Settings.DressColors[0];
         double spawnTimer;
 
@@ -36,16 +38,26 @@ namespace IdleWalker.Domain
 
         /// <summary>
         /// Every walker created so far: Mr. Bean first (hidden unless he is
-        /// switched on), then the Minions in roster order. The list only ever
-        /// grows, so each walker keeps its index and its window.
+        /// switched on), then the Minions in roster order, then the Angry
+        /// Birds in flock order. The list only ever grows, so each walker
+        /// keeps its index and its window.
         /// </summary>
         public IList<Walker> Walkers { get { return walkers; } }
+
+        static int FullCast { get { return 1 + Settings.MaxWalkers + Settings.MaxBirds; } }
 
         /// <summary>How many Minions should be out; the rest are sent away.</summary>
         public int Count
         {
             get { return count; }
             set { count = Math.Max(1, Math.Min(Settings.MaxWalkers, value)); }
+        }
+
+        /// <summary>How many Angry Birds should be out; the rest are sent away.</summary>
+        public int BirdCount
+        {
+            get { return birdCount; }
+            set { birdCount = Math.Max(1, Math.Min(Settings.MaxBirds, value)); }
         }
 
         /// <summary>Whether the Minions come out. Switching them off sends them away at once; Mr. Bean is not affected.</summary>
@@ -60,6 +72,13 @@ namespace IdleWalker.Domain
         {
             get { return beanEnabled; }
             set { beanEnabled = value; }
+        }
+
+        /// <summary>Whether the Angry Birds come out. Switching them off sends them away at once; the rest are not affected.</summary>
+        public bool BirdsEnabled
+        {
+            get { return birdsEnabled; }
+            set { birdsEnabled = value; }
         }
 
         /// <summary>
@@ -97,8 +116,14 @@ namespace IdleWalker.Domain
         /// <param name="disturbed">The cursor just moved, or we were paused.</param>
         public void Step(double dt, Point cursor, bool wantOut, bool disturbed)
         {
-            while (walkers.Count < count + 1)
-                walkers.Add(new Walker(world, rng, Personality.Roster[walkers.Count - 1]));
+            while (walkers.Count < FullCast)
+            {
+                int i = walkers.Count;
+                if (i <= Settings.MaxWalkers)
+                    walkers.Add(new Walker(world, rng, Personality.Roster[i - 1]));
+                else
+                    walkers.Add(new Walker(world, rng, Personality.BirdRoster[i - Settings.MaxWalkers - 1]));
+            }
 
             if (disturbed)
             {
@@ -125,9 +150,13 @@ namespace IdleWalker.Domain
                 spawnTimer = 0;
             }
 
-            // The Minions beyond the count - all of them, if they are switched off - and Mr. Bean, if he is, go home.
+            // The Minions beyond the count - all of them, if they are switched off - go home,
+            // as do the birds beyond the bird count, and Mr. Bean if he is off.
             int wanted = minionsEnabled ? count : 0;
-            for (int i = wanted + 1; i < walkers.Count; i++) walkers[i].Leave();
+            for (int i = wanted + 1; i <= Settings.MaxWalkers; i++) walkers[i].Leave();
+            int wantedBirds = birdsEnabled ? birdCount : 0;
+            for (int b = 0; b < Settings.MaxBirds; b++)
+                if (b >= wantedBirds) walkers[Settings.MaxWalkers + 1 + b].Leave();
             if (!beanEnabled) bean.Leave();
 
             foreach (Walker walker in walkers)
@@ -137,12 +166,15 @@ namespace IdleWalker.Domain
             Spread();
         }
 
-        // The Minions in roster order, if they are wanted, then Mr. Bean, if he is.
+        // The Minions in roster order, then the birds in flock order, then Mr. Bean.
         Walker NextToAppear()
         {
             if (minionsEnabled)
                 for (int i = 1; i <= count; i++)
                     if (walkers[i].IsHidden) return walkers[i];
+            if (birdsEnabled)
+                for (int b = 0; b < birdCount; b++)
+                    if (walkers[Settings.MaxWalkers + 1 + b].IsHidden) return walkers[Settings.MaxWalkers + 1 + b];
             if (beanEnabled && bean.IsHidden) return bean;
             return null;
         }
@@ -351,7 +383,8 @@ namespace IdleWalker.Domain
 
         // A yawn or a dance that has just begun spreads to whoever is near
         // enough to see it, each according to their nature; so does Mr. Bean
-        // bringing Teddy out.
+        // bringing Teddy out, or Matilda laying an egg. A bird slingshotting
+        // past - or Bomb going off - sends the neighbours diving for cover.
         void Spread()
         {
             foreach (Walker walker in walkers)
@@ -359,13 +392,22 @@ namespace IdleWalker.Domain
                 Antic? started = walker.TakeBroadcast();
                 if (started == null || !walker.IsVisible) continue;
                 bool toot = started.Value == Antic.Toot;   // that one carries less far, and nobody copies it
-                double reach = (toot ? 260 : 450) * walker.Scale / Settings.BasePixelSize;
+                bool scare = started.Value == Antic.Launch || started.Value == Antic.Blast;
+                double reach = (toot ? 260 : scare ? 550 : 450) * walker.Scale / Settings.BasePixelSize;
                 foreach (Walker other in walkers)
                 {
                     if (other == walker || !other.IsVisible || other.IsLeaving) continue;
                     if (Math.Abs(other.FeetY - walker.FeetY) > 2) continue;
-                    if (Math.Abs(other.CentreX - walker.CentreX) > reach) continue;
+                    double gap = Math.Abs(other.CentreX - walker.CentreX);
+                    if (gap > reach) continue;
                     if (toot) other.Smell(walker.CentreX);
+                    else if (scare)
+                    {
+                        // Duck! Close neighbours dive outright, the rest stop and bristle/gasp.
+                        double close = (started.Value == Antic.Blast ? 260 : 200) * walker.Scale / Settings.BasePixelSize;
+                        if (gap < close && other.IsGrounded) other.Spook(walker.CentreX);
+                        else other.React(walker.CentreX);
+                    }
                     else other.Catch(started.Value);
                 }
             }

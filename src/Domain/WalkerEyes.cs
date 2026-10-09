@@ -47,6 +47,7 @@ namespace IdleWalker.Domain
                     case Temperament.Timid: return 0.6;        // nervous: blinks a lot
                     case Temperament.Calm: return 1.25;        // unhurried
                     case Temperament.Aggressive: return 1.5;   // stares people down
+                    case Temperament.Feisty: return 1.3;        // a bird's hard stare
                     case Temperament.Goofy: return 0.85;
                     case Temperament.Eccentric: return 0.9;
                     default: return 1;
@@ -109,6 +110,7 @@ namespace IdleWalker.Domain
                     switch (personality.Temperament)
                     {
                         case Temperament.Aggressive: target = Expression.Suspicious; rate = 10; break;
+                        case Temperament.Feisty: target = Expression.Suspicious; rate = 10; break;
                         case Temperament.Goofy: target = Expression.Smug; rate = 10; break;
                         case Temperament.Friendly: target = Expression.Happy; rate = 10; break;
                         case Temperament.Eccentric: target = Expression.Suspicious; rate = 10; break;
@@ -163,6 +165,7 @@ namespace IdleWalker.Domain
                         case Temperament.Friendly: target = Expression.Happy; break;
                         case Temperament.Goofy: target = Expression.Silly; break;
                         case Temperament.Aggressive: target = Expression.Stern; break;
+                        case Temperament.Feisty: target = Expression.Stern; break;
                         case Temperament.Eccentric: target = Expression.Gormless; break;
                         default: target = Expression.Knowing; break;
                     }
@@ -223,6 +226,9 @@ namespace IdleWalker.Domain
             {
                 case Temperament.Aggressive:
                     eyeBeat = r < 0.55 ? EyeBeat.SideEye : r < 0.85 ? EyeBeat.EyeRoll : EyeBeat.Viewer;
+                    break;
+                case Temperament.Feisty:
+                    eyeBeat = r < 0.5 ? EyeBeat.SideEye : r < 0.8 ? EyeBeat.EyeRoll : EyeBeat.Viewer;
                     break;
                 case Temperament.Timid:
                     eyeBeat = r < 0.75 ? EyeBeat.Shifty : EyeBeat.SideEye;
@@ -288,7 +294,7 @@ namespace IdleWalker.Domain
             crossEye = Settle(crossEye, cross, 1 - Math.Exp(-dt * 10));
 
             double interest = 0;
-            if (personality.Temperament == Temperament.Aggressive)
+            if (personality.Temperament == Temperament.Aggressive || personality.Temperament == Temperament.Feisty)
             {
                 if (watching || eyeBeat == EyeBeat.SideEye) interest = -1;
             }
