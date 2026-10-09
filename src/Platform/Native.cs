@@ -34,6 +34,12 @@ namespace IdleWalker.Platform
         }
 
         [StructLayout(LayoutKind.Sequential)]
+        public struct RECT
+        {
+            public int Left, Top, Right, Bottom;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
         public struct SIZE
         {
             public int Width;
@@ -74,6 +80,22 @@ namespace IdleWalker.Platform
         public const int VK_LBUTTON = 0x01, VK_RBUTTON = 0x02, VK_MBUTTON = 0x04;
         public const byte VK_TAB = 0x09, VK_CONTROL = 0x11, VK_ESCAPE = 0x1B, VK_A = 0x41, VK_D = 0x44, VK_N = 0x4E, VK_LWIN = 0x5B;
         public const uint KEYEVENTF_KEYUP = 0x0002;
+
+        // The foreground window, to stay out of the way of full-screen apps.
+        public const int GWL_STYLE = -16;
+        public const int WS_CAPTION = 0x00C00000;
+
+        [DllImport("user32.dll", EntryPoint = "GetWindowLongW")]   // the 32-bit read is enough for style bits and exists on every Windows
+        public static extern int GetWindowLong(IntPtr hwnd, int index);
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr GetForegroundWindow();
+
+        [DllImport("user32.dll")]
+        public static extern bool GetWindowRect(IntPtr hwnd, out RECT rect);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        public static extern int GetClassName(IntPtr hwnd, System.Text.StringBuilder name, int capacity);
 
         [DllImport("user32.dll")]
         public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extraInfo);

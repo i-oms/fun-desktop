@@ -34,6 +34,8 @@ namespace IdleWalker.App
 
         double lastTick;
         double nextTopmost;
+        double nextCheck;           // when to look again at the foreground window and the power
+        bool fullScreen;            // a full-screen app is in front: the Minions keep away
         bool summoned;              // a hot corner called the Minions out; cleared when the cursor moves
         AboutToast about;           // the card while it is showing
 
@@ -108,7 +110,17 @@ namespace IdleWalker.App
                 }
             }
 
-            bool enabled = tray.MinionsEnabled;
+            // Twice a second: a full-screen app in front keeps the Minions
+            // away (and sends them off if they are out), and on battery the
+            // animation runs at half rate.
+            if (now >= nextCheck)
+            {
+                nextCheck = now + 0.5;
+                fullScreen = ForegroundWatch.IsFullScreen();
+                pump.HalfRate = SystemInformation.PowerStatus.PowerLineStatus == PowerLineStatus.Offline;
+            }
+
+            bool enabled = tray.MinionsEnabled && !fullScreen;
             bool wantOut = enabled && (summoned || cursor.IdleFor(now, tray.IdleSeconds));
             troupe.Step(dt, cursor.Position, wantOut, moved || !enabled);
 

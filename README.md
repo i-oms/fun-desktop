@@ -49,9 +49,10 @@ fun/
     ├── Platform/             Win32
     │   ├── Native.cs         P/Invoke declarations
     │   ├── CornerActions.cs  what a hot corner does: shortcuts, lock, screen saver, monitor off
+    │   ├── ForegroundWatch.cs  is a full-screen app in front? (the Minions keep away)
     │   ├── MonitorWorld.cs   IWorld backed by the real monitors (cached per frame)
     │   ├── SpriteWindow.cs   layered click-through window
-    │   ├── FramePump.cs      vsync-paced tick thread
+    │   ├── FramePump.cs      vsync-paced tick thread (half rate on battery)
     │   ├── StartupRegistration.cs   the "Start with Windows" registry entry
     │   └── UserSettings.cs   remembers every menu choice
     └── App/                  wiring
@@ -823,38 +824,59 @@ in or out while it runs is fine.
 
 ## Performance
 
-Measured on a Windows 11 laptop with two 60 Hz monitors (12 logical cores):
+What the program costs the computer, measured on the author's Windows 11
+laptop (12 logical cores, two 60 Hz monitors) with the Minions at 100%
+scaling, a 120x144 pixel canvas each, using a harness that drives the real
+`Troupe`, `FrameRenderer` and `SpriteWindow` objects from a `FramePump` and
+reads the process's own CPU time. "One core" means 100% of a single
+logical processor.
 
 | State | CPU | Notes |
 |---|---|---|
-| Hidden (cursor moving, normal use) | ~0% | Ten `GetCursorPos` calls a second, nothing else. |
-| One walker out | < 5% of one core | 4.7% was measured before the dirty-rectangle optimisation; it is lower now. |
-| Five walkers out | 6-7% of one core | ≈ 0.5% of the machine (measured: 6.3% and 7.2% over two 8-second runs). |
-| Ten walkers out | roughly 1.75 × five | Headless measurement: ten walkers repaint about 1.75 times as many frames as five (more of them are standing about at any moment), and a repaint costs the same per walker as before, so expect 11-13% of one core. |
+| Minions hidden (the normal state while you work) | 0.2% of one core | One wake-up every 100 ms to read the cursor, the monitors and the hot corners. No windows, no drawing. |
+| 1 Minion out | 11% of one core | 60 frames a second, 1.5 ms of software shading a frame. |
+| 5 Minions out (the default) | 35% of one core (3% of the machine) | 4.6 ms of shading a frame plus 1 ms to hand the layered windows to the compositor. |
+| 10 Minions out | 61% of one core | 8.5 ms a frame; the frame rate starts to dip below 60. |
 
-Memory is about 35 MB working set, almost all of it the .NET runtime.
+Memory is about 30-45 MB working set and stays flat: the renderer allocates
+nothing per frame (one gen-0 garbage collection in 12 s with five Minions
+out), each Minion owns two small pixel buffers and one DIB, and there is no
+GPU work beyond the desktop compositor blending a few small layered
+windows, which it does for every window on screen anyway. The hot corners
+add three `GetAsyncKeyState` calls and a handful of comparisons per tick,
+nothing measurable.
 
-Note that the walkers are only ever on screen while the mouse has been idle
-for two seconds - i.e. while you are *not* using the computer - and they are
-gone within half a second of the cursor moving. While you work, the program
-is doing nothing but a cheap poll ten times a second.
+So the cost is entirely while the Minions are on screen - that is, while
+the mouse has been idle and you are not using the computer - and it scales
+with the **Walkers** count: on a laptop, three to five is a comfortable
+number. The one real cost is the painter: every pixel of a Minion is shaded
+from signed distance fields with lighting, about 1.2 ms per repaint, and a
+walking Minion repaints nearly every frame.
 
-What keeps it cheap:
+What keeps it out of the way:
 
+- **Full-screen apps.** While the window in front covers its whole monitor -
+  a game, a film, a presentation - the Minions stay hidden, and if they are
+  out when one starts they leave at once (`ForegroundWatch`, checked twice a
+  second). A maximised window does not count: it leaves the taskbar showing.
+- **Battery.** On battery the animation runs at half the refresh rate
+  (`FramePump.HalfRate`), halving the shading cost.
+- **Nothing when hidden.** The frame pump only runs at the refresh rate while
+  a Minion is visible; the rest of the time it is a 10 Hz poll. No timers
+  fire and no hooks are installed.
 - The simulation is trivial: stepping all ten walkers plus their
-  interactions and face logic takes a few tens of microseconds per frame.
+  interactions, faces and eyes takes a few tens of microseconds per frame.
 - Slow motions (breathing, swaying, a sleeper's nodding, floating letters)
   are stepped in coarse increments, so a walker that is only idling is
   repainted a few times a second rather than sixty.
+- The painter shades only the rows the figure can reach (the dome, or the
+  hair above it, unless something floats higher), and `UpdateLayeredWindow`
+  gets only the rectangle that has content (see [Rendering](#rendering)).
 - Monitor layout and DPI are read once per frame (`MonitorWorld.Refresh`),
   not once per query.
-- Rendering and `UpdateLayeredWindow` happen only for walkers whose picture
-  changed, and only for the rectangle that has content (see
-  [Rendering](#rendering)).
 - Each walker has its own small window; nothing is ever drawn desktop-wide.
 - Frames are paced by the compositor (`DwmFlush`), so there is never more
   than one frame per screen refresh and no busy-waiting.
-- No timers fire and no hooks are installed while hidden.
 
 ## Troubleshooting
 
@@ -864,7 +886,7 @@ What keeps it cheap:
 | Fewer walkers appear than expected | Check **Walkers** in the tray menu; the count is remembered between runs and defaults to 5. |
 | Walkers overlap each other | They can walk through one another; only meetings (greeting, shoving) are physical. This is by design. |
 | Appears, but immediately dives away | Something is moving the cursor (a jittery mouse, a wobbling desk, some remote-control software). Raise `MoveTolerance`. |
-| Hidden behind a full-screen game | Exclusive full-screen apps bypass the compositor; nothing can draw over them. Borderless-windowed games are fine. |
+| Does not appear while a game or film is up | By design: a full-screen window in front keeps the Minions hidden (and exclusive full-screen apps bypass the compositor anyway). Leave the app or un-fullscreen it. |
 | Blurry or wrong size on one monitor | Check Windows' per-monitor scaling; the cell size follows it. If a monitor reports an odd DPI, `ScaleFor` is where to adjust. |
 | `build.cmd` says the output file is in use | Exit IdleWalker from the tray first. |
 | `build.cmd` cannot find `csc.exe` | On 32-bit Windows edit the path to use `Framework` instead of `Framework64`. |

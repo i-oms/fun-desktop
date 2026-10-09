@@ -16,6 +16,7 @@ namespace IdleWalker.Platform
         readonly SendOrPostCallback callback;
         readonly Thread thread;
         volatile bool animating;
+        volatile bool halfRate;
         volatile bool stopping;
         int pending;
 
@@ -39,6 +40,13 @@ namespace IdleWalker.Platform
             set { animating = value; }
         }
 
+        /// <summary>True to tick every other refresh instead of every one (on battery).</summary>
+        public bool HalfRate
+        {
+            get { return halfRate; }
+            set { halfRate = value; }
+        }
+
         public void Start()
         {
             thread.Start();
@@ -60,6 +68,7 @@ namespace IdleWalker.Platform
                     // DwmFlush returns at the next vertical blank. Guard against
                     // it returning at once (no compositor, remote session).
                     if (Native.DwmFlush() != 0 || frame.ElapsedMilliseconds < 3) Thread.Sleep(12);
+                    if (halfRate && (Native.DwmFlush() != 0 || frame.ElapsedMilliseconds < 20)) Thread.Sleep(12);
                 }
                 else
                 {

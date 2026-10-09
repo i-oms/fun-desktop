@@ -88,6 +88,7 @@ namespace IdleWalker.Rendering
 
         readonly double[] hair;              // segments: u0, v0, u1, v1, r0, r1
         readonly bool decorated;             // anything floating about the figure this frame
+        readonly double topV;                // nothing of the figure is drawn above this height
 
         // Depth of the body's surface at the pixel being shaded, and how far
         // in front of it a limb has to be to count as in front: a soft band
@@ -170,6 +171,14 @@ namespace IdleWalker.Rendering
 
             hair = HairFor(look.Hair);
             decorated = pose.Sweat > 0 || pose.Note || pose.Zzz || pose.Bubble || pose.Heart;
+
+            // How high the figure reaches: the dome, or the hair above it;
+            // only the floating decorations go higher. Rows above this are
+            // never shaded, which is most of the saving on an empty canvas.
+            double hairTop = 0;
+            for (int i = 0; i < hair.Length; i += 6)
+                hairTop = Math.Max(hairTop, Math.Max(hair[i + 1] + hair[i + 4], hair[i + 3] + hair[i + 5]));
+            topV = decorated ? 26 : Math.Max(BodyTop + BodyR, hairTop) + 1 + Math.Abs(pose.BodyDy);
         }
 
         // Where an eye at `phi` round the body ends up once the body has turned.
@@ -400,7 +409,7 @@ namespace IdleWalker.Rendering
 
             int left = Math.Max(0, (int)Math.Floor(centreX - 10.5 * sx));
             int right = Math.Min(surface.Width, (int)Math.Ceiling(centreX + 10.5 * sx));
-            int top = Math.Max(0, (int)Math.Floor(soleY - 26 * sy));
+            int top = Math.Max(0, (int)Math.Floor(soleY - painter.topV * sy));
             int bottom = Math.Min(surface.Height, (int)Math.Ceiling(soleY + 0.5));
             if (left >= right || top >= bottom) return;
 
