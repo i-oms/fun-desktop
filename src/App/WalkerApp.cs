@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Drawing;
 using System.Threading;
 using System.Windows.Forms;
 using IdleWalker.Domain;
@@ -26,6 +27,7 @@ namespace IdleWalker.App
         readonly MonitorWorld monitors = new MonitorWorld();
         readonly CursorWatcher cursor = new CursorWatcher();
         readonly HotCorners corners = new HotCorners();
+        readonly CornerRipple ripple = new CornerRipple();
         readonly Stopwatch clock = Stopwatch.StartNew();
         readonly List<View> views = new List<View>();
         readonly Troupe troupe;
@@ -48,6 +50,7 @@ namespace IdleWalker.App
             troupe.MinionsEnabled = UserSettings.LoadMinionsEnabled();
             troupe.BeanEnabled = UserSettings.LoadBeanEnabled();
             troupe.BirdsEnabled = UserSettings.LoadBirdsEnabled();
+            troupe.PantherEnabled = UserSettings.LoadPantherEnabled();
 
             CornerAction[] actions = new CornerAction[4];
             for (int c = 0; c < actions.Length; c++) actions[c] = UserSettings.LoadCornerAction((Corner)c);
@@ -58,7 +61,7 @@ namespace IdleWalker.App
             StartupRegistration.ApplyDefault();
 
             tray = new TrayMenu(troupe.Count, troupe.BirdCount, UserSettings.LoadIdleSeconds(), troupe.Dress,
-                                UserSettings.LoadWalkersEnabled(), troupe.MinionsEnabled, troupe.BeanEnabled, troupe.BirdsEnabled,
+                                UserSettings.LoadWalkersEnabled(), troupe.MinionsEnabled, troupe.BeanEnabled, troupe.BirdsEnabled, troupe.PantherEnabled,
                                 UserSettings.LoadHotCornersEnabled(), actions, delayMs);
             tray.ExitRequested += delegate { ExitThread(); };
             tray.WalkersToggled += delegate { UserSettings.SaveWalkersEnabled(tray.WalkersEnabled); };
@@ -82,6 +85,11 @@ namespace IdleWalker.App
             {
                 troupe.BeanEnabled = tray.BeanEnabled;
                 UserSettings.SaveBeanEnabled(tray.BeanEnabled);
+            };
+            tray.PantherToggled += delegate
+            {
+                troupe.PantherEnabled = tray.PantherEnabled;
+                UserSettings.SavePantherEnabled(tray.PantherEnabled);
             };
             tray.BirdsToggled += delegate
             {
@@ -124,12 +132,14 @@ namespace IdleWalker.App
             if (moved) summoned = false;
 
             // The hot corners: the cursor resting in a corner of any monitor.
+            // (The ripple ticks by itself once fired, so it needs no stepping here.)
             if (tray.HotCornersEnabled)
             {
                 Corner corner;
                 if (corners.Step(now, cursor.Latest, monitors.MonitorBounds, CornerActions.MouseButtonDown(), out corner))
                 {
                     CornerAction action = tray.CornerActionFor(corner);
+                    if (action != CornerAction.None) RippleFor(corner);
                     if (action == CornerAction.CallMinions) summoned = tray.WalkersEnabled;
                     else CornerActions.Perform(action);
                 }
@@ -177,6 +187,33 @@ namespace IdleWalker.App
             pump.Animating = troupe.AnyVisible;
         }
 
+        /// <summary>Starts the ripple on the corner that just fired.</summary>
+        void RippleFor(Corner corner)
+        {
+            Rectangle bounds = monitors.MonitorBoundsAt(cursor.Latest);
+            int x, y;
+            switch (corner)
+            {
+                case Corner.TopRight:
+                    x = bounds.Right - 1;
+                    y = bounds.Top;
+                    break;
+                case Corner.BottomLeft:
+                    x = bounds.Left;
+                    y = bounds.Bottom - 1;
+                    break;
+                case Corner.BottomRight:
+                    x = bounds.Right - 1;
+                    y = bounds.Bottom - 1;
+                    break;
+                default:
+                    x = bounds.Left;
+                    y = bounds.Top;
+                    break;
+            }
+            ripple.Show(x, y, monitors.ScaleAt(x));
+        }
+
         /// <summary>Shows the About card; a second click while it is already up is ignored.</summary>
         void ShowAbout()
         {
@@ -197,6 +234,7 @@ namespace IdleWalker.App
                 pump.Stop();
                 if (about != null) about.Dispose();
                 tray.Dispose();
+                ripple.Dispose();
                 foreach (View view in views) view.Window.Dispose();
             }
             base.Dispose(disposing);

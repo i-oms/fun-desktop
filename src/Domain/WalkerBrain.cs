@@ -116,10 +116,11 @@ namespace IdleWalker.Domain
             }
 
             // A bully with somebody standing quietly in range creeps up on
-            // them to shout boo; Mr. Bean creeps up to give them a poke, and
-            // a bird hops up to give them a peck.
-            if (same && (tm == Temperament.Aggressive || tm == Temperament.Eccentric || tm == Temperament.Feisty) && other.IsQuiet &&
-                d > 1.6 * BodyWidth && d < 450 * sizeFactor && energy > 0.4 && rng.NextDouble() < (bean || bird ? 0.5 : 0.6))
+            // them to shout boo; Mr. Bean creeps up to give them a poke, the
+            // Panther creeps up to give them a poke, and a bird hops up to
+            // give them a peck.
+            if (same && (tm == Temperament.Aggressive || tm == Temperament.Eccentric || tm == Temperament.Feisty || tm == Temperament.Suave) && other.IsQuiet &&
+                d > 1.6 * BodyWidth && d < 450 * sizeFactor && energy > 0.4 && rng.NextDouble() < ((bean || bird || panther) ? 0.5 : 0.6))
             {
                 SetGoal(Goal.Prank, other);
                 return;
@@ -327,8 +328,8 @@ namespace IdleWalker.Domain
                 }
                 case Goal.Prank:
                     // The target is kept for the shout (or the poke, or the peck) itself.
-                    antic = bird ? Antic.Peck : bean ? Antic.Poke : Antic.Boo;
-                    anticSeconds = bird ? 2.2 : bean ? 2.8 : 1.6;
+                    antic = bird ? Antic.Peck : (bean || panther) ? Antic.Poke : Antic.Boo;
+                    anticSeconds = bird ? 2.2 : (bean || panther) ? 2.8 : 1.6;
                     anticStage = 0;
                     StopFacing(goalTarget.CentreX, Mode.Antic);
                     break;

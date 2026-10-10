@@ -21,7 +21,10 @@ namespace IdleWalker.Domain
         Eccentric,
 
         /// <summary>An Angry Bird: short-fused and territorial - pecks, flaps, launches, rages, blows up.</summary>
-        Feisty
+        Feisty,
+
+        /// <summary>The Pink Panther: suave, sly and silent - slinks, prowls, grooms, charms.</summary>
+        Suave
     }
 
     /// <summary>The things a walker gets up to when it stops walking for a moment.</summary>
@@ -177,10 +180,10 @@ namespace IdleWalker.Domain
             Habits = habits;
         }
 
-        /// <summary>Friendly, goofy, Mr. Bean or a bird: waves, dances, plays tag, chats.</summary>
+        /// <summary>Friendly, goofy, Mr. Bean, a bird or the Panther: waves, dances, plays tag, chats.</summary>
         public bool Warm
         {
-            get { return Temperament == Temperament.Friendly || Temperament == Temperament.Goofy || Temperament == Temperament.Eccentric || Temperament == Temperament.Feisty; }
+            get { return Temperament == Temperament.Friendly || Temperament == Temperament.Goofy || Temperament == Temperament.Eccentric || Temperament == Temperament.Feisty || Temperament == Temperament.Suave; }
         }
 
         /// <summary>Which painter draws it and which body it has.</summary>
@@ -213,6 +216,24 @@ namespace IdleWalker.Domain
                             H(Antic.Photo, 1.8), H(Antic.Look, 1.5),
                             H(Antic.Rest, 1), H(Antic.Doze, 1), H(Antic.Whistle, 0.5), H(Antic.Hiccups, 0.5),
                             H(Antic.Sneeze, 0.4));
+
+        /// <summary>
+        /// The Pink Panther. Not one of the Minions: he comes out alongside
+        /// them when switched on in the menu. Tall, sleek and silent, all in
+        /// pink with a long curling tail, yellow eyes and a dark pink nose.
+        /// Slinks on tiptoe, prowls, grooms a paw, ponders with a finger to
+        /// the chin, twirls, dances and mimes mischief - and pokes anyone
+        /// standing quietly, and your cursor, with one claw.
+        /// </summary>
+        public static readonly Personality Panther =
+            new Personality("Pink Panther", Temperament.Suave, Look.Panther,
+                            Expression.Cool, Expression.Knowing,
+                            1.0, 0.30, 0.10, 18, 40, 4, 9,
+                            1.1, 0.8, 0.9, 0, 1, 1, false, Antic.Poke,
+                            H(Antic.Sneak, 3), H(Antic.Wave, 2.5), H(Antic.Dance, 2), H(Antic.Twirl, 2),
+                            H(Antic.Ponder, 2), H(Antic.Jive, 1.5), H(Antic.Poke, 1.5), H(Antic.Look, 2.5),
+                            H(Antic.Rest, 1.5), H(Antic.Scratch, 1.5), H(Antic.Joy, 1.2), H(Antic.Laugh, 1),
+                            H(Antic.Doze, 0.8), H(Antic.Whistle, 1), H(Antic.Sneeze, 0.4), H(Antic.Hiccups, 0.4));
 
         static Habit H(Antic antic, double weight)
         {

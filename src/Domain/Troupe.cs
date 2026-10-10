@@ -20,9 +20,11 @@ namespace IdleWalker.Domain
         readonly Random rng;
         readonly List<Walker> walkers = new List<Walker>();
         readonly Walker bean;          // Mr. Bean, always first in the list, out only when switched on
+        readonly Walker panther;       // Pink Panther, always second, out only when switched on
         bool minionsEnabled = true;
         bool beanEnabled;
         bool birdsEnabled;
+        bool pantherEnabled;
         int count = 1;
         int birdCount = Settings.DefaultBirds;
         int dress = Settings.DressColors[0];
@@ -34,17 +36,20 @@ namespace IdleWalker.Domain
             this.rng = rng;
             bean = new Walker(world, rng, Personality.Bean);
             walkers.Add(bean);
+            panther = new Walker(world, rng, Personality.Panther);
+            walkers.Add(panther);
         }
 
         /// <summary>
         /// Every walker created so far: Mr. Bean first (hidden unless he is
+        /// switched on), the Pink Panther second (hidden unless he is
         /// switched on), then the Minions in roster order, then the Angry
         /// Birds in flock order. The list only ever grows, so each walker
         /// keeps its index and its window.
         /// </summary>
         public IList<Walker> Walkers { get { return walkers; } }
 
-        static int FullCast { get { return 1 + Settings.MaxWalkers + Settings.MaxBirds; } }
+        static int FullCast { get { return 2 + Settings.MaxWalkers + Settings.MaxBirds; } }
 
         /// <summary>How many Minions should be out; the rest are sent away.</summary>
         public int Count
@@ -79,6 +84,13 @@ namespace IdleWalker.Domain
         {
             get { return birdsEnabled; }
             set { birdsEnabled = value; }
+        }
+
+        /// <summary>Whether the Pink Panther comes out. Switching him off sends him away at once; the rest are not affected.</summary>
+        public bool PantherEnabled
+        {
+            get { return pantherEnabled; }
+            set { pantherEnabled = value; }
         }
 
         /// <summary>
@@ -119,10 +131,10 @@ namespace IdleWalker.Domain
             while (walkers.Count < FullCast)
             {
                 int i = walkers.Count;
-                if (i <= Settings.MaxWalkers)
-                    walkers.Add(new Walker(world, rng, Personality.Roster[i - 1]));
+                if (i <= Settings.MaxWalkers + 1)
+                    walkers.Add(new Walker(world, rng, Personality.Roster[i - 2]));
                 else
-                    walkers.Add(new Walker(world, rng, Personality.BirdRoster[i - Settings.MaxWalkers - 1]));
+                    walkers.Add(new Walker(world, rng, Personality.BirdRoster[i - Settings.MaxWalkers - 2]));
             }
 
             if (disturbed)
@@ -151,13 +163,14 @@ namespace IdleWalker.Domain
             }
 
             // The Minions beyond the count - all of them, if they are switched off - go home,
-            // as do the birds beyond the bird count, and Mr. Bean if he is off.
+            // as do the birds beyond the bird count, and Mr. Bean and the Panther if off.
             int wanted = minionsEnabled ? count : 0;
-            for (int i = wanted + 1; i <= Settings.MaxWalkers; i++) walkers[i].Leave();
+            for (int i = wanted + 1; i <= Settings.MaxWalkers; i++) walkers[i + 1].Leave();
             int wantedBirds = birdsEnabled ? birdCount : 0;
             for (int b = 0; b < Settings.MaxBirds; b++)
-                if (b >= wantedBirds) walkers[Settings.MaxWalkers + 1 + b].Leave();
+                if (b >= wantedBirds) walkers[Settings.MaxWalkers + 2 + b].Leave();
             if (!beanEnabled) bean.Leave();
+            if (!pantherEnabled) panther.Leave();
 
             foreach (Walker walker in walkers)
                 if (walker.IsVisible) walker.Step(dt, cursor);
@@ -166,16 +179,17 @@ namespace IdleWalker.Domain
             Spread();
         }
 
-        // The Minions in roster order, then the birds in flock order, then Mr. Bean.
+        // The Minions in roster order, then the birds in flock order, then Bean and Panther.
         Walker NextToAppear()
         {
             if (minionsEnabled)
                 for (int i = 1; i <= count; i++)
-                    if (walkers[i].IsHidden) return walkers[i];
+                    if (walkers[i + 1].IsHidden) return walkers[i + 1];
             if (birdsEnabled)
                 for (int b = 0; b < birdCount; b++)
-                    if (walkers[Settings.MaxWalkers + 1 + b].IsHidden) return walkers[Settings.MaxWalkers + 1 + b];
+                    if (walkers[Settings.MaxWalkers + 2 + b].IsHidden) return walkers[Settings.MaxWalkers + 2 + b];
             if (beanEnabled && bean.IsHidden) return bean;
+            if (pantherEnabled && panther.IsHidden) return panther;
             return null;
         }
 

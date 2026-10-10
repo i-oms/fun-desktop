@@ -50,6 +50,7 @@ namespace IdleWalker.Domain
                     case Temperament.Feisty: return 1.3;        // a bird's hard stare
                     case Temperament.Goofy: return 0.85;
                     case Temperament.Eccentric: return 0.9;
+                    case Temperament.Suave: return 1.15;       // slow, deliberate Panther blink
                     default: return 1;
                 }
             }
@@ -114,6 +115,7 @@ namespace IdleWalker.Domain
                         case Temperament.Goofy: target = Expression.Smug; rate = 10; break;
                         case Temperament.Friendly: target = Expression.Happy; rate = 10; break;
                         case Temperament.Eccentric: target = Expression.Suspicious; rate = 10; break;
+                        case Temperament.Suave: target = Expression.Knowing; rate = 10; break;
                     }
                     break;
                 }
@@ -167,6 +169,7 @@ namespace IdleWalker.Domain
                         case Temperament.Aggressive: target = Expression.Stern; break;
                         case Temperament.Feisty: target = Expression.Stern; break;
                         case Temperament.Eccentric: target = Expression.Gormless; break;
+                        case Temperament.Suave: target = Expression.Cool; break;
                         default: target = Expression.Knowing; break;
                     }
                     rate = 10;
@@ -241,6 +244,9 @@ namespace IdleWalker.Domain
                     break;
                 case Temperament.Eccentric:
                     eyeBeat = r < 0.4 ? EyeBeat.Shifty : r < 0.7 ? EyeBeat.SideEye : EyeBeat.Viewer;
+                    break;
+                case Temperament.Suave:
+                    eyeBeat = r < 0.5 ? EyeBeat.Viewer : r < 0.8 ? EyeBeat.SideEye : EyeBeat.Shifty;
                     break;
                 default:
                     eyeBeat = r < 0.6 ? EyeBeat.SideEye : r < 0.9 ? EyeBeat.Viewer : EyeBeat.EyeRoll;

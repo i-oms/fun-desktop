@@ -55,6 +55,9 @@ namespace IdleWalker
         /// <summary>Whether the Angry Birds are on until the tray menu says otherwise. Independent of the Minions and Mr. Bean.</summary>
         public const bool BirdsEnabledByDefault = false;
 
+        /// <summary>Whether the Pink Panther is on until the tray menu says otherwise. Independent of the rest.</summary>
+        public const bool PantherByDefault = false;
+
         /// <summary>Whether the hot corners are on until the tray menu says otherwise.</summary>
         public const bool HotCornersByDefault = true;
 

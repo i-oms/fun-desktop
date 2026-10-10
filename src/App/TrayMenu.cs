@@ -30,6 +30,7 @@ namespace IdleWalker.App
         readonly ToolStripMenuItem birdsMenu = new ToolStripMenuItem("Angry Birds");
         readonly ToolStripMenuItem birdsItem = new ToolStripMenuItem("Enabled");
         readonly ToolStripMenuItem birdCountMenu = new ToolStripMenuItem("Count");
+        readonly ToolStripMenuItem pantherItem = new ToolStripMenuItem("Pink Panther");
         int[] customPalette;         // the colour dialog's own swatches, kept between openings
 
         // The hot corners.
@@ -58,6 +59,7 @@ namespace IdleWalker.App
         public event EventHandler BeanToggled;
         public event EventHandler BirdsToggled;
         public event EventHandler BirdCountChanged;
+        public event EventHandler PantherToggled;
         public event EventHandler HotCornersToggled;
         public event Action<Corner> CornerChanged;
         public event EventHandler DelayChanged;
@@ -111,6 +113,12 @@ namespace IdleWalker.App
             get { return birdCount; }
         }
 
+        /// <summary>True while the Pink Panther is switched on (independently of the rest).</summary>
+        public bool PantherEnabled
+        {
+            get { return pantherItem.Checked; }
+        }
+
         /// <summary>True while the hot corners are switched on.</summary>
         public bool HotCornersEnabled
         {
@@ -130,7 +138,7 @@ namespace IdleWalker.App
         }
 
         public TrayMenu(int initialCount, int initialBirdCount, int initialIdleSeconds, int initialDress,
-                        bool walkersOn, bool minionsOn, bool beanOn, bool birdsOn,
+                        bool walkersOn, bool minionsOn, bool beanOn, bool birdsOn, bool pantherOn,
                         bool cornersOn, CornerAction[] initialActions, int initialDelayMs)
         {
             // ---- The walkers: the master switch ----
@@ -147,6 +155,11 @@ namespace IdleWalker.App
             beanItem.Checked = beanOn;
             beanItem.CheckOnClick = true;
             beanItem.CheckedChanged += delegate { Raise(BeanToggled); };
+
+            // ---- The Pink Panther ----
+            pantherItem.Checked = pantherOn;
+            pantherItem.CheckOnClick = true;
+            pantherItem.CheckedChanged += delegate { Raise(PantherToggled); };
 
             // ---- The Angry Birds ----
             birdsItem.Checked = birdsOn;
@@ -257,6 +270,7 @@ namespace IdleWalker.App
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(minionsMenu);
             menu.Items.Add(beanItem);
+            menu.Items.Add(pantherItem);
             menu.Items.Add(birdsMenu);
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(hotCornersMenu);
@@ -308,6 +322,7 @@ namespace IdleWalker.App
             idleMenu.Enabled = walkers;
             minionsMenu.Enabled = walkers;
             beanItem.Enabled = walkers;
+            pantherItem.Enabled = walkers;
             birdsMenu.Enabled = walkers;
 
             bool minions = walkers && minionsItem.Checked;

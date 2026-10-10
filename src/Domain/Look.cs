@@ -18,7 +18,8 @@ namespace IdleWalker.Domain
     {
         Minion,   // a yellow capsule in overalls and goggles
         Bean,     // a tall thin man in a tweed jacket: Mr. Bean
-        Bird      // a round Angry Bird with a beak, crest and tail
+        Bird,     // a round Angry Bird with a beak, crest and tail
+        Panther   // a tall sleek pink panther, bipedal like the cartoon
     }
 
     /// <summary>Which Angry Bird: its colours and feathers come from this.</summary>
@@ -80,6 +81,9 @@ namespace IdleWalker.Domain
 
         /// <summary>Round and hoppy: a ball of feathers with its eyes up top and a beak in front.</summary>
         public static readonly Anatomy Bird = new Anatomy(14, 10.2, 7.6, 8.4, 2.5, 8, 16, 9, 8, 48, 5.2);
+
+        /// <summary>Tall and sleek like the cartoon Pink Panther: long legs, a narrow waist, a cat head on a neck.</summary>
+        public static readonly Anatomy Panther = new Anatomy(26, 22.6, 20.6, 17.8, 10, 8, 28, 20, 15, 56, 5.2);
     }
 
     /// <summary>What a walker is born with: its kind of figure and, for a Minion, how many eyes, their colour, its hair.</summary>
@@ -139,10 +143,13 @@ namespace IdleWalker.Domain
         /// <summary>Mr. Bean: the painter knows what he looks like.</summary>
         public static readonly Look Bean = new Look(Figure.Bean);
 
+        /// <summary>The Pink Panther: the painter knows what he looks like.</summary>
+        public static readonly Look Panther = new Look(Figure.Panther);
+
         /// <summary>The body this figure has.</summary>
         public Anatomy Anatomy
         {
-            get { return Figure == Figure.Bean ? Anatomy.Bean : Figure == Figure.Bird ? Anatomy.Bird : Anatomy.Minion; }
+            get { return Figure == Figure.Bean ? Anatomy.Bean : Figure == Figure.Bird ? Anatomy.Bird : Figure == Figure.Panther ? Anatomy.Panther : Anatomy.Minion; }
         }
 
         /// <summary>

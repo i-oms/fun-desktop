@@ -78,6 +78,7 @@ namespace IdleWalker.Domain
         readonly Anatomy body;      // its measurements: eye height, stride, how deep it hides, ...
         readonly bool bean;         // it is Mr. Bean: a head on a neck, long arms, his own ways
         readonly bool bird;         // it is an Angry Bird: round, hoppy, flutters down slowly
+        readonly bool panther;      // it is the Pink Panther: a sleek cat head on a neck, long tail
         readonly List<Puff> puffs = new List<Puff>();
 
         Mode mode = Mode.Hidden;
@@ -168,6 +169,7 @@ namespace IdleWalker.Domain
             body = personality.Anatomy;
             bean = personality.Figure == Figure.Bean;
             bird = personality.Figure == Figure.Bird;
+            panther = personality.Figure == Figure.Panther;
         }
 
         // ---- What others need to know ----------------------------------------------
@@ -402,6 +404,9 @@ namespace IdleWalker.Domain
                 case Temperament.Feisty:
                     ReactWith(Reaction.Bristle, x, 1.6, false);
                     break;
+                case Temperament.Suave:
+                    ReactWith(Reaction.Chuckle, x, 1.6, false);
+                    break;
                 default:
                     ReactWith(Reaction.Jeer, x, 1.8, false);
                     break;
@@ -429,6 +434,9 @@ namespace IdleWalker.Domain
                     break;
                 case Temperament.Feisty:
                     ReactWith(Reaction.Bristle, x, 1.4, false);
+                    break;
+                case Temperament.Suave:
+                    ReactWith(Reaction.Waft, x, 1.5, false);
                     break;
                 default:
                     ReactWith(Reaction.Huff, x, 1.2, true);
@@ -937,7 +945,7 @@ namespace IdleWalker.Domain
                 case Mode.Turn:
                     return headTurned ? -45 : 58;
                 case Mode.Look:
-                    return headTurned ? (bean ? -15 : -45) : 0;   // Mr. Bean turns his head, not his whole body
+                    return headTurned ? ((bean || panther) ? -15 : -45) : 0;   // Bean and Panther turn the head, not the whole body
                 case Mode.Wave:
                     return waveAtCursor || !companyNearby ? 0 : 45;
                 case Mode.Greet:
@@ -976,6 +984,8 @@ namespace IdleWalker.Domain
                     return 5;     // square on; the head does the looking about
                 case Temperament.Feisty:
                     return 8 * Math.Sin(time * 1.1);   // perched, shifting from foot to foot
+                case Temperament.Suave:
+                    return Math.Round(8 * Math.Sin(time * 0.9) * 4) / 4;   // suave sway, head does the work
                 default:
                     return (cursorX - cx) * facing >= 0 ? 10 : -10;
             }
@@ -1145,6 +1155,15 @@ namespace IdleWalker.Domain
                         HandsClasped(ref pose);
                         pose.Lean = Math.Round(0.12 * Math.Sin(time * 1.1) * 8) / 8;
                     }
+                    else if (personality.Temperament == Temperament.Suave)
+                    {
+                        // The Panther: one paw on the hip, suave lean, tail swaying.
+                        pose.ArmNear = 40;
+                        pose.ForeNear = -85;
+                        pose.ArmFar = -10;
+                        pose.ForeFar = 20;
+                        pose.Lean = Math.Round((-0.12 + 0.08 * Math.Sin(time * 0.9)) * 8) / 8;
+                    }
                     breathe = true;
                     break;
 
@@ -1167,7 +1186,7 @@ namespace IdleWalker.Domain
             }
 
             if (breathe) pose.BodyDy = Quantise(0.3 * (1 + Math.Sin(time * 2.6)) / 2);
-            if (bean) BeanTouch(ref pose);
+            if (bean || panther) BeanTouch(ref pose);
             pose.StretchY *= (1 - 0.22 * squash) * personality.BuildY;
             pose.StretchX *= (1 + 0.16 * squash) * personality.BuildX;
             if (sweat > 0) pose.Sweat = Math.Ceiling(sweat * 12) / 12;
@@ -1215,6 +1234,16 @@ namespace IdleWalker.Domain
                 pose.BodyDy = Quantise(0.4 * (1 - Math.Cos(modeTime * 2 * Math.PI / 0.45)) / 2);
                 pose.Lean = Math.Round(0.2 * Math.Sin(modeTime * 7) * 8) / 8;
                 pose.StretchY = 1.03;
+                return;
+            }
+            if (panther)
+            {
+                // Suave slow wave: paw high, elegant sway, slight bow of the head.
+                pose.ArmNear = 145 + 10 * Math.Sin(modeTime * 8);
+                pose.ForeNear = -20 + 18 * Math.Sin(modeTime * 8);
+                pose.Lean = Math.Round(0.1 * Math.Sin(modeTime * 3.5) * 8) / 8;
+                pose.HeadDip = Quantise(0.15 + 0.1 * Math.Sin(modeTime * 3.5));
+                pose.BodyDy = Quantise(0.25 * (1 - Math.Cos(modeTime * 2 * Math.PI / 0.9)) / 2);
                 return;
             }
             // Arm up, forearm out to the side so the hand clears the goggles.

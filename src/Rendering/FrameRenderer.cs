@@ -103,6 +103,7 @@ namespace IdleWalker.Rendering
         {
             if (look.Figure == Figure.Bean) BeanPainter.Draw(surface, pose, faceLeft, centreX, soleY, scale);
             else if (look.Figure == Figure.Bird) BirdPainter.Draw(surface, pose, look, faceLeft, centreX, soleY, scale);
+            else if (look.Figure == Figure.Panther) PantherPainter.Draw(surface, pose, faceLeft, centreX, soleY, scale);
             else MinionPainter.Draw(surface, pose, look, dress, faceLeft, centreX, soleY, scale);
             surface.CommitCharacter(1);
         }
