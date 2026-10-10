@@ -58,6 +58,9 @@ namespace IdleWalker
         /// <summary>Whether the Pink Panther is on until the tray menu says otherwise. Independent of the rest.</summary>
         public const bool PantherByDefault = false;
 
+        /// <summary>Whether a mouse move sends everyone back underground until the tray menu says otherwise.</summary>
+        public const bool HideOnMoveByDefault = true;
+
         /// <summary>Whether the hot corners are on until the tray menu says otherwise.</summary>
         public const bool HotCornersByDefault = true;
 
@@ -76,6 +79,12 @@ namespace IdleWalker
 
         /// <summary>Whether "Start with Windows" is switched on the first time the program runs.</summary>
         public const bool StartWithWindowsByDefault = true;
+
+        /// <summary>How fast each walker updates its learned preferences (0..1). Higher = changes its mind faster.</summary>
+        public const double LearnRate = 0.12;
+
+        /// <summary>How often a walker tries something unexpected instead of its favourite (0..1).</summary>
+        public const double ExploreRate = 0.15;
 
         public const double WalkSpeed = 90;
         public const double Acceleration = 420;  // easing into a walk

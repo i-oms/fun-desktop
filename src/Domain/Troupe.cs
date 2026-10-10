@@ -126,7 +126,14 @@ namespace IdleWalker.Domain
         /// <param name="cursor">Where the cursor is resting.</param>
         /// <param name="wantOut">The cursor has been idle long enough and we're not paused.</param>
         /// <param name="disturbed">The cursor just moved, or we were paused.</param>
-        public void Step(double dt, Point cursor, bool wantOut, bool disturbed)
+        /// <summary>Forgets everything every walker learned: taste, friendships, hangouts, walks.</summary>
+        public void ForgetBrains()
+        {
+            foreach (Walker walker in walkers) walker.ForgetMind();
+        }
+
+        /// <summary>Makes sure every walker exists (without bringing anyone out), so memories have owners.</summary>
+        public void EnsureCast()
         {
             while (walkers.Count < FullCast)
             {
@@ -136,6 +143,11 @@ namespace IdleWalker.Domain
                 else
                     walkers.Add(new Walker(world, rng, Personality.BirdRoster[i - Settings.MaxWalkers - 2]));
             }
+        }
+
+        public void Step(double dt, Point cursor, bool wantOut, bool disturbed)
+        {
+            EnsureCast();
 
             if (disturbed)
             {
@@ -274,6 +286,14 @@ namespace IdleWalker.Domain
 
                     if (ResolveContact(a, b, distance, towardsB)) continue;
                     TryGreet(a, b, distance, towardsB);
+                    // Side by side, going the same way: walking together bonds.
+                    if (a.IsWalking && b.IsWalking && a.Facing == b.Facing &&
+                        distance < 300 * a.Scale / Settings.BasePixelSize &&
+                        a.BondReady && b.BondReady)
+                    {
+                        a.NoteWalkTogether(b);
+                        b.NoteWalkTogether(a);
+                    }
                 }
 
                 if (a.Temperament == Temperament.Aggressive) ConsiderCharging(a);
@@ -292,12 +312,16 @@ namespace IdleWalker.Domain
             {
                 a.Tag(b.CentreX);
                 b.Tagged(a.CentreX);
+                a.NoteTagFun(b);
+                b.NoteTaggedFun(a);
                 return true;
             }
             if (bReaches && b.IsPlayful)
             {
                 b.Tag(a.CentreX);
                 a.Tagged(b.CentreX);
+                b.NoteTagFun(a);
+                a.NoteTaggedFun(b);
                 return true;
             }
 
@@ -311,12 +335,16 @@ namespace IdleWalker.Domain
             else if (aReaches)
             {
                 b.Knock(towardsB);
+                b.NoteShove(a);
+                a.NoteShoveLanded(b);
                 a.Gloat();
                 Witness(a, b, b.CentreX);
             }
             else
             {
                 a.Knock(-towardsB);
+                a.NoteShove(b);
+                b.NoteShoveLanded(a);
                 b.Gloat();
                 Witness(a, b, a.CentreX);
             }
@@ -408,12 +436,16 @@ namespace IdleWalker.Domain
                 bool toot = started.Value == Antic.Toot;   // that one carries less far, and nobody copies it
                 bool scare = started.Value == Antic.Launch || started.Value == Antic.Blast;
                 double reach = (toot ? 260 : scare ? 550 : 450) * walker.Scale / Settings.BasePixelSize;
+                // A dance, a Teddy show or an egg before a crowd is applause for the performer.
+                bool show = !toot && !scare && (started.Value == Antic.Dance || started.Value == Antic.Teddy || started.Value == Antic.Egg);
+                int audience = 0;
                 foreach (Walker other in walkers)
                 {
                     if (other == walker || !other.IsVisible || other.IsLeaving) continue;
                     if (Math.Abs(other.FeetY - walker.FeetY) > 2) continue;
                     double gap = Math.Abs(other.CentreX - walker.CentreX);
                     if (gap > reach) continue;
+                    if (show) audience++;
                     if (toot) other.Smell(walker.CentreX);
                     else if (scare)
                     {
@@ -424,6 +456,7 @@ namespace IdleWalker.Domain
                     }
                     else other.Catch(started.Value);
                 }
+                if (show && audience > 0) walker.NoteAudience(Math.Min(0.3, 0.1 + 0.05 * audience));
             }
         }
     }

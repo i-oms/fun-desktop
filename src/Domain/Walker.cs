@@ -301,7 +301,7 @@ namespace IdleWalker.Domain
             chargeTarget = null;
             afterTurn = Mode.Walk;
             idleTimer = Between(4, 9);
-            hopTimer = Between(personality.HopMin, personality.HopMax);
+            hopTimer = Between(personality.HopMin, personality.HopMax) * EffHop();
             tripTimer = Between(20, 60);
             blinkTimer = Between(1, 3);
             blinkAgain = false;
@@ -313,6 +313,7 @@ namespace IdleWalker.Domain
             curiosity = Between(0, 0.4);
             catchCooldown = 0;
             ClearAntics();
+            ResetMind();
             GreetCooldown = 2;
             ChargeCooldown = 3;
             puffs.Clear();
@@ -377,6 +378,7 @@ namespace IdleWalker.Domain
             greetStyle = style;
             social = 0.1;
             if (style == GreetStyle.Dance) broadcast = Antic.Dance;
+            NoteGreet(style);
             Stop(Mode.Greet);
         }
 
@@ -502,6 +504,8 @@ namespace IdleWalker.Domain
             GreetCooldown -= dt;
             ChargeCooldown -= dt;
             catchCooldown -= dt;
+            steerCooldown -= dt;
+            bondCooldown -= dt;
             if (moodLeft > 0)
             {
                 moodLeft -= dt;
@@ -515,6 +519,7 @@ namespace IdleWalker.Domain
             UpdateWorld();
             StepBlink(dt);
             StepMood(dt);
+            StepStyle(dt);
             StepPending(dt);
 
             switch (mode)
@@ -683,6 +688,21 @@ namespace IdleWalker.Domain
                         Enter(Mode.Hidden);
                     }
                     break;
+                }
+            }
+
+            // Reflection is not only for long walks: the idle timer keeps
+            // running through standing pauses (rest, look, greetings,
+            // reactions, gloating) so a crowd never starves anyone's
+            // learning. It fires at the next moment free to act.
+            if (mode == Mode.Rest || mode == Mode.Look || mode == Mode.Greet ||
+                mode == Mode.React || mode == Mode.Gloat)
+            {
+                idleTimer -= dt;
+                if (idleTimer <= 0)
+                {
+                    idleTimer = Between(personality.IdleMin, personality.IdleMax);
+                    if (CanGreet) Decide();
                 }
             }
 
@@ -936,6 +956,7 @@ namespace IdleWalker.Domain
                 case Mode.PeekDuck:
                     return 45;
                 case Mode.Walk:
+                    return 58 + SwaggerYaw();
                 case Mode.Crouch:
                 case Mode.Air:
                     return 58;
@@ -1013,7 +1034,7 @@ namespace IdleWalker.Domain
             {
                 case Mode.Walk:
                     Walk(ref pose);
-                    pose.Lean = personality.WalkLean;
+                    pose.Lean = EffLean();
                     if (goal == Goal.Prank)
                     {
                         // Creeping up: leaning in, fists up by the chest.
@@ -1185,7 +1206,11 @@ namespace IdleWalker.Domain
                     break;
             }
 
-            if (breathe) pose.BodyDy = Quantise(0.3 * (1 + Math.Sin(time * 2.6)) / 2);
+            if (breathe)
+            {
+                pose.BodyDy = Quantise(0.3 * (1 + Math.Sin(time * 2.6)) / 2);
+                pose.Lean = Quantise(pose.Lean + FidgetLean());
+            }
             if (bean || panther) BeanTouch(ref pose);
             pose.StretchY *= (1 - 0.22 * squash) * personality.BuildY;
             pose.StretchX *= (1 + 0.16 * squash) * personality.BuildX;
@@ -1218,7 +1243,7 @@ namespace IdleWalker.Domain
             if (Math.Abs(vx) <= 6 * sizeFactor) return;
             pose.Walking = true;
             pose.WalkPhase = walkPhase;
-            pose.BodyDy = personality.WalkBob * (1 - Math.Cos(walkPhase * 4 * Math.PI)) / 2; // two bobs per stride
+            pose.BodyDy = EffBob() * (1 - Math.Cos(walkPhase * 4 * Math.PI)) / 2; // two bobs per stride
         }
 
         void WaveArm(ref Pose pose)
@@ -1493,12 +1518,13 @@ namespace IdleWalker.Domain
         {
             if (!StayOnGround()) return;
 
-            double full = Settings.WalkSpeed * sizeFactor * personality.SpeedFactor * speedFactor;
+            double full = Settings.WalkSpeed * sizeFactor * EffSpeed() * speedFactor;
             if (antics) full *= GoalPace();
             double target = braking ? 0 : facing * full;
             vx = Approach(vx, target, (braking ? Settings.Braking : Settings.Acceleration) * sizeFactor * dt);
             bool blocked = !MoveX(vx * dt);
             walkPhase += Math.Abs(vx) * dt / (body.StrideCells * scale);
+            trialDist += Math.Abs(vx) * dt;
 
             if (braking)
             {
@@ -1570,6 +1596,37 @@ namespace IdleWalker.Domain
                 }
             }
 
+            // Walking with a purpose, not just pacing: lonely with a friend
+            // behind, turn back instead of marching away; now and then head
+            // for the stretch of desktop where life has been good.
+            if (!braking && steerCooldown <= 0)
+            {
+                bool together = company != null && company.IsVisible && !company.IsLeaving &&
+                                Math.Abs(company.FeetY - feetY) <= 2;
+                double cdx = together ? company.CentreX - cx : 0;
+                double adx = Math.Abs(cdx);
+                if (together && social > 0.6 && adx > 2.5 * BodyWidth &&
+                    adx < 800 * sizeFactor && cdx * facing < 0)
+                {
+                    steerCooldown = Between(6, 12);
+                    afterTurn = Mode.Walk;
+                    Brake(Mode.Turn);
+                    return;
+                }
+                if (rng.NextDouble() < dt * 0.05)
+                {
+                    double hx = BinCenter(BestPlace());
+                    if ((hx - cx) * facing < -BodyWidth)
+                    {
+                        steerCooldown = Between(8, 15);
+                        afterTurn = Mode.Walk;
+                        Brake(Mode.Turn);
+                        return;
+                    }
+                    steerCooldown = Between(4, 8);
+                }
+            }
+
             idleTimer -= dt;
             hopTimer -= dt;
             if (idleTimer <= 0)
@@ -1580,7 +1637,7 @@ namespace IdleWalker.Domain
             else if (hopTimer <= 0)
             {
                 // A hop only while it has the energy to spare.
-                hopTimer = Between(personality.HopMin, personality.HopMax);
+                hopTimer = Between(personality.HopMin, personality.HopMax) * EffHop();
                 if (energy > 0.6 && Math.Abs(vx) > 0.8 * full) StartJump(Settings.HopSpeed * sizeFactor, vx);
             }
         }

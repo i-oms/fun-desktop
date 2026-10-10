@@ -3,43 +3,70 @@ using IdleWalker.Domain;
 
 namespace IdleWalker.Rendering
 {
+    /// <summary>One dust speck as plain values: safe to hand to another thread.</summary>
+    struct PuffSnapshot
+    {
+        public int X, Y, Size, Alpha;
+    }
+
     /// <summary>
-    /// Turns one walker's state into pixels: decides where the canvas goes on
-    /// screen and draws the dust, the shadow and the posed character into it.
-    /// Skips the work entirely when the picture would be identical to the
-    /// last frame.
+    /// Everything a frame needs, as plain values: geometry the UI thread
+    /// worked out, the pose struct, and the immutable look. No walker is
+    /// touched while painting, so this may cross to the render thread.
+    /// </summary>
+    struct RenderJob
+    {
+        public uint Stamp;
+        public int Width, Height, Left, Top;
+        public bool HasShadow;
+        public double ShadowCx, ShadowGy, ShadowRx, ShadowRy, ShadowAlpha;
+        public PuffSnapshot[] Puffs;
+        public Pose Pose;
+        public Look Look;
+        public int Dress;
+        public bool FaceLeft;
+        public double CharCx, SoleY, Scale;
+    }
+
+    /// <summary>
+    /// Turns one walker's state into pixels, in two halves: <see cref="Prepare"/>
+    /// runs on the UI thread and only does cheap arithmetic (layout and the
+    /// unchanged check - a walker that stands still costs almost nothing),
+    /// while <see cref="PaintJob"/> does the dear raster work from the
+    /// snapshot and may run anywhere. Finished frames are shown by the UI
+    /// thread, which owns the windows.
     /// </summary>
     sealed class FrameRenderer
     {
         const int CanvasColumns = 40;
         const int RowsBelowFeet = 18; // canvas kept under the feet during high jumps
 
-        readonly Surface surface = new Surface();
-
         bool hasLast;
         Pose lastPose;
         int lastLeft, lastTop, lastFeet, lastGround, lastScale;
         bool lastFaceLeft, lastHadDust;
         int lastDress;
+        uint stamp = 1;
 
-        /// <summary>The rendered frame.</summary>
-        public Surface Surface { get { return surface; } }
-
-        /// <summary>Screen position of the frame's top-left corner.</summary>
-        public int Left { get; private set; }
-        public int Top { get; private set; }
+        /// <summary>Stamp of the latest snapshot; results with an older one are stale.</summary>
+        public uint Stamp { get { return stamp; } }
 
         /// <summary>Forget the last frame, so the next one is drawn for sure.</summary>
         public void Invalidate()
         {
             hasLast = false;
+            stamp++;
         }
 
-        /// <summary>Renders the walker; false if nothing changed and the old frame still stands.</summary>
-        public bool Render(Walker walker)
+        /// <summary>
+        /// Snapshots the walker; false when the picture would be identical to
+        /// the last frame and there is nothing to paint.
+        /// </summary>
+        public bool Prepare(Walker walker, out RenderJob job)
         {
             // The canvas rests on the ground line, so anything underground is
             // simply cut off. In a high jump it follows the character up.
+            job = new RenderJob();
             int scale = walker.Scale;
             Anatomy anatomy = walker.Personality.Anatomy;
             int width = CanvasColumns * scale;
@@ -51,10 +78,11 @@ namespace IdleWalker.Rendering
             bool hasDust = walker.Puffs.Count > 0;
             Pose pose = walker.CurrentPose();
             int dress = walker.Dress;
+            bool faceLeft = walker.FacesLeft;
 
             bool unchanged = hasLast && !hasDust && !lastHadDust &&
                              left == lastLeft && top == lastTop && feet == lastFeet && ground == lastGround &&
-                             scale == lastScale && walker.FacesLeft == lastFaceLeft && dress == lastDress &&
+                             scale == lastScale && faceLeft == lastFaceLeft && dress == lastDress &&
                              pose.SameAs(lastPose);
             if (unchanged) return false;
 
@@ -65,32 +93,66 @@ namespace IdleWalker.Rendering
             lastFeet = feet;
             lastGround = ground;
             lastScale = scale;
-            lastFaceLeft = walker.FacesLeft;
+            lastFaceLeft = faceLeft;
             lastDress = dress;
             lastHadDust = hasDust;
-            Left = left;
-            Top = top;
 
-            surface.Reset(width, height);
+            job.Stamp = stamp;
+            job.Width = width;
+            job.Height = height;
+            job.Left = left;
+            job.Top = top;
 
             // The shadow stays on the ground and thins out as it jumps.
             double lift = (walker.GroundLine - walker.FeetY) / (40.0 * scale);
             if (lift >= 0 && lift < 1)
             {
-                surface.Shadow(walker.CentreX - left, walker.GroundLine - top,
-                               (anatomy.ShadowRadius - 2.2 * lift) * scale * pose.StretchX, 1.4 * scale, 0.42 * (1 - lift));
+                job.HasShadow = true;
+                job.ShadowCx = walker.CentreX - left;
+                job.ShadowGy = walker.GroundLine - top;
+                job.ShadowRx = (anatomy.ShadowRadius - 2.2 * lift) * scale * pose.StretchX;
+                job.ShadowRy = 1.4 * scale;
+                job.ShadowAlpha = 0.42 * (1 - lift);
             }
 
-            foreach (Puff puff in walker.Puffs)
+            if (hasDust)
             {
-                double age = puff.Age;
-                int size = Math.Max(1, Round(scale * (0.7 + 0.7 * age)));
-                surface.Puff(Round(puff.X) - left, Round(puff.Y) - top, size, (int)(190 * (1 - age)));
+                PuffSnapshot[] snaps = new PuffSnapshot[walker.Puffs.Count];
+                for (int k = 0; k < snaps.Length; k++)
+                {
+                    Puff puff = walker.Puffs[k];
+                    double age = puff.Age;
+                    snaps[k].X = Round(puff.X) - left;
+                    snaps[k].Y = Round(puff.Y) - top;
+                    snaps[k].Size = Math.Max(1, Round(scale * (0.7 + 0.7 * age)));
+                    snaps[k].Alpha = (int)(190 * (1 - age));
+                }
+                job.Puffs = snaps;
             }
 
+            job.Pose = pose;
+            job.Look = walker.Personality.Look;
+            job.Dress = dress;
+            job.FaceLeft = faceLeft;
             // The soles sit just above the ground line, leaving room for the halo.
-            DrawPose(surface, pose, walker.Personality.Look, dress, walker.FacesLeft, walker.CentreX - left, walker.FeetY - top - 1, scale);
+            job.CharCx = walker.CentreX - left;
+            job.SoleY = walker.FeetY - top - 1;
+            job.Scale = scale;
             return true;
+        }
+
+        /// <summary>Paints a snapshot into a surface; touches only the two.</summary>
+        public static void PaintJob(ref RenderJob job, Surface surface)
+        {
+            surface.Reset(job.Width, job.Height);
+            if (job.HasShadow)
+                surface.Shadow(job.ShadowCx, job.ShadowGy, job.ShadowRx, job.ShadowRy, job.ShadowAlpha);
+            if (job.Puffs != null)
+            {
+                for (int k = 0; k < job.Puffs.Length; k++)
+                    surface.Puff(job.Puffs[k].X, job.Puffs[k].Y, job.Puffs[k].Size, job.Puffs[k].Alpha);
+            }
+            DrawPose(surface, job.Pose, job.Look, job.Dress, job.FaceLeft, job.CharCx, job.SoleY, job.Scale);
         }
 
         /// <summary>

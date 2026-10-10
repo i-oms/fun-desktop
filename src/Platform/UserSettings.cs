@@ -18,6 +18,7 @@ namespace IdleWalker.Platform
         const string BirdsValue = "BirdsEnabled";
         const string BirdCountValue = "BirdCount";
         const string PantherValue = "PantherEnabled";
+        const string HideOnMoveValue = "HideOnMove";
         const string CornersValue = "HotCornersEnabled";
         const string DelayValue = "HotCornerDelayMs";
         static readonly string[] CornerValues = { "CornerTopLeft", "CornerTopRight", "CornerBottomLeft", "CornerBottomRight" };
@@ -133,6 +134,16 @@ namespace IdleWalker.Platform
         public static void SavePantherEnabled(bool on)
         {
             Save(PantherValue, on ? 1 : 0);
+        }
+
+        public static bool LoadHideOnMove()
+        {
+            return Load(HideOnMoveValue, Settings.HideOnMoveByDefault ? 1 : 0) != 0;
+        }
+
+        public static void SaveHideOnMove(bool on)
+        {
+            Save(HideOnMoveValue, on ? 1 : 0);
         }
 
         public static bool LoadHotCornersEnabled()

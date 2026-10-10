@@ -33,13 +33,16 @@ namespace IdleWalker.App
         readonly Troupe troupe;
         readonly TrayMenu tray;
         readonly FramePump pump;
+        readonly RenderThread paint = new RenderThread();
 
         double lastTick;
         double nextTopmost;
         double nextCheck;           // when to look again at the foreground window and the power
+        double nextBrainSave;       // when to write what the walkers learned to disk
         bool fullScreen;            // a full-screen app is in front: the Minions keep away
         bool summoned;              // a hot corner called the Minions out; cleared when the cursor moves
         AboutToast about;           // the card while it is showing
+        BrainDialog brains;         // the brains card while it is open
 
         public WalkerApp()
         {
@@ -51,6 +54,7 @@ namespace IdleWalker.App
             troupe.BeanEnabled = UserSettings.LoadBeanEnabled();
             troupe.BirdsEnabled = UserSettings.LoadBirdsEnabled();
             troupe.PantherEnabled = UserSettings.LoadPantherEnabled();
+            BrainStore.Load(troupe);
 
             CornerAction[] actions = new CornerAction[4];
             for (int c = 0; c < actions.Length; c++) actions[c] = UserSettings.LoadCornerAction((Corner)c);
@@ -62,6 +66,7 @@ namespace IdleWalker.App
 
             tray = new TrayMenu(troupe.Count, troupe.BirdCount, UserSettings.LoadIdleSeconds(), troupe.Dress,
                                 UserSettings.LoadWalkersEnabled(), troupe.MinionsEnabled, troupe.BeanEnabled, troupe.BirdsEnabled, troupe.PantherEnabled,
+                                UserSettings.LoadHideOnMove(),
                                 UserSettings.LoadHotCornersEnabled(), actions, delayMs);
             tray.ExitRequested += delegate { ExitThread(); };
             tray.WalkersToggled += delegate { UserSettings.SaveWalkersEnabled(tray.WalkersEnabled); };
@@ -76,6 +81,7 @@ namespace IdleWalker.App
                 UserSettings.SaveWalkerCount(tray.Count);
             };
             tray.IdleChanged += delegate { UserSettings.SaveIdleSeconds(tray.IdleSeconds); };
+            tray.HideOnMoveToggled += delegate { UserSettings.SaveHideOnMove(tray.HideOnMove); };
             tray.DressChanged += delegate
             {
                 troupe.Dress = tray.Dress;
@@ -113,11 +119,13 @@ namespace IdleWalker.App
                 UserSettings.SaveHotCornerDelay(tray.DelayMs);
             };
             tray.AboutRequested += delegate { ShowAbout(); };
+            tray.BrainsRequested += delegate { ShowBrains(); };
             StartupRegistration.RefreshPath();
 
             if (SynchronizationContext.Current == null)
                 SynchronizationContext.SetSynchronizationContext(new WindowsFormsSynchronizationContext());
             pump = new FramePump(SynchronizationContext.Current, OnTick);
+            paint.Start();
             pump.Start();
         }
 
@@ -155,16 +163,31 @@ namespace IdleWalker.App
                 pump.HalfRate = SystemInformation.PowerStatus.PowerLineStatus == PowerLineStatus.Offline;
             }
 
+            // Every minute: write what they learned to disk, so a restart
+            // (or a crash) keeps their taste, friendships and walks.
+            if (now >= nextBrainSave)
+            {
+                nextBrainSave = now + 60;
+                BrainStore.Save(troupe);
+            }
+
             // The master switch; which of the Minions and Mr. Bean actually come out is the troupe's business.
+            // A mouse move only sends them away while "Hide on mouse move" is ticked.
             bool enabled = tray.WalkersEnabled && !fullScreen;
             bool wantOut = enabled && (summoned || cursor.IdleFor(now, tray.IdleSeconds));
-            troupe.Step(dt, cursor.Position, wantOut, moved || !enabled);
+            troupe.Step(dt, cursor.Position, wantOut, (moved && tray.HideOnMove) || !enabled);
 
             // The walkers are re-raised once a second, except while the
             // About card is up: that belongs above them.
             bool raise = now >= nextTopmost && about == null;
             if (raise) nextTopmost = now + 1;
 
+            // Painting is split across threads: snapshots are cheap and made
+            // here for every walker that changed, the render thread turns
+            // them into pixels, and only the finished frames are shown -
+            // a memcpy plus one window call each. The UI thread never does
+            // pixel math, so menus, dialogs and the desktop stay fluid while
+            // a full cast animates at full rate.
             IList<Walker> walkers = troupe.Walkers;
             for (int i = 0; i < walkers.Count; i++)
             {
@@ -179,9 +202,28 @@ namespace IdleWalker.App
                     continue;
                 }
 
-                if (view.Renderer.Render(walker))
-                    view.Window.Present(view.Renderer.Surface, view.Renderer.Left, view.Renderer.Top);
+                RenderJob job;
+                if (view.Renderer.Prepare(walker, out job)) paint.Request(i, job);
                 if (raise) view.Window.StayOnTop();
+            }
+
+            PaintResult result;
+            while (paint.TryTake(out result))
+            {
+                if (result.Walker < 0 || result.Walker >= views.Count)
+                {
+                    paint.Release(result.Surface);
+                    continue;
+                }
+                View view = views[result.Walker];
+                if (result.Walker >= walkers.Count || walkers[result.Walker].IsHidden ||
+                    result.Stamp != view.Renderer.Stamp)
+                {
+                    paint.Release(result.Surface);   // stale: hid or moved on mid-paint
+                    continue;
+                }
+                view.Window.Present(result.Surface, result.Left, result.Top);
+                paint.Release(result.Surface);
             }
 
             pump.Animating = troupe.AnyVisible;
@@ -227,11 +269,61 @@ namespace IdleWalker.App
             about.Present();
         }
 
+        /// <summary>Shows the brains card, modally: rendering continues on its
+        /// own thread while it is open, so the card and the cast share
+        /// nothing dear. A second click while it is up brings it forward.</summary>
+        void ShowBrains()
+        {
+            if (brains != null)
+            {
+                try
+                {
+                    brains.Focus();
+                }
+                catch (Exception)
+                {
+                }
+                return;
+            }
+            BrainDialog dialog = new BrainDialog(troupe);
+            brains = dialog;
+            try
+            {
+                dialog.ShowDialog();
+            }
+            finally
+            {
+                brains = null;
+                dialog.Dispose();
+            }
+        }
+
         protected override void Dispose(bool disposing)
         {
             if (disposing)
             {
+                try
+                {
+                    BrainStore.Save(troupe);
+                }
+                catch (Exception)
+                {
+                }
                 pump.Stop();
+                try
+                {
+                    paint.Stop();
+                }
+                catch (Exception)
+                {
+                }
+                try
+                {
+                    if (brains != null) brains.Dispose();
+                }
+                catch (Exception)
+                {
+                }
                 if (about != null) about.Dispose();
                 tray.Dispose();
                 ripple.Dispose();

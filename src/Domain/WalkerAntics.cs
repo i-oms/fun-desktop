@@ -78,7 +78,7 @@ namespace IdleWalker.Domain
                     anticSeconds = 2.8;
                     StopFacing(goalTarget != null ? goalTarget.CentreX : cursorX, Mode.Antic);
                     return;
-                case Antic.Teddy: anticSeconds = 3.6; broadcast = Antic.Teddy; break;   // the Minions come to look
+                case Antic.Teddy: anticSeconds = 3.6; broadcast = Antic.Teddy; if (bean) AddBonus(0.2); break;   // the Minions come to look; comfort in hand already
                 case Antic.Sneak: anticSeconds = 3.4; break;
                 case Antic.Fuss: anticSeconds = 2.8; break;
                 case Antic.Ponder: anticSeconds = 3.0; break;
@@ -241,7 +241,12 @@ namespace IdleWalker.Domain
                     if (anticStage == 0)
                     {
                         anticStage = 1;
-                        if (goalTarget != null) goalTarget.Spook(cx);
+                        if (goalTarget != null)
+                        {
+                            goalTarget.Spook(cx);
+                            NotePrankLanded(goalTarget);
+                            goalTarget.NotePranked(this);
+                        }
                     }
                     break;
 
@@ -288,7 +293,12 @@ namespace IdleWalker.Domain
                     if (anticStage == 0 && t >= 0.7)
                     {
                         anticStage = 1;
-                        if (goalTarget != null) goalTarget.Spook(cx);
+                        if (goalTarget != null)
+                        {
+                            goalTarget.Spook(cx);
+                            NotePrankLanded(goalTarget);
+                            goalTarget.NotePranked(this);
+                        }
                     }
                     break;
 
@@ -326,12 +336,22 @@ namespace IdleWalker.Domain
                     if (anticStage == 0 && t >= 0.5)
                     {
                         anticStage = 1;
-                        if (goalTarget != null) goalTarget.Spook(cx);
+                        if (goalTarget != null)
+                        {
+                            goalTarget.Spook(cx);
+                            NotePrankLanded(goalTarget);
+                            goalTarget.NotePranked(this);
+                        }
                     }
                     else if (anticStage == 1 && t >= 1.1)
                     {
                         anticStage = 2;
-                        if (goalTarget != null && goalTarget.IsGrounded) goalTarget.Spook(cx);
+                        if (goalTarget != null && goalTarget.IsGrounded)
+                        {
+                            goalTarget.Spook(cx);
+                            NotePrankLanded(goalTarget);
+                            goalTarget.NotePranked(this);
+                        }
                     }
                     break;
 

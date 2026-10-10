@@ -1,3 +1,4 @@
+
 # IdleWalker
 
 A tiny Windows desktop companion. When your mouse cursor has not moved for a
@@ -32,7 +33,7 @@ fun/
     ├── Domain/               the characters - no Windows code in here
     │   ├── Expression.cs     a face as numbers, and the repertoire of moods
     │   ├── Look.cs           what a walker is born with: which figure it is (Minion or Mr. Bean), eyes, hair; the figures' measurements (Anatomy)
-    │   ├── Personality.cs    the cast: temperament, face, speed, habits - the Minions, and Mr. Bean
+    │   ├── Personality.cs    the cast: temperament, face, speed, habits - the Minions, Mr. Bean, the birds, the Panther
     │   ├── Pose.cs           which parts to show in one frame
     │   ├── Puff.cs           a speck of dust
     │   ├── IWorld.cs         what a walker needs to know about the terrain
@@ -40,14 +41,19 @@ fun/
     │   ├── Walker.cs         one character: state machine, physics, face
     │   ├── WalkerAntics.cs   the same class, continued: the idle antics and reactions
     │   ├── WalkerBrain.cs    the same class, continued: wants, errands, chats, pranks, tag
+    │   ├── WalkerMind.cs     the same class, continued: learning, memory, friendships, rhythm, saved format
+    │   ├── WalkerStyle.cs    the same class, continued: how its own walk drifts with experience
     │   ├── WalkerEyes.cs     the same class, continued: where the eyes go - following, side-eyes, eye-rolls, blinks in character
     │   └── Troupe.cs         the group: entrances, greetings, shoving, tag, onlookers, contagion
     ├── Rendering/            pixels
     │   ├── SolidPainter.cs   what the painters share: compositing, lighting, distance fields, limb sorting, the floating sweat/notes/Zzz/"!"
     │   ├── MinionPainter.cs  draws a Minion from solids: distance fields, normals, lighting
     │   ├── BeanPainter.cs    draws Mr. Bean the same way: knees, a tweed jacket and tie, a head on a neck, Teddy
+    │   ├── BirdPainter.cs    draws an Angry Bird the same way: feathers, brows, beak, crest and tail
+    │   ├── PantherPainter.cs draws the Pink Panther the same way: sleek, yellow-eyed, long-tailed
     │   ├── Surface.cs        software canvas, soft halo, shadow, dirty-region tracking
-    │   └── FrameRenderer.cs  lays out the canvas, draws a frame, skips unchanged ones
+    │   ├── FrameRenderer.cs  snapshots changed walkers, paints snapshots into frames, skips unchanged ones
+    │   └── RenderThread.cs   the background painter: snapshots in, pixels out
     ├── Platform/             Win32
     │   ├── Native.cs         P/Invoke declarations
     │   ├── CornerActions.cs  what a hot corner does: shortcuts, lock, screen saver, monitor off
@@ -56,11 +62,13 @@ fun/
     │   ├── SpriteWindow.cs   layered click-through window
     │   ├── FramePump.cs      vsync-paced tick thread (half rate on battery)
     │   ├── StartupRegistration.cs   the "Start with Windows" registry entry
-    │   └── UserSettings.cs   remembers every menu choice
+    │   ├── UserSettings.cs   remembers every menu choice
+    │   └── BrainStore.cs     remembers what the walkers learned, on disk
     └── App/                  wiring
-        ├── WalkerApp.cs      the per-frame loop, one window per walker
+        ├── WalkerApp.cs      the per-frame loop, one window per walker, paint via the render thread
         ├── CursorWatcher.cs  idle detection
         ├── TrayMenu.cs       notification-area icon and menu
+        ├── BrainDialog.cs    the brains dashboard
         └── AboutToast.cs     the About card
 ```
 
@@ -164,12 +172,15 @@ Minion appears.
 |---|---|
 | Walkers | The master switch. Ticked (the default): whoever is switched on below comes out when the cursor rests. Untick it and nobody comes out at all; anyone on screen leaves at once, and every walker setting below is greyed out. Remembered between runs. |
 | Appear after: *t* → 1…5 seconds, 1…5 minutes | How long the mouse must be still before they come out. Takes effect at once: shorten it and they appear sooner, lengthen it while they are out and they stay (they only ever leave when the mouse moves). Remembered between runs. |
+| Hide on mouse move | Ticked (the default): moving the mouse sends everyone back underground at once. Untick it and they stay out and carry on while you work; newcomers still wait for the cursor to rest. Remembered between runs. |
 | Minions | Ticked (the default): the Minions come out. Untick it to switch just them off; any on screen leave at once (Mr. Bean stays if he is on), and their count and Dress are greyed out. Remembered between runs. |
 | Minions: *n* → 1…10 | How many Minions come out (five by default). Raising it brings the new ones out straight away (one at a time); lowering it sends the extras away. Remembered between runs. |
 | Dress: *colour* → Classic blue, Red, Green, Purple, Orange, Pink, Teal, Black, Random, Custom… | The colour of their overalls. Classic blue is the default. A fixed colour applies to everyone at once, even while they are out. Random gives each Minion its own colour every time it comes out; picking Random again re-rolls the ones on screen. Custom… opens the Windows colour picker; the menu then shows the colour as "Custom #RRGGBB". Remembered between runs. |
 | Mr. Bean | Unticked by default. Tick it and Mr. Bean comes out (after the Minions, as an extra; the Minions count is not his). Untick it and he leaves at once; the Minions stay. He and the Minions are independent: either, both or neither can be on. Remembered between runs. See [Mr. Bean](#mr-bean). |
+| Pink Panther | Unticked by default. Tick it and the Pink Panther comes out alongside the rest, independently of them. Untick it and he leaves at once; the others stay. Remembered between runs. |
 | Angry Birds | Unticked by default. Tick it and the birds come out (after the Minions; the counts are independent). Untick it and they leave at once. Remembered between runs. See [Angry Birds](#angry-birds). |
 | Birds: *n* → 1…10 | How many birds come out (three by default). Raising it brings the new ones out straight away (one at a time); lowering it sends the extras away. Remembered between runs. |
+| Brains... | Opens the brains dashboard: where their learnings live, how big they are, and a live per-walker table (learned tastes, friendships, best friend, rival, own walk) with buttons to open the file and to forget everything. See [Brains](#brains). |
 | Start with Windows | Ticked: the program starts when you sign in. On by default; untick it to switch it off. See below. |
 | Hot corners | Ticked (the default): pushing the cursor into a corner of any monitor and leaving it there fires that corner's action. Untick it to switch the corners off. Remembered between runs. See [Hot corners](#hot-corners). |
 | Top-left / Top-right / Bottom-left / Bottom-right: *action* | What each corner does: Nothing, Task view, Show desktop, Start menu, Notification centre, Quick settings, Lock screen, Screen saver, Monitor off, or Call the Minions. Defaults: Task view, Notification centre, Start menu, Show desktop. |
@@ -228,7 +239,7 @@ a hand to his chin, his collar or his chest.
 | Resting face | wide-eyed and gormless, lips just parted; a knowing look on a rest, hands clasped in front, rocking on his heels, head turning slowly |
 | Habits, most to least often | **Teddy**: fishes Teddy out of his jacket, holds him up and gazes at him fondly, makes him wave his paw at you with a big grin, tucks him away. **Hello**: his stiff wave - arm straight up beside the head, hand wagging from the wrist, up on his toes, chin up. **Eyebrows**: leans in with his hands behind his back and waggles his eyebrows at you over a smirk. **Sneak**: looks over each shoulder, creeps forward on tiptoe hunched with his hands up, then freezes and whistles innocently. **Fuss**: straightens his tie with both hands, brushes down a lapel, pats his hair. **Ponder**: finger to the chin, eyes rolled up, tapping, then an idea - finger in the air and a "!". **The Bean dance**: elbows pumping, hips twisting, knees bouncing, head bobbing, notes flying. **Drive**: mimes his Mini - both hands on the wheel, leaning into the bends, then a long honk ("!"). **Photo**: holds up a box camera, takes your picture (flash!), studies the print and shows it off with a grin. Also looks about, rests, dozes (head nodding right off, Zzz), whistles, gets hiccups, sneezes. He never trips and hardly ever hops. |
 | At your cursor | Walks over and prods it with one finger, twice, examines the finger, then hides his hands behind his back and looks innocent. |
-| With the others | Creeps up on tiptoe on anyone standing quietly (dozing, whistling, daydreaming...) and pokes them in the back; they jump with a "!". The Minions react when Teddy comes out: the friendly ones wave, the calm and timid ones stop to look, the bullies laugh. He greets with his stiff wave, nods with his head, chats (mumbling, gesturing), joins dances with the Bean dance, plays tag, comforts the shoved and is comforted himself. He winces with his hands to his cheeks when he sees a shove, recoils fanning his nose at a toot, and glares when pranked. The bullies charge him like anyone else; shoved, he flies, runs off flailing and sulks until Bob comes over. |
+| With the others | Creeps up on tiptoe on anyone standing quietly (dozing, whistling, daydreaming...) and pokes them in the back; they jump with a "!". The Minions react when Teddy comes out: the friendly ones wave, the calm and timid ones stop to look, the bullies laugh. He greets with his stiff wave, nods with his head, chats (mumbling, gesturing), joins dances with the Bean dance, plays tag, comforts the shoved and is comforted himself. He winces with his hands to his cheeks when he sees a shove, recoils fanning his nose at a toot, and glares when pranked. The bullies charge him like anyone else; shoved, he flies, runs off flailing and sulks until Bob comes over. He is the lonely one: Teddy is his only real friend, so the lonelier he is the more he clings to Teddy, the more a chat teaches him to seek people out, and the more being stood up stings. His schemes delight him (a landed poke pays extra), he pays back whoever wronged him, he comforts readily, and being a child he experiments often and never quite connects consequences. |
 
 ### Angry Birds
 
@@ -254,7 +265,46 @@ Bob and Dave point at it and giggle, Stuart and Mel stick their tongues out
 at it, Jerry serenades it, Tim salutes it, Phil plays peekaboo with it,
 Carl peeks at it through his fingers, Norbert blows it a kiss and Mr. Bean
 prods it with a finger. Random hops only happen with energy to spare, and
-rarely.
+rarely. And they learn: every walker keeps its own little tally of what
+each choice was worth - chats and greetings that warmed it, pranks that
+landed, dances applauded by a crowd, shoves that stung - and mostly picks
+what has paid off before, with an occasional experiment (the rates are
+`Settings.LearnRate` and `Settings.ExploreRate`). It also remembers *who*:
+chats and games of tag warm it to someone, pranks and shoves chill it, so
+it prefers visiting friends - and bullies take a shine to pranking walkers
+they dislike. The body learns too:
+each walker is born with a whisper of difference in its bob, lean, pace,
+hoppiness, swagger and fidget, then runs little trials - change one thing,
+live with it, keep it if life went well - so no two ever walk quite alike.
+Nor do they just pace: a lonely one turns back toward a friend behind it
+instead of marching away, covering ground side by side bonds a pair, and
+each remembers the stretches of desktop where life treated it well and
+wanders back to its hangouts.
+
+No two minds run at the same speed, either: the nervous learn fast and
+the calm slowly, clowns and children experiment constantly and the timid
+hardly at all, and a bully lives more in the moment than a worrier does
+(the rates are per temperament in `src\Domain\WalkerMind.cs`, built on the
+`Settings.LearnRate` and `Settings.ExploreRate` base rates). Moods linger
+beyond the moment as well: warmth after chats, tag and applause and cold
+after pranks and shoves settle into cheer or gloom, dread rises near
+bullies, repeats go stale while untried things beckon, and a slow
+optimism - a good or hard life, accumulated over days - sets the baseline
+the daily cheer returns to. Thinking is never starved: the idle timer
+keeps running through standing pauses, so even a crowd never stops anyone
+reflecting.
+
+The diary is short and the reflections last. Each walker remembers its
+last few hurts and kindnesses, with who and when: fresh warmth pulls a
+visit harder, fresh hurt turns it away - anyone will give a recent
+attacker a wide berth for a minute or two, not just Carl. Distilled out
+of the friendships over time come a best friend and a rival, when earned:
+best friends are visited across the desktop and comforted first, and
+bullies run vendettas against their rivals. And the cast keeps time: late
+at night showing off quiets down, rest calls louder, and sleep restores
+more - leave them running overnight and you will find a sleepy desktop by
+morning. Same cast, diverging taste over days: what is inborn stays, what
+is lived accumulates - and what is lived is kept, in [Brains](#brains).
 
 **How they get on**
 
@@ -317,13 +367,53 @@ rarely.
   ones shake their heads, the bullies turn their backs in a huff, and Phil
   himself whistles innocently and glances about.
 - Two aggressive walkers that charge each other collide and both go flying.
+- **Best friends and rivals.** Past enough fondness or resentment, a walker
+  has a best friend and a rival (watch the dashboard). It crosses the
+  desktop to visit a best friend and hurries hardest to comfort one, and it
+  simply avoids a rival - unless it is a bully, in which case the rival is
+  exactly who the next prank or charge is for.
+- **Fresh grudges.** Anyone shoved or pranked gives the attacker a wide
+  berth for a minute or two afterwards, bully or not; bullies never back
+  down, everyone else does.
 - Aggressive walkers ignore greetings; friendly ones wave at them anyway.
 - Interactions only happen between walkers on the same ground level (so not
   across a step between monitors) and never while someone is in the air.
 
 The cast is defined in `src\Domain\Personality.cs` (the Minions in
-`Roster`, Mr. Bean as `Personality.Bean`); the meeting rules are in
-`src\Domain\Troupe.cs`.
+`Roster`, Mr. Bean as `Personality.Bean`, the flock in `BirdRoster`, the
+Panther as `Personality.Panther`); the meeting rules are in
+`src\Domain\Troupe.cs`; the learning in `src\Domain\WalkerMind.cs`
+(drives, memory, friendships, rhythm) and `src\Domain\WalkerBrain.cs`
+(choices, errands); the walk in `src\Domain\WalkerStyle.cs`.
+
+### Brains
+
+Everything they learn is kept between runs in one small text file:
+
+```
+%APPDATA%\IdleWalker\brains.txt
+```
+
+Each walker gets a section under its name with its learned taste (every
+situation and choice), its friendships and grudges, its hangouts, its
+walk, its experience counts and its optimism; moods (cheer, fear, energy)
+are the moment, not the character, and start fresh. It is saved every
+minute and on exit, so even a crash keeps almost everything, and a
+missing or corrupt file just means a fresh cast - startup never fails
+because of it. To start over, quit the program, delete the file (or one
+`[Name]` block), and start again. The format is `PackMind`/`UnpackMind`
+in `src\Domain\WalkerMind.cs`, the file is `src\Platform\BrainStore.cs`.
+
+The tray menu's **Brains...** opens the dashboard: the file and its live
+size, totals across the cast, and a per-walker table - name, temperament,
+learned tastes, friendships, best friend, rival, own walk - that refreshes
+every second while they keep playing behind it. Click a header to sort
+(most tastes, most friends) and click a row to follow one walker; scroll,
+selection and sort all survive refreshes. **Open file location** reveals
+the file in Explorer; **Forget everything...** asks, then wipes every mind
+and deletes the file, and the table zeroes itself live. The card shares
+nothing dear with the animation: snapshots flow to the paint thread (see
+[Frame flow](#frame-flow)), so it stays instant with a full cast out.
 
 ### Start automatically with Windows
 
@@ -470,7 +560,11 @@ and idle intervals, stamina, sociability, curiosity, clumsiness and the
 weighted list of habits) are in `src\Domain\Personality.cs`; the timing of
 each antic is in `src\Domain\WalkerAntics.cs` (`StartAntic` sets how long
 it lasts); how fast the drives rise and fall, and the odds of each errand,
-are in `src\Domain\WalkerBrain.cs` (`StepMood` and `Decide`).
+are in `src\Domain\WalkerBrain.cs` (`StepMood` and `Decide`); how fast each
+individual learns and explores, and how far ahead it connects acts to
+consequences, is per temperament in `src\Domain\WalkerMind.cs`
+(`LearnRateFor`, `Explore`, `MindGamma`), where the diary, best
+friend/rival and optimism live too, and the night rhythm (`NightTiredness`).
 Timings that live in the state machine (`src\Domain\Walker.cs`): blink every
 `Between(1.8, 4.5)` s in `Step`, scaled by `BlinkPace` per temperament (the
 gaps between eye beats and the length of each are in `src\Domain\WalkerEyes.cs`);
@@ -631,14 +725,30 @@ WalkerApp.OnTick     MonitorWorld.Refresh · CursorWatcher.Poll ─▶ Troupe.St
                                               │
 Troupe               spawn next / startle all ─▶ Walker.Step ×n ─▶ Interact (greet, charge, shove)
                                               │
-FrameRenderer ×n     Walker state ─▶ Pose ─▶ Surface (shadow, dust, painted Minion, halo)   [skipped if unchanged]
+FrameRenderer ×n     snapshots: layout + Pose, unchanged ones skipped (microseconds)
                                               │
-SpriteWindow ×n      Surface.Pixels (content rect only) ─▶ DIB section ─▶ UpdateLayeredWindow
+RenderThread (thread) RenderJob ─▶ Surface (shadow, dust, painted figure, halo)
+                                              │
+SpriteWindow ×n      finished Surface (content rect only) ─▶ DIB section ─▶ UpdateLayeredWindow
 ```
 
 Each walker has its own small window rather than one desktop-wide window:
 ten 120 x 144 px windows are far cheaper to update than one 3840 px wide
 one, and a walker that hasn't visibly changed costs nothing at all.
+
+The split is by cost, and it is what keeps the computer fluid. The
+simulation (stepping the whole cast) takes about a millisecond for hundreds
+of frames; shading one Minion takes about a millisecond on its own. So the
+UI thread only ever does the cheap half - stepping, and snapshotting what
+changed into a `RenderJob` (pose struct, immutable look, copied dust; the
+walker is never touched while painting). One background painter
+(`src\Rendering\RenderThread.cs`) turns the snapshots into pixels: if a
+walker changes twice before its frame is painted, only the latest snapshot
+is kept, and finished frames are handed back for the UI thread to show
+(windows keep their thread affinity - only pixels cross threads, never
+window calls; each canvas is owned by exactly one thread at a time). When
+the painter falls behind, frames are skipped, never waited for: animation
+degrades, the computer does not.
 
 ### The window
 
@@ -703,8 +813,11 @@ is what a 32-bpp `BI_RGB` DIB holds).
    anti-aliased edges blend with the shadow and dust behind them.
 
 No GDI+ is involved in the per-frame path; it is all array writes. Painting
-one Minion costs about 1 ms at 100% scaling (2 ms at 150%), and only
-happens for walkers whose picture changed.
+one Minion costs about 1 ms at 100% scaling (4 ms at 200%), and only
+happens for walkers whose picture changed - and it happens on the render
+thread (`src\Rendering\RenderThread.cs`), never on the UI thread, which
+only snapshots and shows. There is no per-frame repaint cap any more:
+every changed walker is queued, coalesced per walker, and painted in turn.
 
 **Doing less work.** The canvas is 40 x 48 units but the character is only
 about 12 x 21, so `Surface` tracks the rectangle that has actually been drawn
@@ -791,6 +904,11 @@ default re-ticking the box after the user has unticked it. Reading or
 writing failures are swallowed - the worst case is the count resets to 5,
 the rest time to two seconds, the dress to classic blue and the corners to
 their defaults next time.
+
+What the walkers learned lives outside the registry, in
+`%APPDATA%\IdleWalker\brains.txt` (see [Brains](#brains)): taste,
+friendships, hangouts, walks, experience counts and optimism per walker,
+saved every minute and on exit. Delete it (quit first) for a fresh cast.
 
 ### Adding things
 
@@ -918,6 +1036,12 @@ number. The one real cost is the painter: every pixel of a Minion is shaded
 from signed distance fields with lighting, about 1.2 ms per repaint, and a
 walking Minion repaints nearly every frame.
 
+Since the threaded renderer, that cost no longer sits on the UI thread:
+menus, dialogs and the desktop stay fluid with a full cast out, and a
+struggling machine shows fewer new frames rather than slowing down. The
+totals above are unchanged - the pixels cost what they cost, wherever they
+are shaded.
+
 What keeps it out of the way:
 
 - **Full-screen apps.** While the window in front covers its whole monitor -
@@ -954,6 +1078,7 @@ What keeps it out of the way:
 | Does not appear while a game or film is up | By design: a full-screen window in front keeps the Minions hidden (and exclusive full-screen apps bypass the compositor anyway). Leave the app or un-fullscreen it. |
 | Blurry or wrong size on one monitor | Check Windows' per-monitor scaling; the cell size follows it. If a monitor reports an odd DPI, `ScaleFor` is where to adjust. |
 | `build.cmd` says the output file is in use | Exit IdleWalker from the tray first. |
+| Brains dashboard is empty ("nothing saved yet") | They bank memories only while out and learning; leave them alone together for a few minutes. **Forget everything...** in the card also wipes it - the next minute's autosave starts it over. |
 | `build.cmd` cannot find `csc.exe` | On 32-bit Windows edit the path to use `Framework` instead of `Framework64`. |
 | It walks over something I want to click | It is click-through, so just click; the character does not intercept input. |
 

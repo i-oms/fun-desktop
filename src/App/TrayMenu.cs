@@ -24,6 +24,7 @@ namespace IdleWalker.App
         readonly ToolStripMenuItem minionsItem = new ToolStripMenuItem("Enabled");
         readonly ToolStripMenuItem countMenu = new ToolStripMenuItem("Count");
         readonly ToolStripMenuItem idleMenu = new ToolStripMenuItem("Appear after");
+        readonly ToolStripMenuItem hideOnMoveItem = new ToolStripMenuItem("Hide on mouse move");
         readonly ToolStripMenuItem dressMenu = new ToolStripMenuItem("Dress");
         readonly ToolStripMenuItem customItem = new ToolStripMenuItem("Custom...");
         readonly ToolStripMenuItem beanItem = new ToolStripMenuItem("Mr. Bean");
@@ -60,10 +61,12 @@ namespace IdleWalker.App
         public event EventHandler BirdsToggled;
         public event EventHandler BirdCountChanged;
         public event EventHandler PantherToggled;
+        public event EventHandler HideOnMoveToggled;
         public event EventHandler HotCornersToggled;
         public event Action<Corner> CornerChanged;
         public event EventHandler DelayChanged;
         public event EventHandler AboutRequested;
+        public event EventHandler BrainsRequested;
 
         /// <summary>True while the master switch is on: nobody comes out while it is off.</summary>
         public bool WalkersEnabled
@@ -119,6 +122,12 @@ namespace IdleWalker.App
             get { return pantherItem.Checked; }
         }
 
+        /// <summary>True while a mouse move sends everyone back underground. Unticked, they stay out and carry on.</summary>
+        public bool HideOnMove
+        {
+            get { return hideOnMoveItem.Checked; }
+        }
+
         /// <summary>True while the hot corners are switched on.</summary>
         public bool HotCornersEnabled
         {
@@ -138,13 +147,18 @@ namespace IdleWalker.App
         }
 
         public TrayMenu(int initialCount, int initialBirdCount, int initialIdleSeconds, int initialDress,
-                        bool walkersOn, bool minionsOn, bool beanOn, bool birdsOn, bool pantherOn,
+                        bool walkersOn, bool minionsOn, bool beanOn, bool birdsOn, bool pantherOn, bool hideOnMove,
                         bool cornersOn, CornerAction[] initialActions, int initialDelayMs)
         {
             // ---- The walkers: the master switch ----
             walkersItem.Checked = walkersOn;
             walkersItem.CheckOnClick = true;
             walkersItem.CheckedChanged += OnWalkersToggled;
+
+            // ---- Staying out: untick and a mouse move no longer sends them away ----
+            hideOnMoveItem.Checked = hideOnMove;
+            hideOnMoveItem.CheckOnClick = true;
+            hideOnMoveItem.CheckedChanged += delegate { Raise(HideOnMoveToggled); };
 
             // ---- The Minions ----
             minionsItem.Checked = minionsOn;
@@ -267,6 +281,7 @@ namespace IdleWalker.App
 
             menu.Items.Add(walkersItem);
             menu.Items.Add(idleMenu);
+            menu.Items.Add(hideOnMoveItem);
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(minionsMenu);
             menu.Items.Add(beanItem);
@@ -276,6 +291,7 @@ namespace IdleWalker.App
             menu.Items.Add(hotCornersMenu);
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(startupItem);
+            menu.Items.Add("Brains...", null, OnBrainsClick);
             menu.Items.Add("About", null, OnAboutClick);
             menu.Items.Add("Exit", null, OnExitClick);
             ShowEnabled();
@@ -320,6 +336,7 @@ namespace IdleWalker.App
         {
             bool walkers = walkersItem.Checked;
             idleMenu.Enabled = walkers;
+            hideOnMoveItem.Enabled = walkers;
             minionsMenu.Enabled = walkers;
             beanItem.Enabled = walkers;
             pantherItem.Enabled = walkers;
@@ -541,6 +558,12 @@ namespace IdleWalker.App
         {
             AllowCloseAndHide();
             Raise(AboutRequested);
+        }
+
+        void OnBrainsClick(object sender, EventArgs e)
+        {
+            AllowCloseAndHide();
+            Raise(BrainsRequested);
         }
 
         void OnExitClick(object sender, EventArgs e)

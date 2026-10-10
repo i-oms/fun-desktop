@@ -79,17 +79,33 @@ namespace IdleWalker.Domain
                     }
                     break;
             }
-            energy = Math.Max(0, Math.Min(1, energy + (gain - drain / personality.Stamina) * dt));
+            // Sleep restores better in the small hours; everything else restores
+            // a little worse - the body keeps time even underground.
+            bool deepRest = mode == Mode.Antic && (antic == Antic.Doze || antic == Antic.Sleepwalk);
+            double night = NightTiredness();
+            double rest = deepRest ? gain * (1 + 0.3 * night) : gain * (1 - 0.25 * night);
+            energy = Math.Max(0, Math.Min(1, energy + (rest - drain / personality.Stamina) * dt));
             social = Math.Min(1, social + 0.015 * personality.Sociable * dt);
             curiosity = Math.Min(1, curiosity + 0.012 * personality.Curious * dt);
+            StepEmotion(dt);
         }
 
         /// <summary>How much go it has left, 0..1.</summary>
         public double Energy { get { return energy; } }
 
-        // An idle moment: first the errands (each in character and only
-        // when the wish for it has grown), otherwise one of its habits on
-        // the spot, weighted by how it is feeling.
+        // An idle moment: survival first (the timid one), then play (tag),
+        // then a choice of its own - each habit, or setting off to visit,
+        // prank or inspect - picked by learned taste with an occasional
+        // experiment. The previous choice is judged first, by how its
+        // drives moved since and what happened meanwhile (see WalkerMind).
+        int FindHabit(Antic antic)
+        {
+            Habit[] all = personality.Habits;
+            for (int i = 0; i < all.Length; i++)
+                if (all[i].Antic == antic) return i;
+            return -1;
+        }
+
         void Decide()
         {
             Walker other = company;
@@ -98,97 +114,258 @@ namespace IdleWalker.Domain
             double d = same ? Math.Abs(other.CentreX - cx) : double.MaxValue;
             Temperament tm = personality.Temperament;
 
+            // Always judge the last choice first: even a reflex interrupts
+            // life, it should not erase the lesson from what came before.
+            int state = MindState();
+            EnsureTable();
+            SettlePrevious();
+
             // The timid one keeps well away from the bullies - and the birds,
             // who are just as scary with a beak: hides if one is close,
             // otherwise turns and walks the other way, glancing back.
+            // Hiding is remembered so safety learns its value; a bare turn
+            // is a reflex and claims no credit.
             if (same && tm == Temperament.Timid &&
                 (other.Temperament == Temperament.Aggressive || other.Temperament == Temperament.Feisty) &&
                 d < 380 * sizeFactor)
             {
-                if (d < 160 * sizeFactor || rng.NextDouble() < 0.35) StartAntic(Antic.Hide);
+                if (d < 160 * sizeFactor || rng.NextDouble() < 0.35)
+                {
+                    int hide = FindHabit(Antic.Hide);
+                    if (hide >= 0) RememberChoice(state, hide);
+                    StartAntic(Antic.Hide);
+                }
                 else if ((other.CentreX - cx) * facing > 0)
                 {
                     afterTurn = Mode.Walk;
                     Brake(Mode.Turn);
                 }
-                else StartAntic(Antic.Look);
+                else
+                {
+                    int look = FindHabit(Antic.Look);
+                    if (look >= 0) RememberChoice(state, look);
+                    StartAntic(Antic.Look);
+                }
                 return;
             }
 
-            // A bully with somebody standing quietly in range creeps up on
-            // them to shout boo; Mr. Bean creeps up to give them a poke, the
-            // Panther creeps up to give them a poke, and a bird hops up to
-            // give them a peck.
-            if (same && (tm == Temperament.Aggressive || tm == Temperament.Eccentric || tm == Temperament.Feisty || tm == Temperament.Suave) && other.IsQuiet &&
-                d > 1.6 * BodyWidth && d < 450 * sizeFactor && energy > 0.4 && rng.NextDouble() < ((bean || bird || panther) ? 0.5 : 0.6))
+            // Anyone gives a wide berth to someone who hurt them very recently -
+            // grudges walk, not just the timid. Bullies never back down.
+            if (same && tm != Temperament.Aggressive &&
+                RecentFeeling(other, EvHurt, 90) > 0.5 && d < 220 * sizeFactor)
             {
-                SetGoal(Goal.Prank, other);
+                if ((other.CentreX - cx) * facing > 0)
+                {
+                    afterTurn = Mode.Walk;
+                    Brake(Mode.Turn);
+                }
+                else
+                {
+                    int look = FindHabit(Antic.Look);
+                    if (look >= 0) RememberChoice(state, look);
+                    StartAntic(Antic.Look);
+                }
                 return;
             }
 
-            // A friendly one goes to comfort anyone who has been shoved.
-            if (same && tm == Temperament.Friendly && other.IsUpset && d > 1.2 * BodyWidth && d < 900 * sizeFactor)
-            {
-                SetGoal(Goal.Visit, other);
-                return;
-            }
-
-            // Wanting company: go over for a chat.
-            if (same && tm != Temperament.Aggressive && d > 1.6 * BodyWidth && d < 900 * sizeFactor &&
-                rng.NextDouble() < social * personality.Sociable * 0.9)
-            {
-                SetGoal(Goal.Visit, other);
-                return;
-            }
-
-            // Two friendly ones with energy to burn play tag.
+            // Two friendly ones with energy to burn play tag. Remembered as
+            // a social outing so the fun that follows teaches its value.
             if (same && personality.Warm && other.Personality.Warm && other.IsWalking &&
                 !other.HasGoal && d < 500 * sizeFactor && energy > 0.55 && rng.NextDouble() < 0.4)
             {
+                RememberChoice(state, VisitChoice);
                 StartChase(other);
                 return;
             }
 
-            // The cursor has become too interesting to ignore.
-            if (curiosity > 0.6 && rng.NextDouble() < curiosity * personality.Curious * 0.5 && CursorOnThisGround())
-            {
-                if (Math.Abs(cursorX - cx) < 60 * sizeFactor)
-                {
-                    curiosity = 0;
-                    StartAntic(InspectAntic());
-                }
-                else
-                {
-                    SetGoal(Goal.Inspect, null);
-                }
-                return;
-            }
+            // Choose: every habit is always an option; the errands join in
+            // only when they make sense (nearby company, a quiet victim,
+            // a cursor worth a look). The last choice was already judged above.
+
+            double visitReach = 900 * sizeFactor;
+            if (same && other.IsUpset && personality.Warm) visitReach = 1200 * sizeFactor;   // hurry to comfort
+            if (same && other == BestFond()) visitReach = Math.Max(visitReach, 1200 * sizeFactor);   // best friends cross the desktop
+            bool visitValid = same && tm != Temperament.Aggressive &&
+                              d > 1.6 * BodyWidth && d < visitReach;
+            bool prankValid = same && (tm == Temperament.Aggressive || tm == Temperament.Eccentric ||
+                              tm == Temperament.Feisty || tm == Temperament.Suave) && other.IsQuiet &&
+                              d > 1.6 * BodyWidth && d < 450 * sizeFactor && energy > 0.4;
+            bool inspectValid = curiosity > 0.6 && CursorOnThisGround();
+            bool inspectNear = inspectValid && Math.Abs(cursorX - cx) < 60 * sizeFactor;
 
             Habit[] habits = personality.Habits;
-            double total = 0;
-            for (int i = 0; i < habits.Length; i++) total += HabitWeight(habits[i]);
-            double roll = rng.NextDouble() * total;
-            for (int i = 0; i < habits.Length; i++)
+            int[] acts = new int[habits.Length + 3];
+            int n = 0;
+            for (int i = 0; i < habits.Length; i++) acts[n++] = i;
+            if (visitValid) acts[n++] = VisitChoice;
+            if (prankValid) acts[n++] = PrankChoice;
+            if (inspectValid) acts[n++] = InspectChoice;
+            if (n == 0) return;
+
+            int choice;
+            if (rng.NextDouble() < Explore())
             {
-                roll -= HabitWeight(habits[i]);
-                if (roll < 0 || i == habits.Length - 1)
+                choice = acts[rng.Next(n)];
+            }
+            else
+            {
+                choice = acts[0];
+                double best = OptionValue(state, choice, other);
+                for (int i = 1; i < n; i++)
                 {
-                    StartAntic(habits[i].Antic);
-                    return;
+                    double v = OptionValue(state, acts[i], other);
+                    if (v > best)
+                    {
+                        best = v;
+                        choice = acts[i];
+                    }
                 }
+            }
+            RememberChoice(state, choice);
+
+            if (choice < habits.Length)
+            {
+                StartAntic(habits[choice].Antic);
+            }
+            else if (choice == VisitChoice)
+            {
+                wantAtVisit = social;
+                SetGoal(Goal.Visit, other);
+            }
+            else if (choice == PrankChoice)
+            {
+                SetGoal(Goal.Prank, other);
+            }
+            else if (inspectNear)
+            {
+                curiosity = 0;
+                StartAntic(InspectAntic());
+            }
+            else
+            {
+                SetGoal(Goal.Inspect, null);
             }
         }
 
+        /// <summary>Learned value plus inborn taste, current drives, mood and who it would deal with.</summary>
+        double OptionValue(int state, int choice, Walker other)
+        {
+            bool eccentric = personality.Temperament == Temperament.Eccentric;
+            double v;
+            if (choice < HabitCount)
+            {
+                // Utility AI: the body's current needs scale the inborn taste.
+                // A tired one means rest; a curious one means look and point.
+                Habit h = personality.Habits[choice];
+                double drive = h.Weight > 0 ? HabitWeight(h) / h.Weight : 1;
+                v = values[state, choice] + PriorFor(choice) * drive;
+                if (eccentric && h.Antic == Antic.Teddy)
+                {
+                    v += social * 0.4;   // lonely: cling to the only friend
+                }
+                // Mood colours the habits: cheer invites show-offs, gloom invites rest,
+                // fear invites hiding and kills showing off.
+                if (cheer > 0)
+                {
+                    switch (h.Antic)
+                    {
+                        case Antic.Dance: case Antic.Joy: case Antic.Strum: case Antic.Jive:
+                        case Antic.Wave: case Antic.Laugh: case Antic.Twirl: case Antic.Fly:
+                            v += cheer * 0.20;
+                            break;
+                        case Antic.Rest: case Antic.Doze: case Antic.Hide: case Antic.Fret:
+                            v -= cheer * 0.10;
+                            break;
+                    }
+                }
+                else if (cheer < 0)
+                {
+                    switch (h.Antic)
+                    {
+                        case Antic.Rest: case Antic.Doze: case Antic.Teddy: case Antic.Daydream:
+                            v += -cheer * 0.12;
+                            break;
+                        case Antic.Dance: case Antic.Joy: case Antic.Jive: case Antic.Strum:
+                            v += cheer * 0.15;
+                            break;
+                    }
+                }
+                if (fear > 0)
+                {
+                    switch (h.Antic)
+                    {
+                        case Antic.Hide: case Antic.Fret: case Antic.Rest: case Antic.Look:
+                            v += fear * (tmIsTimid() ? 0.6 : 0.25);
+                            break;
+                        case Antic.Dance: case Antic.Twirl: case Antic.Strum: case Antic.Jive:
+                        case Antic.Flex: case Antic.Box: case Antic.Taunt: case Antic.Launch:
+                        case Antic.Blast: case Antic.Rage:
+                            v -= fear * 0.4;
+                            break;
+                    }
+                }
+                // Curiosity for the rarely-tried, boredom with the repeated (habituation).
+                v += NoveltyBonus(choice) - HabituationPenalty(choice);
+            }
+            else
+            {
+                v = values[state, choice] + PriorFor(choice);
+                if (choice == VisitChoice && other != null)
+                {
+                    v += FondOf(other) * 0.5;
+                    if (other.IsUpset && personality.Warm) v += 0.3;
+                    v += RecentFeeling(other, EvKind, 45) * 0.5;   // fresh warmth pulls harder
+                    v -= RecentFeeling(other, EvHurt, 90) * 0.8;   // fresh hurt repels
+                    if (other == BestFond()) v += 0.4;             // best friends first
+                    else if (other == Rival()) v -= 0.3;           // enemies are avoided
+                    if (other.IsUpset && other == BestFond()) v += 0.3;   // a best friend's tears hurry
+                    // Scared of who it would visit: no errand into dread.
+                    if (fear > 0.3 && (other.Temperament == Temperament.Aggressive ||
+                                       other.Temperament == Temperament.Feisty))
+                        v -= fear * 0.8;
+                    else if (cheer < -0.3 && personality.Warm)
+                        v += 0.15;   // miserable and friendly: seek comfort
+                    v += NoveltyBonus(choice) - HabituationPenalty(choice);
+                }
+                else if (choice == PrankChoice && other != null)
+                {
+                    // Bullies pick on the disliked; Bean pays back his tormentors.
+                    v += personality.Temperament == Temperament.Aggressive ? -FondOf(other) * 0.3 :
+                         eccentric ? (FondOf(other) < -0.15 ? 0.35 : FondOf(other) * 0.05) :
+                         FondOf(other) * 0.1;
+                    if (personality.Temperament == Temperament.Aggressive && other == Rival())
+                        v += 0.4;   // a vendetta: the old enemy gets it
+                    if (fear > 0.3) v -= fear * 0.5;
+                    if (cheer > 0.4) v += cheer * 0.15;   // cheeky when happy
+                    v += NoveltyBonus(choice) - HabituationPenalty(choice);
+                }
+                else if (choice == InspectChoice)
+                {
+                    if (fear > 0.4) v -= fear * 0.4;   // dread kills curiosity
+                    v += NoveltyBonus(choice) - HabituationPenalty(choice);
+                }
+            }
+            return v;
+        }
+
+        bool tmIsTimid()
+        {
+            return personality.Temperament == Temperament.Timid;
+        }
+
         // Tired walkers rest more and caper less; a curious one looks and points more.
+        // And the small hours weigh on everyone: rest calls louder at night,
+        // showing off quieter - the cast keeps a circadian rhythm.
         double HabitWeight(Habit habit)
         {
+            double night = NightTiredness();
             switch (habit.Antic)
             {
                 case Antic.Rest:
                 case Antic.Yawn:
                 case Antic.Doze:
                 case Antic.Sleepwalk:
-                    return habit.Weight * (0.4 + 2.5 * (1 - energy));
+                    return habit.Weight * (0.4 + 2.5 * (1 - energy)) * (1 + 0.8 * night);
                 case Antic.Dance:
                 case Antic.Twirl:
                 case Antic.Joy:
@@ -207,7 +384,7 @@ namespace IdleWalker.Domain
                 case Antic.Launch:
                 case Antic.Inflate:
                 case Antic.Blast:
-                    return habit.Weight * (0.25 + 1.2 * energy);
+                    return habit.Weight * (0.25 + 1.2 * energy) * (1 - 0.4 * night);
                 case Antic.Wave:
                 case Antic.Point:
                 case Antic.Look:
@@ -306,6 +483,13 @@ namespace IdleWalker.Domain
             Goal was = goal;
             goal = Goal.None;
             goalTarget = null;
+            if (was == Goal.Prank) pendingBonus -= 0.15;
+            else if (was == Goal.Visit)
+            {
+                // Stood up: stings, and worse the lonelier the walk over was.
+                pendingBonus -= 0.1 + (personality.Temperament == Temperament.Eccentric ? 0.3 * (0.5 + social) : 0);
+                if (pendingBonus < -MaxReward) pendingBonus = -MaxReward;
+            }
             if (was == Goal.Prank) StartAntic(Antic.Stomp);
             else if (was == Goal.Visit) StartAntic(Antic.Shrug);
         }
@@ -374,6 +558,7 @@ namespace IdleWalker.Domain
             lastStomp = -1;
             goal = Goal.None;
             goalTarget = null;
+            NoteChatJoined(partner, style);
             social = 0.1;
             Stop(Mode.Chat);
             return true;
@@ -400,6 +585,7 @@ namespace IdleWalker.Domain
             chatLead = true;
             chatFacing = dir;
             chatSeconds = seconds;
+            NoteChatBegun(partner, style);
             lastStomp = -1;
             GreetCooldown = 8;
             partner.GreetCooldown = 8;
