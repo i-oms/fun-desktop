@@ -8,9 +8,10 @@ using IdleWalker.Rendering;
 namespace IdleWalker.App
 {
     /// <summary>
-    /// The notification-area icon and its right-click menu: the walkers (a
-    /// master switch, then the Minions and Mr. Bean each with their own) and
-    /// their settings, the hot corners and theirs, and the program itself.
+    /// The notification-area icon and its right-click menu, grouped by feature:
+    /// Walkers (the master switch plus the shared "Appear after" delay), then
+    /// Minions / Mr. Bean / Angry Birds (each a group with its own Enabled
+    /// switch and settings), then Hot corners (its own group), then the program.
     /// </summary>
     sealed class TrayMenu : IDisposable
     {
@@ -19,21 +20,24 @@ namespace IdleWalker.App
 
         // The walkers.
         readonly ToolStripMenuItem walkersItem = new ToolStripMenuItem("Walkers");
-        readonly ToolStripMenuItem minionsItem = new ToolStripMenuItem("Minions");
-        readonly ToolStripMenuItem countMenu = new ToolStripMenuItem("Minions");
+        readonly ToolStripMenuItem minionsMenu = new ToolStripMenuItem("Minions");
+        readonly ToolStripMenuItem minionsItem = new ToolStripMenuItem("Enabled");
+        readonly ToolStripMenuItem countMenu = new ToolStripMenuItem("Count");
         readonly ToolStripMenuItem idleMenu = new ToolStripMenuItem("Appear after");
         readonly ToolStripMenuItem dressMenu = new ToolStripMenuItem("Dress");
         readonly ToolStripMenuItem customItem = new ToolStripMenuItem("Custom...");
         readonly ToolStripMenuItem beanItem = new ToolStripMenuItem("Mr. Bean");
-        readonly ToolStripMenuItem birdsItem = new ToolStripMenuItem("Angry Birds");
-        readonly ToolStripMenuItem birdCountMenu = new ToolStripMenuItem("Birds");
+        readonly ToolStripMenuItem birdsMenu = new ToolStripMenuItem("Angry Birds");
+        readonly ToolStripMenuItem birdsItem = new ToolStripMenuItem("Enabled");
+        readonly ToolStripMenuItem birdCountMenu = new ToolStripMenuItem("Count");
         int[] customPalette;         // the colour dialog's own swatches, kept between openings
 
         // The hot corners.
         static readonly string[] CornerNames = { "Top-left", "Top-right", "Bottom-left", "Bottom-right" };
-        readonly ToolStripMenuItem cornersItem = new ToolStripMenuItem("Hot corners");
+        readonly ToolStripMenuItem hotCornersMenu = new ToolStripMenuItem("Hot corners");
+        readonly ToolStripMenuItem cornersItem = new ToolStripMenuItem("Enabled");
         readonly ToolStripMenuItem[] cornerMenus = new ToolStripMenuItem[CornerNames.Length];
-        readonly ToolStripMenuItem delayMenu = new ToolStripMenuItem("Corner delay");
+        readonly ToolStripMenuItem delayMenu = new ToolStripMenuItem("Delay");
 
         readonly ToolStripMenuItem startupItem = new ToolStripMenuItem("Start with Windows");
         IntPtr iconHandle;
@@ -231,19 +235,31 @@ namespace IdleWalker.App
             startupItem.Checked = StartupRegistration.IsEnabled();
             startupItem.Click += OnStartupClick;
 
+            // ---- Grouping: each feature is a sub-menu with an "Enabled"
+            // switch first, then its own settings after a line. ----
+            minionsMenu.DropDownItems.Add(minionsItem);
+            minionsMenu.DropDownItems.Add(new ToolStripSeparator());
+            minionsMenu.DropDownItems.Add(countMenu);
+            minionsMenu.DropDownItems.Add(dressMenu);
+
+            birdsMenu.DropDownItems.Add(birdsItem);
+            birdsMenu.DropDownItems.Add(new ToolStripSeparator());
+            birdsMenu.DropDownItems.Add(birdCountMenu);
+
+            hotCornersMenu.DropDownItems.Add(cornersItem);
+            hotCornersMenu.DropDownItems.Add(new ToolStripSeparator());
+            foreach (ToolStripMenuItem cornerMenu in cornerMenus) hotCornersMenu.DropDownItems.Add(cornerMenu);
+            hotCornersMenu.DropDownItems.Add(new ToolStripSeparator());
+            hotCornersMenu.DropDownItems.Add(delayMenu);
+
             menu.Items.Add(walkersItem);
             menu.Items.Add(idleMenu);
             menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add(minionsItem);
-            menu.Items.Add(countMenu);
-            menu.Items.Add(dressMenu);
+            menu.Items.Add(minionsMenu);
             menu.Items.Add(beanItem);
-            menu.Items.Add(birdsItem);
-            menu.Items.Add(birdCountMenu);
+            menu.Items.Add(birdsMenu);
             menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add(cornersItem);
-            foreach (ToolStripMenuItem cornerMenu in cornerMenus) menu.Items.Add(cornerMenu);
-            menu.Items.Add(delayMenu);
+            menu.Items.Add(hotCornersMenu);
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(startupItem);
             menu.Items.Add("About", null, OnAboutClick);
@@ -254,12 +270,7 @@ namespace IdleWalker.App
             // outside (or Esc, About, Exit, the colour picker) dismisses it.
             menu.Closing += OnDropDownClosing;
             menu.Closed += delegate { closeAllowed = false; };
-            foreach (ToolStripItem top in menu.Items)
-            {
-                ToolStripMenuItem holder = top as ToolStripMenuItem;
-                if (holder != null && holder.HasDropDownItems)
-                    holder.DropDown.Closing += OnDropDownClosing;
-            }
+            KeepOpen(menu.Items);
 
             iconHandle = RenderIcon();
             icon.Icon = Icon.FromHandle(iconHandle);
@@ -288,14 +299,16 @@ namespace IdleWalker.App
 
         // A feature's settings are greyed out while it is off: everything
         // under the master switch while that is off, the Minions' own
-        // settings while they are off. Mr. Bean's tick is his own.
+        // settings while they are off. Mr. Bean's tick is his own. Group
+        // headers stay enabled so the group can always be opened; only the
+        // settings inside are dimmed.
         void ShowEnabled()
         {
             bool walkers = walkersItem.Checked;
             idleMenu.Enabled = walkers;
-            minionsItem.Enabled = walkers;
+            minionsMenu.Enabled = walkers;
             beanItem.Enabled = walkers;
-            birdsItem.Enabled = walkers;
+            birdsMenu.Enabled = walkers;
 
             bool minions = walkers && minionsItem.Checked;
             countMenu.Enabled = minions;
@@ -336,7 +349,7 @@ namespace IdleWalker.App
 
         void ShowCount()
         {
-            countMenu.Text = "Minions: " + count;
+            countMenu.Text = "Count: " + count;
             foreach (ToolStripMenuItem item in countMenu.DropDownItems)
                 item.Checked = (int)item.Tag == count;
         }
@@ -352,7 +365,7 @@ namespace IdleWalker.App
 
         void ShowBirdCount()
         {
-            birdCountMenu.Text = "Birds: " + birdCount;
+            birdCountMenu.Text = "Count: " + birdCount;
             foreach (ToolStripMenuItem item in birdCountMenu.DropDownItems)
                 item.Checked = (int)item.Tag == birdCount;
         }
@@ -478,7 +491,7 @@ namespace IdleWalker.App
 
         void ShowDelay()
         {
-            delayMenu.Text = "Corner delay: " + DescribeDelay(delayMs);
+            delayMenu.Text = "Delay: " + DescribeDelay(delayMs);
             Tick(delayMenu, delayMs);
         }
 
@@ -533,6 +546,18 @@ namespace IdleWalker.App
         {
             if (e.CloseReason == ToolStripDropDownCloseReason.ItemClicked && !closeAllowed)
                 e.Cancel = true;
+        }
+
+        /// <summary>Hooks every drop-down (at any nesting depth) so settings clicks keep the menu open.</summary>
+        void KeepOpen(ToolStripItemCollection items)
+        {
+            foreach (ToolStripItem entry in items)
+            {
+                ToolStripMenuItem holder = entry as ToolStripMenuItem;
+                if (holder == null || !holder.HasDropDownItems) continue;
+                holder.DropDown.Closing += OnDropDownClosing;
+                KeepOpen(holder.DropDownItems);
+            }
         }
 
         /// <summary>Let the in-progress click dismiss the menu (About, Exit, colour picker).</summary>
