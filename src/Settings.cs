@@ -70,12 +70,21 @@ namespace IdleWalker
             CornerAction.TaskView, CornerAction.Notifications, CornerAction.StartMenu, CornerAction.ShowDesktop
         };
 
-        /// <summary>How far in from a corner's two edges (pixels) still counts as being in it.</summary>
-        public const int HotCornerReach = 2;
+        /// <summary>How far in from a corner's two edges (pixels at 100% scaling, grown with DPI) still counts as being in it.</summary>
+        public const int HotCornerReach = 6;
+
+        /// <summary>How many extra pixels of wobble past the trigger box still count as holding the corner (hysteresis).</summary>
+        public const int HotCornerReleaseExtra = 8;
+
+        /// <summary>Two corner points this close together are one physical hotspot (neighbouring monitors on a shared seam).</summary>
+        public const int HotCornerCoLocate = 6;
 
         /// <summary>How long the cursor must rest in a corner before it fires (ms), and the choices the menu offers.</summary>
         public const int HotCornerDelayMs = 300;
         public static readonly int[] HotCornerDelayChoices = { 100, 200, 300, 500, 1000 };
+
+        /// <summary>After a corner fires, the same corner cannot fire again for this long (ms): toggle actions can't bounce.</summary>
+        public const int HotCornerRefireCooldownMs = 1500;
 
         /// <summary>Whether "Start with Windows" is switched on the first time the program runs.</summary>
         public const bool StartWithWindowsByDefault = true;

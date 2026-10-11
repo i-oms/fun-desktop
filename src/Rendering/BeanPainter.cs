@@ -29,6 +29,9 @@ namespace IdleWalker.Rendering
 
         // Torso: a capsule from the hips to the shoulders, wider at the top.
         const double TorsoBottom = 12.2, TorsoTop = 19.4, HipR = 2.4, ChestR = 2.95;
+        // Shoulders rise this far above TorsoTop before rounding off: a low
+        // cap so the neck stands clear instead of sinking into a tall dome.
+        const double ShoulderCap = 0.6;
         const double HemV = 13.1;                                // the jacket's hem; trousers below
         const double VBottom = 14.6;                             // where the lapels meet over the tie's tip
         const double CollarV = 19.9;                             // where the collar spreads
@@ -260,11 +263,14 @@ namespace IdleWalker.Rendering
 
             // How far forward the body's surface is here: the torso's or the
             // head's, whichever bulges further. Limbs are sorted against it.
+            // Above the shoulders the dome is squashed to ShoulderCap so the
+            // neck stands clear of the chest instead of sinking into it.
             double axisV = vb < TorsoBottom ? TorsoBottom : vb > TorsoTop ? TorsoTop : vb;
             double t = (axisV - TorsoBottom) / (TorsoTop - TorsoBottom);
             double torsoR = HipR + (ChestR - HipR) * t;
             double tdy = vb - axisV;
-            double torsoDist = Math.Sqrt(ub * ub + tdy * tdy);
+            double dyEff = vb > TorsoTop ? tdy * torsoR / ShoulderCap : tdy;
+            double torsoDist = Math.Sqrt(ub * ub + dyEff * dyEff);
             double bulge = torsoR * torsoR - torsoDist * torsoDist;
             bodyZ = bulge > 0 ? Math.Sqrt(bulge) : 0;
             double hdy = vb - HeadV;
@@ -278,8 +284,11 @@ namespace IdleWalker.Rendering
             Leg(u, v, 1 - backLeg);
             Limb(ub, vb, 0);
             Limb(ub, vb, 1);
-            Torso(ub, vb, tdy, torsoDist, torsoR);
+            // The neck behind the torso: its base stays buried in the
+            // shoulders, so no tube shows through the chest - only the part
+            // standing clear above them is ever seen.
             Neck(ub, vb);
+            Torso(ub, vb, dyEff, torsoDist, torsoR);
             if (earZ[0] <= 0) Ear(ub, vb, 0);
             if (earZ[1] <= 0) Ear(ub, vb, 1);
             if (Math.Abs(hdy) < HeadRy + 1.5 && Math.Abs(ub) < HeadRx + 1.5)

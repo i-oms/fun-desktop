@@ -26,6 +26,9 @@ namespace IdleWalker.Rendering
 
         // Torso: a capsule from hips to shoulders, narrow at the waist.
         const double TorsoBottom = 11.2, TorsoTop = 17.8, HipR = 2.2, ChestR = 2.7;
+        // Shoulders rise this far above TorsoTop before rounding off: a low
+        // cap so the neck stands clear instead of lying along the chest.
+        const double ShoulderCap = 0.9;
         const double NeckBottom = 17.6, NeckTop = 20.2, NeckR = 0.9;
 
         // Head: a rounded cat skull, slightly taller than wide.
@@ -76,6 +79,12 @@ namespace IdleWalker.Rendering
         readonly double muzzleU, muzzleV;
         readonly double tailSway;
 
+        // Tail centreline resampled along a smooth spline: one flowing curve,
+        // never straight rods. Filled in BuildTail once per pose.
+        const int TailSpans = 5, TailPer = 6, TailSamples = TailSpans * TailPer;
+        readonly double[] tailU = new double[TailSamples + 1], tailV = new double[TailSamples + 1];
+        double tailLo, tailHi, tailVlo, tailVhi;
+
         PantherPainter(Pose pose, bool faceLeft, double px)
             : base(faceLeft, px, ArmRadius)
         {
@@ -124,6 +133,8 @@ namespace IdleWalker.Rendering
             if (pose.Walking) tailSway = Math.Sin(p) * 0.7;
             else tailSway = pose.BodyDy * 2.0 + pose.Lean * 0.5;
 
+            BuildTail();
+
             decorated = pose.Sweat > 0 || pose.Note || pose.Zzz || pose.Bubble || pose.Heart;
             topV = decorated ? 37 : Height + 1.6 + Math.Abs(pose.BodyDy) + Math.Max(0, -dip);
         }
@@ -156,6 +167,53 @@ namespace IdleWalker.Rendering
             double b = (swing - bend) * Deg;
             ankleU[i] = kneeU[i] + Shin * Math.Sin(b);
             ankleV[i] = kneeV[i] - Shin * Math.Cos(b) + 0.6 * pose.Tiptoe;
+        }
+
+        /// <summary>
+        /// Lays out the tail as a long hanging banana curve through six
+        /// control points: out from the rear, drooping down, then flicking up
+        /// at the thin tip. Every bend along the thick part turns 45 degrees
+        /// or less, so the tube's inner wall can never pinch into a crease;
+        /// only the thin tip hooks harder. Resampled with Catmull-Rom into
+        /// short links so no straight-rod joints ever show. Radius tapers
+        /// thin and even towards the tip. Drawn in profile at any yaw, the
+        /// way the cartoon always draws the tail.
+        /// </summary>
+        void BuildTail()
+        {
+            double[] cu = new double[6], cv = new double[6];
+            double rootU = -2.0 * sinY;
+            cu[0] = rootU;                        cv[0] = 11.5;
+            cu[1] = rootU - 3.0 + tailSway * 0.4; cv[1] = 9.8;
+            cu[2] = rootU - 4.8 + tailSway * 0.7; cv[2] = 7.6;
+            cu[3] = rootU - 5.4 + tailSway;       cv[3] = 5.0;
+            cu[4] = rootU - 4.4 + tailSway * 1.3; cv[4] = 3.2;
+            cu[5] = rootU - 3.2 + tailSway * 1.5; cv[5] = 3.4;
+
+            tailLo = tailHi = cu[0];
+            tailVlo = tailVhi = cv[0];
+            for (int j = 0; j < TailSamples; j++)
+            {
+                int span = j / TailPer;
+                double t = (j % TailPer) / (double)TailPer;
+                int p0 = span - 1 < 0 ? 0 : span - 1, p3 = span + 2 > 5 ? 5 : span + 2;
+                tailU[j] = Catmull(cu[p0], cu[span], cu[span + 1], cu[p3], t);
+                tailV[j] = Catmull(cv[p0], cv[span], cv[span + 1], cv[p3], t);
+                if (tailU[j] < tailLo) tailLo = tailU[j];
+                if (tailU[j] > tailHi) tailHi = tailU[j];
+                if (tailV[j] < tailVlo) tailVlo = tailV[j];
+                if (tailV[j] > tailVhi) tailVhi = tailV[j];
+            }
+            tailU[TailSamples] = cu[5];
+            tailV[TailSamples] = cv[5];
+        }
+
+        static double Catmull(double p0, double p1, double p2, double p3, double t)
+        {
+            double t2 = t * t, t3 = t2 * t;
+            return 0.5 * ((2 * p1) + (-p0 + p2) * t +
+                          (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 +
+                          (-p0 + 3 * p1 - 3 * p2 + p3) * t3);
         }
 
         void PlaceArm(int i, double side, double raise, double bend, double reach, double swing, double foreSwing)
@@ -238,8 +296,11 @@ namespace IdleWalker.Rendering
             double torsoR = HipR + (ChestR - HipR) * t;
             // Narrow waist: pinch the middle in a little.
             torsoR -= 0.35 * Math.Sin(t * Math.PI);
+            // Above the shoulders the dome is squashed to ShoulderCap so the
+            // neck stands clear of the chest instead of lying along it.
             double tdy = vb - axisV;
-            double torsoDist = Math.Sqrt(ub * ub + tdy * tdy);
+            double dyEff = vb > TorsoTop ? tdy * torsoR / ShoulderCap : tdy;
+            double torsoDist = Math.Sqrt(ub * ub + dyEff * dyEff);
             double bulge = torsoR * torsoR - torsoDist * torsoDist;
             bodyZ = bulge > 0 ? Math.Sqrt(bulge) : 0;
             double hdy = vb - HeadV;
@@ -253,8 +314,11 @@ namespace IdleWalker.Rendering
             Leg(ub, vb, 1 - backLeg);
             Limb(ub, vb, 0);
             Limb(ub, vb, 1);
-            Torso(ub, vb, tdy, torsoDist, torsoR);
+            // The neck behind the torso: its base stays buried in the
+            // shoulders, so no tube shows through the chest - only the part
+            // standing clear above them is ever seen.
             Neck(ub, vb);
+            Torso(ub, vb, dyEff, torsoDist, torsoR);
             if (earZ[0] <= 0) Ear(ub, vb, 0);
             if (earZ[1] <= 0) Ear(ub, vb, 1);
             if (Math.Abs(hdy) < HeadRy + 1.6 && Math.Abs(ub) < HeadRx + 1.6)
@@ -678,23 +742,31 @@ namespace IdleWalker.Rendering
 
         void Tail(double u, double v)
         {
-            // Tail root behind the body; sways with the walk, curls up at the tip.
-            double rootU = -2.0 * sinY;
-            double rootV = 11.5;
-            double midU = rootU - 1.6 * cosY - 0.4 + tailSway * 0.8;
-            double midV = 9.2;
-            double tipU = rootU - 0.7 * cosY + 0.9 + tailSway * 1.4;
-            double tipV = 12.8;
-            double curlU = tipU + 0.9 * sinY + 0.7 + tailSway * 0.5;
-            double curlV = 14.2;
-            if (Math.Abs(u - rootU) > 5.5 && Math.Abs(u - midU) > 4.5 && Math.Abs(u - tipU) > 4.5) return;
-            if (v < 7.5 || v > 16.0) return;
-            Tube(u, v, rootU, rootV, midU, midV, 0.55, FurR * 0.96, FurG * 0.96, FurB * 0.96, 0.28, 16);
-            Tube(u, v, midU, midV, tipU, tipV, 0.48, FurR, FurG, FurB, 0.30, 18);
-            Tube(u, v, tipU, tipV, curlU, curlV, 0.40, FurR * 1.02, FurG * 1.02, FurB * 1.02, 0.32, 20);
+            // One flowing ribbon, shaded once: distance to the whole sampled
+            // centreline, then a single lighting pass - so neither straight
+            // joints nor caterpillar bands can show.
+            if (u < tailLo - 1.2 || u > tailHi + 1.2 || v < tailVlo - 1.2 || v > tailVhi + 1.2) return;
+            double best = double.MaxValue, qx = 0, qy = 0, qt = 0;
+            int hit = 0;
+            for (int i = 0; i < TailSamples; i++)
+            {
+                double sx, sy, st;
+                double d = Seg(u, v, tailU[i], tailV[i], tailU[i + 1], tailV[i + 1], out sx, out sy, out st);
+                if (d < best) { best = d; qx = sx; qy = sy; qt = st; hit = i; }
+            }
+            double g = (hit + qt) / TailSamples;
+            double radius = 0.50 - 0.22 * g;
+            double cov = Cov(best - radius);
+            if (cov <= 0) return;
+            double nx, ny, nz;
+            Normal(u - qx, v - qy, radius, out nx, out ny, out nz);
+            double k = 0.96 + 0.06 * g;
+            double lr, lg, lb;
+            Lit(FurR * k, FurG * k, FurB * k, nx, ny, nz, 0.28 + 0.04 * g, 16.0 + 4.0 * g, out lr, out lg, out lb);
+            Over(lr, lg, lb, cov);
             // Tuft highlight on the curl.
             {
-                double dx = u - curlU, dy = v - curlV;
+                double dx = u - tailU[TailSamples], dy = v - tailV[TailSamples];
                 Over(1, 0.85, 0.9, Cov(Math.Sqrt(dx * dx + dy * dy) - 0.22) * 0.4);
             }
         }

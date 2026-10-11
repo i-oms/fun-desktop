@@ -1,4 +1,3 @@
-
 # IdleWalker
 
 A tiny Windows desktop companion. When your mouse cursor has not moved for a
@@ -92,12 +91,12 @@ fun/
 
 ## Requirements
 
-| | |
-|---|---|
-| OS | Windows 10 version 1703 or later, or Windows 11 (tested on Windows 11 24H2) |
-| Runtime | .NET Framework 4.x - already part of Windows, nothing to install |
+|          |                                                                                                                        |
+| -------- | ---------------------------------------------------------------------------------------------------------------------- |
+| OS       | Windows 10 version 1703 or later, or Windows 11 (tested on Windows 11 24H2)                                            |
+| Runtime  | .NET Framework 4.x - already part of Windows, nothing to install                                                       |
 | Compiler | `csc.exe` from .NET Framework 4 - already part of Windows at `C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe` |
-| Display | Desktop Window Manager (DWM) composition - always on in Windows 8 and later |
+| Display  | Desktop Window Manager (DWM) composition - always on in Windows 8 and later                                            |
 
 No Visual Studio, no .NET SDK and no admin rights are required.
 
@@ -116,13 +115,13 @@ It runs this single command:
     /out:IdleWalker.exe /r:System.Windows.Forms.dll /r:System.Drawing.dll /recurse:src\*.cs
 ```
 
-| Flag | Why |
-|---|---|
-| `/target:winexe` | A windowed app - no console window opens behind it. |
-| `/optimize+` | Release-style code generation. |
-| `/r:System.Windows.Forms.dll` | `NativeWindow`, `Screen`, `NotifyIcon`, the message loop. |
-| `/r:System.Drawing.dll` | `Bitmap`/`Icon` for the tray icon, `Rectangle`, `Point`. |
-| `/recurse:src\*.cs` | Compiles every source file under `src\`, so new files need no build changes. |
+| Flag                          | Why                                                                          |
+| ----------------------------- | ---------------------------------------------------------------------------- |
+| `/target:winexe`              | A windowed app - no console window opens behind it.                          |
+| `/optimize+`                  | Release-style code generation.                                               |
+| `/r:System.Windows.Forms.dll` | `NativeWindow`, `Screen`, `NotifyIcon`, the message loop.                    |
+| `/r:System.Drawing.dll`       | `Bitmap`/`Icon` for the tray icon, `Rectangle`, `Point`.                     |
+| `/recurse:src\*.cs`           | Compiles every source file under `src\`, so new files need no build changes. |
 
 The result is one ~32 KB `IdleWalker.exe` next to `build.cmd`. Build takes a
 couple of seconds.
@@ -154,8 +153,8 @@ is a convenience and is not checked in.)
   expression-bodied members, `nameof`, ...). If you add code, stay within C# 5
   or build with a newer compiler instead (e.g. `dotnet build` with a
   `net48` WinForms project, or Visual Studio).
-- If IdleWalker is running, the build fails with *"could not write to output
-  file"* because the `.exe` is in use. Exit it from the tray icon first.
+- If IdleWalker is running, the build fails with _"could not write to output
+  file"_ because the `.exe` is in use. Exit it from the tray icon first.
 - On a 32-bit Windows install use `Framework` instead of `Framework64` in
   `build.cmd`.
 
@@ -168,25 +167,25 @@ Minion appears.
 
 **Tray icon menu** (right-click):
 
-| Item | Effect |
-|---|---|
-| Walkers | The master switch. Ticked (the default): whoever is switched on below comes out when the cursor rests. Untick it and nobody comes out at all; anyone on screen leaves at once, and every walker setting below is greyed out. Remembered between runs. |
-| Appear after: *t* → 1…5 seconds, 1…5 minutes | How long the mouse must be still before they come out. Takes effect at once: shorten it and they appear sooner, lengthen it while they are out and they stay (they only ever leave when the mouse moves). Remembered between runs. |
-| Hide on mouse move | Ticked (the default): moving the mouse sends everyone back underground at once. Untick it and they stay out and carry on while you work; newcomers still wait for the cursor to rest. Remembered between runs. |
-| Minions | Ticked (the default): the Minions come out. Untick it to switch just them off; any on screen leave at once (Mr. Bean stays if he is on), and their count and Dress are greyed out. Remembered between runs. |
-| Minions: *n* → 1…10 | How many Minions come out (five by default). Raising it brings the new ones out straight away (one at a time); lowering it sends the extras away. Remembered between runs. |
-| Dress: *colour* → Classic blue, Red, Green, Purple, Orange, Pink, Teal, Black, Random, Custom… | The colour of their overalls. Classic blue is the default. A fixed colour applies to everyone at once, even while they are out. Random gives each Minion its own colour every time it comes out; picking Random again re-rolls the ones on screen. Custom… opens the Windows colour picker; the menu then shows the colour as "Custom #RRGGBB". Remembered between runs. |
-| Mr. Bean | Unticked by default. Tick it and Mr. Bean comes out (after the Minions, as an extra; the Minions count is not his). Untick it and he leaves at once; the Minions stay. He and the Minions are independent: either, both or neither can be on. Remembered between runs. See [Mr. Bean](#mr-bean). |
-| Pink Panther | Unticked by default. Tick it and the Pink Panther comes out alongside the rest, independently of them. Untick it and he leaves at once; the others stay. Remembered between runs. |
-| Angry Birds | Unticked by default. Tick it and the birds come out (after the Minions; the counts are independent). Untick it and they leave at once. Remembered between runs. See [Angry Birds](#angry-birds). |
-| Birds: *n* → 1…10 | How many birds come out (three by default). Raising it brings the new ones out straight away (one at a time); lowering it sends the extras away. Remembered between runs. |
-| Brains... | Opens the brains dashboard: where their learnings live, how big they are, and a live per-walker table (learned tastes, friendships, best friend, rival, own walk) with buttons to open the file and to forget everything. See [Brains](#brains). |
-| Start with Windows | Ticked: the program starts when you sign in. On by default; untick it to switch it off. See below. |
-| Hot corners | Ticked (the default): pushing the cursor into a corner of any monitor and leaving it there fires that corner's action. Untick it to switch the corners off. Remembered between runs. See [Hot corners](#hot-corners). |
-| Top-left / Top-right / Bottom-left / Bottom-right: *action* | What each corner does: Nothing, Task view, Show desktop, Start menu, Notification centre, Quick settings, Lock screen, Screen saver, Monitor off, or Call the Minions. Defaults: Task view, Notification centre, Start menu, Show desktop. |
-| Corner delay: *t* → 0.1…1 s | How long the cursor must rest in the corner before it fires (0.3 s by default). |
-| About | Shows a small card above the walkers' lane - a waving Minion and the creator's name - for two seconds, then it fades out. It takes no focus; click it to dismiss it sooner. |
-| Exit | Quits the program. |
+| Item                                                                                           | Effect                                                                                                                                                                                                                                                                                                                                                                   |
+| ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Walkers                                                                                        | The master switch. Ticked (the default): whoever is switched on below comes out when the cursor rests. Untick it and nobody comes out at all; anyone on screen leaves at once, and every walker setting below is greyed out. Remembered between runs.                                                                                                                    |
+| Appear after: _t_ → 1…5 seconds, 1…5 minutes                                                   | How long the mouse must be still before they come out. Takes effect at once: shorten it and they appear sooner, lengthen it while they are out and they stay (they only ever leave when the mouse moves). Remembered between runs.                                                                                                                                       |
+| Hide on mouse move                                                                             | Ticked (the default): moving the mouse sends everyone back underground at once. Untick it and they stay out and carry on while you work; newcomers still wait for the cursor to rest. Remembered between runs.                                                                                                                                                           |
+| Minions                                                                                        | Ticked (the default): the Minions come out. Untick it to switch just them off; any on screen leave at once (Mr. Bean stays if he is on), and their count and Dress are greyed out. Remembered between runs.                                                                                                                                                              |
+| Minions: _n_ → 1…10                                                                            | How many Minions come out (five by default). Raising it brings the new ones out straight away (one at a time); lowering it sends the extras away. Remembered between runs.                                                                                                                                                                                               |
+| Dress: _colour_ → Classic blue, Red, Green, Purple, Orange, Pink, Teal, Black, Random, Custom… | The colour of their overalls. Classic blue is the default. A fixed colour applies to everyone at once, even while they are out. Random gives each Minion its own colour every time it comes out; picking Random again re-rolls the ones on screen. Custom… opens the Windows colour picker; the menu then shows the colour as "Custom #RRGGBB". Remembered between runs. |
+| Mr. Bean                                                                                       | Unticked by default. Tick it and Mr. Bean comes out (after the Minions, as an extra; the Minions count is not his). Untick it and he leaves at once; the Minions stay. He and the Minions are independent: either, both or neither can be on. Remembered between runs. See [Mr. Bean](#mr-bean).                                                                         |
+| Pink Panther                                                                                   | Unticked by default. Tick it and the Pink Panther comes out alongside the rest, independently of them. Untick it and he leaves at once; the others stay. Remembered between runs.                                                                                                                                                                                        |
+| Angry Birds                                                                                    | Unticked by default. Tick it and the birds come out (after the Minions; the counts are independent). Untick it and they leave at once. Remembered between runs. See [Angry Birds](#angry-birds).                                                                                                                                                                         |
+| Birds: _n_ → 1…10                                                                              | How many birds come out (three by default). Raising it brings the new ones out straight away (one at a time); lowering it sends the extras away. Remembered between runs.                                                                                                                                                                                                |
+| Brains...                                                                                      | Opens the brains dashboard: where their learnings live, how big they are, and a live per-walker table (learned tastes, friendships, best friend, rival, own walk) with buttons to open the file and to forget everything. See [Brains](#brains).                                                                                                                         |
+| Start with Windows                                                                             | Ticked: the program starts when you sign in. On by default; untick it to switch it off. See below.                                                                                                                                                                                                                                                                       |
+| Hot corners                                                                                    | Ticked (the default): pushing the cursor into a corner of any monitor and leaving it there fires that corner's action. Untick it to switch the corners off. Remembered between runs. See [Hot corners](#hot-corners).                                                                                                                                                    |
+| Top-left / Top-right / Bottom-left / Bottom-right: _action_                                    | What each corner does: Nothing, Task view, Show desktop, Start menu, Notification centre, Quick settings, Lock screen, Screen saver, Monitor off, or Call the Minions. Defaults: Task view, Notification centre, Start menu, Show desktop.                                                                                                                               |
+| Corner delay: _t_ → 0.1…1 s                                                                    | How long the cursor must rest in the corner before it fires (0.3 s by default).                                                                                                                                                                                                                                                                                          |
+| About                                                                                          | Shows a small card above the walkers' lane - a waving Minion and the creator's name - for two seconds, then it fades out. It takes no focus; click it to dismiss it sooner.                                                                                                                                                                                              |
+| Exit                                                                                           | Quits the program.                                                                                                                                                                                                                                                                                                                                                       |
 
 Only one instance can run at a time; starting a second one quietly exits.
 
@@ -198,18 +197,18 @@ and leans as it walks), its own list of habits (the things it does when it
 stops walking for a moment, each weighted so some are rarer than others)
 and its own temperament for dealing with the others.
 
-| # | Name | Temperament | Look | Resting face | Habits, most to least often | With the others |
-|---|---|---|---|---|---|---|
-| 1 | Kevin | Calm | two eyes, a few sprouts of hair | neutral; sleepy on a long rest | Tires easily and is the most curious about the cursor. Looks around, rests, whistles a tune (notes float up), scratches his head over something until an idea strikes ("!"), nods off standing up (yawn, stretch, Zzz, then jerks awake), yawns, gets hiccups, waves shyly, sneezes. | Nods at Minions he meets, goes over for a chat now and then, nods along when others dance, shakes his head at fights, is grumpy for a while when pranked. |
-| 2 | Stuart | Aggressive | one eye, hair combed flat, heavy brow | grumpy; bored on a rest, hands on hips | 20% faster, leans into his walk. Looks around, shadow-boxes (and sweats), sticks his tongue out and beckons you to come and have a go, throws a two-footed tantrum, laughs at you. | Charges at anyone within reach and shoves them; creeps up on anyone standing quietly and shouts "boo!"; squares up to Mel for a shouting match; jeers and points when someone else is shoved; furious when pranked himself. |
-| 3 | Bob | Friendly | bald, one green eye and one brown, big smile | happy | A little slower, bouncy, and clumsy: trips flat on his face every couple of minutes. Waves a lot, dances a jig, points at your cursor and giggles, jumps for joy, laughs, gets hiccups, sneezes. | The most sociable: walks over to friends for a chat, goes to comfort anyone who has been shoved, starts games of tag, joins in any dance, catches yawns, gasps at shoves, laughs off a prank. |
-| 4 | Dave | Friendly | two eyes, hair parted in the middle, open-mouthed smile | cheerful | The most energetic show-off. Waves, twirls right round with his arms out (and walks off dizzy), points at your cursor, jumps for joy, dances. | Chats, tag, dances and gasps like Bob. |
-| 5 | Mel | Aggressive | two eyes, crew cut, heavy brows | stern; bored on a rest, hands on hips | 15% faster, leans into the walk. Flexes both arms and winks at them, stomps, shadow-boxes, occasionally taunts. | Charges, pranks, argues and jeers like Stuart. |
-| 6 | Jerry | Friendly | short, two eyes, short spiky hair | cool: lids low, a lazy half-smile | The busker. Plays air guitar, head banging on the beat with notes flying, dances, whistles, waves, laughs, jumps for joy. Serenades your cursor when it gets curious. | His playing is catching: whoever is near enough to hear it wants to dance. Otherwise chats, tag, dances and gasps like Bob. |
-| 7 | Tim | Calm | tall and thin, two blue eyes, a tall quiff | serious; proud on a rest | The drill sergeant: never tires. Drops and does push-ups (side on, sweating by the end), jogs on the spot, snaps to attention and salutes you with a wink, flexes, occasionally stamps. Salutes your cursor. | Nods at Minions he meets, shakes his head at fights, grumpy when pranked, like Kevin. |
-| 8 | Phil | Goofy | one eye, a single curl on top, cross-eyed grin | silly | The clown, and a bit clumsy. Moonwalks (slides backwards while his feet step forwards), lets one off and whistles innocently, plays peekaboo with your cursor, struts like a chicken, laughs, dances, taunts, gets hiccups. | Copies most things he sees anyone else start (a twirl, boxing, a flex, push-ups, a stomp, a salute...). Waves, dances, plays tag and chats like the friendly ones, laughs at shoves and pranks. |
-| 9 | Carl | Timid | small, two amber eyes, hair standing on end | nervous; worried on a rest, wringing his hands | Scared of his own shadow. Looks around a lot, bites his nails with his eyes darting about (and sweats), hides behind his hands and peeks through his fingers, rests, shrugs, gets hiccups, sneezes. Peeks at your cursor through his fingers. | Keeps away from the bullies: hides if one is close, turns and walks the other way otherwise. Sees a charge coming and bolts before it lands (then sulks, and Bob comes to comfort him). Cowers when he sees a shove, faints flat on his back when pranked, nods nervously at Minions he meets. |
-| 10 | Norbert | Calm | stocky, one eye, bald | dopey: lids heavy, mouth open in a vacant smile; sleepy on a rest | A little slower, away with the fairies. Daydreams with his hands behind his back until he snaps out of it with a start, digs at the ground in a cloud of dust and finds nothing, sleepwalks with his arms out and Zzz until he bumps into something, blows a kiss at your cursor (a heart floats off), nods off, scratches his head, gets hiccups. | Nods, chats and shakes his head like Kevin; catches yawns. |
+| #   | Name    | Temperament | Look                                                    | Resting face                                                      | Habits, most to least often                                                                                                                                                                                                                                                                                                                        | With the others                                                                                                                                                                                                                                                                                |
+| --- | ------- | ----------- | ------------------------------------------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Kevin   | Calm        | two eyes, a few sprouts of hair                         | neutral; sleepy on a long rest                                    | Tires easily and is the most curious about the cursor. Looks around, rests, whistles a tune (notes float up), scratches his head over something until an idea strikes ("!"), nods off standing up (yawn, stretch, Zzz, then jerks awake), yawns, gets hiccups, waves shyly, sneezes.                                                               | Nods at Minions he meets, goes over for a chat now and then, nods along when others dance, shakes his head at fights, is grumpy for a while when pranked.                                                                                                                                      |
+| 2   | Stuart  | Aggressive  | one eye, hair combed flat, heavy brow                   | grumpy; bored on a rest, hands on hips                            | 20% faster, leans into his walk. Looks around, shadow-boxes (and sweats), sticks his tongue out and beckons you to come and have a go, throws a two-footed tantrum, laughs at you.                                                                                                                                                                 | Charges at anyone within reach and shoves them; creeps up on anyone standing quietly and shouts "boo!"; squares up to Mel for a shouting match; jeers and points when someone else is shoved; furious when pranked himself.                                                                    |
+| 3   | Bob     | Friendly    | bald, one green eye and one brown, big smile            | happy                                                             | A little slower, bouncy, and clumsy: trips flat on his face every couple of minutes. Waves a lot, dances a jig, points at your cursor and giggles, jumps for joy, laughs, gets hiccups, sneezes.                                                                                                                                                   | The most sociable: walks over to friends for a chat, goes to comfort anyone who has been shoved, starts games of tag, joins in any dance, catches yawns, gasps at shoves, laughs off a prank.                                                                                                  |
+| 4   | Dave    | Friendly    | two eyes, hair parted in the middle, open-mouthed smile | cheerful                                                          | The most energetic show-off. Waves, twirls right round with his arms out (and walks off dizzy), points at your cursor, jumps for joy, dances.                                                                                                                                                                                                      | Chats, tag, dances and gasps like Bob.                                                                                                                                                                                                                                                         |
+| 5   | Mel     | Aggressive  | two eyes, crew cut, heavy brows                         | stern; bored on a rest, hands on hips                             | 15% faster, leans into the walk. Flexes both arms and winks at them, stomps, shadow-boxes, occasionally taunts.                                                                                                                                                                                                                                    | Charges, pranks, argues and jeers like Stuart.                                                                                                                                                                                                                                                 |
+| 6   | Jerry   | Friendly    | short, two eyes, short spiky hair                       | cool: lids low, a lazy half-smile                                 | The busker. Plays air guitar, head banging on the beat with notes flying, dances, whistles, waves, laughs, jumps for joy. Serenades your cursor when it gets curious.                                                                                                                                                                              | His playing is catching: whoever is near enough to hear it wants to dance. Otherwise chats, tag, dances and gasps like Bob.                                                                                                                                                                    |
+| 7   | Tim     | Calm        | tall and thin, two blue eyes, a tall quiff              | serious; proud on a rest                                          | The drill sergeant: never tires. Drops and does push-ups (side on, sweating by the end), jogs on the spot, snaps to attention and salutes you with a wink, flexes, occasionally stamps. Salutes your cursor.                                                                                                                                       | Nods at Minions he meets, shakes his head at fights, grumpy when pranked, like Kevin.                                                                                                                                                                                                          |
+| 8   | Phil    | Goofy       | one eye, a single curl on top, cross-eyed grin          | silly                                                             | The clown, and a bit clumsy. Moonwalks (slides backwards while his feet step forwards), lets one off and whistles innocently, plays peekaboo with your cursor, struts like a chicken, laughs, dances, taunts, gets hiccups.                                                                                                                        | Copies most things he sees anyone else start (a twirl, boxing, a flex, push-ups, a stomp, a salute...). Waves, dances, plays tag and chats like the friendly ones, laughs at shoves and pranks.                                                                                                |
+| 9   | Carl    | Timid       | small, two amber eyes, hair standing on end             | nervous; worried on a rest, wringing his hands                    | Scared of his own shadow. Looks around a lot, bites his nails with his eyes darting about (and sweats), hides behind his hands and peeks through his fingers, rests, shrugs, gets hiccups, sneezes. Peeks at your cursor through his fingers.                                                                                                      | Keeps away from the bullies: hides if one is close, turns and walks the other way otherwise. Sees a charge coming and bolts before it lands (then sulks, and Bob comes to comfort him). Cowers when he sees a shove, faints flat on his back when pranked, nods nervously at Minions he meets. |
+| 10  | Norbert | Calm        | stocky, one eye, bald                                   | dopey: lids heavy, mouth open in a vacant smile; sleepy on a rest | A little slower, away with the fairies. Daydreams with his hands behind his back until he snaps out of it with a start, digs at the ground in a cloud of dust and finds nothing, sleepwalks with his arms out and Zzz until he bumps into something, blows a kiss at your cursor (a heart floats off), nods off, scratches his head, gets hiccups. | Nods, chats and shakes his head like Kevin; catches yawns.                                                                                                                                                                                                                                     |
 
 The temperaments: **calm** ones nod, chat and tut; **friendly** ones wave,
 dance together, play tag and comfort the shoved; **aggressive** ones charge,
@@ -234,29 +233,29 @@ smile. His head turns and nods on its own,
 he can go up on tiptoe, and his arms come forward out of the picture to put
 a hand to his chin, his collar or his chest.
 
-| | |
-|---|---|
-| Resting face | wide-eyed and gormless, lips just parted; a knowing look on a rest, hands clasped in front, rocking on his heels, head turning slowly |
+|                             |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Resting face                | wide-eyed and gormless, lips just parted; a knowing look on a rest, hands clasped in front, rocking on his heels, head turning slowly                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | Habits, most to least often | **Teddy**: fishes Teddy out of his jacket, holds him up and gazes at him fondly, makes him wave his paw at you with a big grin, tucks him away. **Hello**: his stiff wave - arm straight up beside the head, hand wagging from the wrist, up on his toes, chin up. **Eyebrows**: leans in with his hands behind his back and waggles his eyebrows at you over a smirk. **Sneak**: looks over each shoulder, creeps forward on tiptoe hunched with his hands up, then freezes and whistles innocently. **Fuss**: straightens his tie with both hands, brushes down a lapel, pats his hair. **Ponder**: finger to the chin, eyes rolled up, tapping, then an idea - finger in the air and a "!". **The Bean dance**: elbows pumping, hips twisting, knees bouncing, head bobbing, notes flying. **Drive**: mimes his Mini - both hands on the wheel, leaning into the bends, then a long honk ("!"). **Photo**: holds up a box camera, takes your picture (flash!), studies the print and shows it off with a grin. Also looks about, rests, dozes (head nodding right off, Zzz), whistles, gets hiccups, sneezes. He never trips and hardly ever hops. |
-| At your cursor | Walks over and prods it with one finger, twice, examines the finger, then hides his hands behind his back and looks innocent. |
-| With the others | Creeps up on tiptoe on anyone standing quietly (dozing, whistling, daydreaming...) and pokes them in the back; they jump with a "!". The Minions react when Teddy comes out: the friendly ones wave, the calm and timid ones stop to look, the bullies laugh. He greets with his stiff wave, nods with his head, chats (mumbling, gesturing), joins dances with the Bean dance, plays tag, comforts the shoved and is comforted himself. He winces with his hands to his cheeks when he sees a shove, recoils fanning his nose at a toot, and glares when pranked. The bullies charge him like anyone else; shoved, he flies, runs off flailing and sulks until Bob comes over. He is the lonely one: Teddy is his only real friend, so the lonelier he is the more he clings to Teddy, the more a chat teaches him to seek people out, and the more being stood up stings. His schemes delight him (a landed poke pays extra), he pays back whoever wronged him, he comforts readily, and being a child he experiments often and never quite connects consequences. |
+| At your cursor              | Walks over and prods it with one finger, twice, examines the finger, then hides his hands behind his back and looks innocent.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| With the others             | Creeps up on tiptoe on anyone standing quietly (dozing, whistling, daydreaming...) and pokes them in the back; they jump with a "!". The Minions react when Teddy comes out: the friendly ones wave, the calm and timid ones stop to look, the bullies laugh. He greets with his stiff wave, nods with his head, chats (mumbling, gesturing), joins dances with the Bean dance, plays tag, comforts the shoved and is comforted himself. He winces with his hands to his cheeks when he sees a shove, recoils fanning his nose at a toot, and glares when pranked. The bullies charge him like anyone else; shoved, he flies, runs off flailing and sulks until Bob comes over. He is the lonely one: Teddy is his only real friend, so the lonelier he is the more he clings to Teddy, the more a chat teaches him to seek people out, and the more being stood up stings. His schemes delight him (a landed poke pays extra), he pays back whoever wronged him, he comforts readily, and being a child he experiments often and never quite connects consequences.                                                                                  |
 
 ### Angry Birds
 
-Off by default; tick **Angry Birds** in the tray menu and the flock comes out after the Minions (Red first, then the Blues, Chuck, Bomb, Matilda, Hal, Terence, Bubbles, Stella and Silver - **Birds: *n*** picks how many, like the Minions count). All three switches are independent. They are drawn by the same method (lit solids, anti-aliased) but are a different figure, faithful to the classic 2009 designs: LIMBLESS balls of feathers about 14 units tall - no wings, no legs, no feet - with a lighter belly, big front eyes under thick angry brows, a beak that opens, and crest and tail feathers per bird. Chuck is triangular with a swept-back mohawk, Matilda egg-shaped with three hair strands, Hal carries a huge long beak, Bomb a sparking fuse, Terence freckles, the ladies eyelashes and blush cheeks - and the Blues alone have no brows at all, just red eyelids, while Silver is square-ish grey with a red-tipped beak. They hop and roll instead of walking.
+Off by default; tick **Angry Birds** in the tray menu and the flock comes out after the Minions (Red first, then the Blues, Chuck, Bomb, Matilda, Hal, Terence, Bubbles, Stella and Silver - **Birds: _n_** picks how many, like the Minions count). All three switches are independent. They are drawn by the same method (lit solids, anti-aliased) but are a different figure, faithful to the classic 2009 designs: LIMBLESS balls of feathers about 14 units tall - no wings, no legs, no feet - with a lighter belly, big front eyes under thick angry brows, a beak that opens, and crest and tail feathers per bird. Chuck is triangular with a swept-back mohawk, Matilda egg-shaped with three hair strands, Hal carries a huge long beak, Bomb a sparking fuse, Terence freckles, the ladies eyelashes and blush cheeks - and the Blues alone have no brows at all, just red eyelids, while Silver is square-ish grey with a red-tipped beak. They hop and roll instead of walking.
 
-| | |
-|---|---|
-| How they move | Nothing like a Minion: with no legs they bounce and roll everywhere, hop instead of stepping, flutter down slowly, and Chuck dashes. |
-| Habits | **Peck**: hops up and jabs twice with the beak. **Fly**: flaps along the ground. **Launch**: slingshot crouch, then springs high and far across the sky (neighbours dive for cover). **Rage**: bristles, shakes and stamps (catching, bird to bird). **Egg** (Matilda's favourite): strains, lays a speckled egg and gazes at it - everyone comes to look, like Teddy. **Inflate** (Bubbles): blows up huge and round, then lets it all out. **Blast** (Bomb): crouches with wings over the head, white flash, bang and smoke (neighbours dive). Plus the staples: look, rest, dance, yawn, whistle, sneeze. |
-| At your cursor | Hops over and pecks it, twice. |
-| With the others | Hop up and peck anyone standing quietly (including egg-layers); the pecked jump with a "!". Puff up and shake when they see a shove or smell a toot, glare furiously when pranked, and Carl the Minion is scared of them like he is of the bullies. They greet with a bouncing bow, nod, chat, dance and play tag with Minions and Bean alike - and a launch or blast sends everyone nearby diving. |
+|                 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| How they move   | Nothing like a Minion: with no legs they bounce and roll everywhere, hop instead of stepping, flutter down slowly, and Chuck dashes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Habits          | **Peck**: hops up and jabs twice with the beak. **Fly**: flaps along the ground. **Launch**: slingshot crouch, then springs high and far across the sky (neighbours dive for cover). **Rage**: bristles, shakes and stamps (catching, bird to bird). **Egg** (Matilda's favourite): strains, lays a speckled egg and gazes at it - everyone comes to look, like Teddy. **Inflate** (Bubbles): blows up huge and round, then lets it all out. **Blast** (Bomb): crouches with wings over the head, white flash, bang and smoke (neighbours dive). Plus the staples: look, rest, dance, yawn, whistle, sneeze. |
+| At your cursor  | Hops over and pecks it, twice.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| With the others | Hop up and peck anyone standing quietly (including egg-layers); the pecked jump with a "!". Puff up and shake when they see a shove or smell a toot, glare furiously when pranked, and Carl the Minion is scared of them like he is of the bullies. They greet with a bouncing bow, nod, chat, dance and play tag with Minions and Bean alike - and a launch or blast sends everyone nearby diving.                                                                                                                                                                                                          |
 
 **A mind of their own.** Each walker carries three simple drives that rise
-and fall: *energy* (spent by running, dancing, boxing and the like, won
+and fall: _energy_ (spent by running, dancing, boxing and the like, won
 back by walking calmly, resting and above all dozing), the wish for
-*company* (grows while alone, satisfied by a chat or a greeting) and
-*curiosity* about the cursor (grows until it has been over for a look).
+_company_ (grows while alone, satisfied by a chat or a greeting) and
+_curiosity_ about the cursor (grows until it has been over for a look).
 When an idle moment comes, these decide what it does: a tired one rests,
 yawns or dozes; a lively one capers; one that wants company sets off on an
 errand to find some; one that cannot stand not knowing walks over to stand
@@ -269,7 +268,7 @@ rarely. And they learn: every walker keeps its own little tally of what
 each choice was worth - chats and greetings that warmed it, pranks that
 landed, dances applauded by a crowd, shoves that stung - and mostly picks
 what has paid off before, with an occasional experiment (the rates are
-`Settings.LearnRate` and `Settings.ExploreRate`). It also remembers *who*:
+`Settings.LearnRate` and `Settings.ExploreRate`). It also remembers _who_:
 chats and games of tag warm it to someone, pranks and shoves chill it, so
 it prefers visiting friends - and bullies take a shine to pranking walkers
 they dislike. The body learns too:
@@ -436,7 +435,7 @@ from its new location. If the registry write fails for some reason (a
 locked-down work PC, for instance), the tick stays off and a balloon tip
 says why.
 
-You can see or remove the entry yourself in Task Manager → *Startup apps*,
+You can see or remove the entry yourself in Task Manager → _Startup apps_,
 or with:
 
 ```powershell
@@ -487,25 +486,25 @@ Stop-Process -Name IdleWalker
    [The cast](#the-cast)): set off on an errand - over to a friend for a
    chat, over to the cursor for a look, creeping up on someone to shout boo
    - or one of its habits on the spot: look around, wave or point towards
-   your cursor (turning to face it first if needed), stand and breathe,
-   dance, twirl, doze, whistle, box, taunt, and so on. Now and then, with
-   energy to spare, it does a little hop. It blinks every few seconds
-   regardless - quick, frequent blinks when frightened, slow heavy ones when
-   drowsy, sometimes two in a row, more often for the timid one and seldom
-   for the aggressive ones, who stare - and while standing about its eyes
-   dart a little way off and back every second or two. The eyes have a life
-   of their own beyond that (`src\Domain\WalkerEyes.cs`): they follow
-   whoever walks past and meet the eyes of the one they pass, they move
-   first and the head follows, a long jump of the gaze brings a blink with
-   it, and every ten seconds or so comes a beat of eye acting in character:
-   a glance straight at you while walking (the timid one checks over his
-   shoulder instead); standing, a side-eye towards the company (suspicious
-   and narrowed for Stuart and Mel), an eye-roll from the aggressive ones,
-   a look at you with a smile from the friendly ones, Phil going cross-eyed
-   until a double blink shakes it off, Carl checking both ways, and a double
-   take when a friend walks by. The pupils grow a little for a cursor or a
-   friend close by and shrink for an aggressive stare. Both eyes always
-   point the same way: only Phil's beat and the dizzy faces cross them.
+     your cursor (turning to face it first if needed), stand and breathe,
+     dance, twirl, doze, whistle, box, taunt, and so on. Now and then, with
+     energy to spare, it does a little hop. It blinks every few seconds
+     regardless - quick, frequent blinks when frightened, slow heavy ones when
+     drowsy, sometimes two in a row, more often for the timid one and seldom
+     for the aggressive ones, who stare - and while standing about its eyes
+     dart a little way off and back every second or two. The eyes have a life
+     of their own beyond that (`src\Domain\WalkerEyes.cs`): they follow
+     whoever walks past and meet the eyes of the one they pass, they move
+     first and the head follows, a long jump of the gaze brings a blink with
+     it, and every ten seconds or so comes a beat of eye acting in character:
+     a glance straight at you while walking (the timid one checks over his
+     shoulder instead); standing, a side-eye towards the company (suspicious
+     and narrowed for Stuart and Mel), an eye-roll from the aggressive ones,
+     a look at you with a smile from the friendly ones, Phil going cross-eyed
+     until a double blink shakes it off, Carl checking both ways, and a double
+     take when a friend walks by. The pupils grow a little for a cursor or a
+     friend close by and shrink for an aggressive stare. Both eyes always
+     point the same way: only Phil's beat and the dizzy faces cross them.
 6. **Other monitors.** When the next monitor's bottom edge is higher it jumps
    up onto it, timing the take-off so the top of the arc is over the edge.
    When it is lower, it walks off the edge and falls, landing with a bigger
@@ -526,31 +525,31 @@ and mouse clicks pass straight through it to whatever is underneath.
 All the knobs are constants in `src\Settings.cs`. Change them, exit the
 running copy, rebuild.
 
-| Constant | Default | Meaning |
-|---|---|---|
-| `IdleSeconds` | `2` | How long the cursor must be still before it appears, until a different time is picked from the tray menu. |
-| `IdleChoices` | 1…5 s, 1…5 min | The times the **Appear after** menu offers. A remembered value that is not in this list falls back to `IdleSeconds`. |
-| `DressNames`, `DressColors` | 8 colours | The overalls colours the **Dress** menu offers, as names and 0xRRGGBB values. The first is the default. Any other value is shown as a custom colour. |
-| `RandomDress` | `-1` | The menu's "Random" entry: a fresh colour per Minion per appearance (`Look.RandomDress`, any hue but yellow). |
-| `MoveTolerance` | `2` | Cursor movement (pixels) below this does not count as moving. |
-| `BasePixelSize` | `3` | Size in screen pixels of one art pixel at 100% display scaling. `4` makes it a third bigger. |
-| `MaxWalkers` | `10` | Upper limit of the Minions count menu. The cast in `Personality.Roster` must have at least this many entries. |
-| `DefaultWalkers` | `5` | How many come out until a number is picked from the menu. |
-| `StartWithWindowsByDefault` | `true` | Whether the first run registers the program to start at sign-in. |
-| `WalkersEnabledByDefault` | `true` | The master switch: whether anyone comes out at all until the menu says otherwise. |
-| `MinionsEnabledByDefault` | `true` | Whether the Minions are on until the menu says otherwise. |
-| `MrBeanByDefault` | `false` | Whether Mr. Bean is on until the menu says otherwise; independent of the Minions. |
-| `HotCornersByDefault` | `true` | Whether the hot corners are on until the menu says otherwise. |
-| `DefaultCornerActions` | Task view, Notification centre, Start menu, Show desktop | What the four corners do until the menu says otherwise (top-left, top-right, bottom-left, bottom-right). |
-| `HotCornerReach` | `2` | How far in from a corner's two edges, in pixels, still counts as being in the corner. |
-| `HotCornerDelayMs`, `HotCornerDelayChoices` | `300`; 100…1000 | The default corner dwell time and the choices the menu offers. |
-| `WalkSpeed` | `90` | Walking speed, px/s at 100% scaling. |
-| `Acceleration` | `420` | How quickly it reaches walking speed. |
-| `Braking` | `520` | How quickly it stops. |
-| `Gravity` | `1100` | px/s². Lower = floatier jumps. |
-| `HopSpeed` | `320` | Take-off speed of the random hop (about 47 px high). |
-| `StartleSpeed` | `210` | Height of the frightened hop when you move the mouse. |
-| `ExitGravity` | `2200` | How fast it drops away afterwards. |
+| Constant                                    | Default                                                  | Meaning                                                                                                                                              |
+| ------------------------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `IdleSeconds`                               | `2`                                                      | How long the cursor must be still before it appears, until a different time is picked from the tray menu.                                            |
+| `IdleChoices`                               | 1…5 s, 1…5 min                                           | The times the **Appear after** menu offers. A remembered value that is not in this list falls back to `IdleSeconds`.                                 |
+| `DressNames`, `DressColors`                 | 8 colours                                                | The overalls colours the **Dress** menu offers, as names and 0xRRGGBB values. The first is the default. Any other value is shown as a custom colour. |
+| `RandomDress`                               | `-1`                                                     | The menu's "Random" entry: a fresh colour per Minion per appearance (`Look.RandomDress`, any hue but yellow).                                        |
+| `MoveTolerance`                             | `2`                                                      | Cursor movement (pixels) below this does not count as moving.                                                                                        |
+| `BasePixelSize`                             | `3`                                                      | Size in screen pixels of one art pixel at 100% display scaling. `4` makes it a third bigger.                                                         |
+| `MaxWalkers`                                | `10`                                                     | Upper limit of the Minions count menu. The cast in `Personality.Roster` must have at least this many entries.                                        |
+| `DefaultWalkers`                            | `5`                                                      | How many come out until a number is picked from the menu.                                                                                            |
+| `StartWithWindowsByDefault`                 | `true`                                                   | Whether the first run registers the program to start at sign-in.                                                                                     |
+| `WalkersEnabledByDefault`                   | `true`                                                   | The master switch: whether anyone comes out at all until the menu says otherwise.                                                                    |
+| `MinionsEnabledByDefault`                   | `true`                                                   | Whether the Minions are on until the menu says otherwise.                                                                                            |
+| `MrBeanByDefault`                           | `false`                                                  | Whether Mr. Bean is on until the menu says otherwise; independent of the Minions.                                                                    |
+| `HotCornersByDefault`                       | `true`                                                   | Whether the hot corners are on until the menu says otherwise.                                                                                        |
+| `DefaultCornerActions`                      | Task view, Notification centre, Start menu, Show desktop | What the four corners do until the menu says otherwise (top-left, top-right, bottom-left, bottom-right).                                             |
+| `HotCornerReach`                            | `2`                                                      | How far in from a corner's two edges, in pixels, still counts as being in the corner.                                                                |
+| `HotCornerDelayMs`, `HotCornerDelayChoices` | `300`; 100…1000                                          | The default corner dwell time and the choices the menu offers.                                                                                       |
+| `WalkSpeed`                                 | `90`                                                     | Walking speed, px/s at 100% scaling.                                                                                                                 |
+| `Acceleration`                              | `420`                                                    | How quickly it reaches walking speed.                                                                                                                |
+| `Braking`                                   | `520`                                                    | How quickly it stops.                                                                                                                                |
+| `Gravity`                                   | `1100`                                                   | px/s². Lower = floatier jumps.                                                                                                                       |
+| `HopSpeed`                                  | `320`                                                    | Take-off speed of the random hop (about 47 px high).                                                                                                 |
+| `StartleSpeed`                              | `210`                                                    | Height of the frightened hop when you move the mouse.                                                                                                |
+| `ExitGravity`                               | `2200`                                                   | How fast it drops away afterwards.                                                                                                                   |
 
 Speeds are automatically multiplied by the monitor's display scaling, so the
 motion looks the same on a 100% and a 200% screen.
@@ -611,27 +610,27 @@ how they tilt, pupil size and offset, cross-eyes, and the mouth's curve,
 opening, width, sideways shift, teeth, tremble and tongue. Named presets
 cover the repertoire:
 
-| Expression | Used when |
-|---|---|
-| `Neutral`, `Happy`, `Cheerful`, `Grumpy`, `Stern` | the resting faces of Kevin, Bob, Dave, Stuart and Mel |
-| `Cool`, `Serious`, `Silly`, `Nervous`, `Dopey` | the resting faces of Jerry, Tim, Phil, Carl and Norbert |
-| `Smooch`, `Dreamy`, `Worried` | blowing a kiss; daydreaming; Carl on a rest, after hiding, after a cower |
-| `Sleepy`, `Bored` | a long rest (calm; aggressive) |
-| `Curious` | peeking out of the ground, looking around, pointing, waking up |
-| `Grin`, `Winking`, `Laugh`, `Giggle` | waving, dancing, greeting, pointing, laughing |
-| `Focused`, `Excited` | winding up for a jump or a twirl; a big jump, a spin, jumping for joy |
-| `Thinking`, `Surprised` | scratching the head; the idea that follows |
-| `Whistling` | whistling |
-| `Yawn`, `Asleep`, `Shocked` | yawning; dozing; being jerked awake, seeing a shove |
-| `Inhale`, `Sneeze`, `Dizzy` | a sneeze, start to finish (also after a twirl) |
-| `Determined`, `Smug`, `Proud` | charging or boxing; standing over a victim; flexing, a twirl's ta-da |
-| `Raspberry`, `Mischievous` | taunting; the look that lingers afterwards, creeping up on someone |
-| `Furious`, `Grumpy` | a stomping tantrum, a shouting match; the other side of the argument, a huff |
-| `Panting` | walking off after a bout of boxing |
-| `Dizzy`, `Scared`, `Sad` | being shoved into the air; running away; slowing down after |
-| `Disapproving` | a calm Minion watching a shove |
-| `Surprised` | the mouse moved |
-| `Sad` | sent away because the count was lowered |
+| Expression                                        | Used when                                                                    |
+| ------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `Neutral`, `Happy`, `Cheerful`, `Grumpy`, `Stern` | the resting faces of Kevin, Bob, Dave, Stuart and Mel                        |
+| `Cool`, `Serious`, `Silly`, `Nervous`, `Dopey`    | the resting faces of Jerry, Tim, Phil, Carl and Norbert                      |
+| `Smooch`, `Dreamy`, `Worried`                     | blowing a kiss; daydreaming; Carl on a rest, after hiding, after a cower     |
+| `Sleepy`, `Bored`                                 | a long rest (calm; aggressive)                                               |
+| `Curious`                                         | peeking out of the ground, looking around, pointing, waking up               |
+| `Grin`, `Winking`, `Laugh`, `Giggle`              | waving, dancing, greeting, pointing, laughing                                |
+| `Focused`, `Excited`                              | winding up for a jump or a twirl; a big jump, a spin, jumping for joy        |
+| `Thinking`, `Surprised`                           | scratching the head; the idea that follows                                   |
+| `Whistling`                                       | whistling                                                                    |
+| `Yawn`, `Asleep`, `Shocked`                       | yawning; dozing; being jerked awake, seeing a shove                          |
+| `Inhale`, `Sneeze`, `Dizzy`                       | a sneeze, start to finish (also after a twirl)                               |
+| `Determined`, `Smug`, `Proud`                     | charging or boxing; standing over a victim; flexing, a twirl's ta-da         |
+| `Raspberry`, `Mischievous`                        | taunting; the look that lingers afterwards, creeping up on someone           |
+| `Furious`, `Grumpy`                               | a stomping tantrum, a shouting match; the other side of the argument, a huff |
+| `Panting`                                         | walking off after a bout of boxing                                           |
+| `Dizzy`, `Scared`, `Sad`                          | being shoved into the air; running away; slowing down after                  |
+| `Disapproving`                                    | a calm Minion watching a shove                                               |
+| `Surprised`                                       | the mouse moved                                                              |
+| `Sad`                                             | sent away because the count was lowered                                      |
 
 The walker eases its face towards the current target expression every frame
 (`Expression.Towards`): moods melt into one another over about a tenth of a
@@ -755,14 +754,14 @@ degrades, the computer does not.
 `SpriteWindow` is a `NativeWindow` (no `Form` - nothing WinForms-y to fight
 with). It is created with:
 
-| Style | Effect |
-|---|---|
-| `WS_POPUP` | No frame, no title bar. |
-| `WS_EX_LAYERED` | Per-pixel alpha via `UpdateLayeredWindow`. |
-| `WS_EX_TRANSPARENT` | Mouse input passes through to whatever is behind. |
-| `WS_EX_TOOLWINDOW` | Not in the taskbar or Alt-Tab. |
-| `WS_EX_NOACTIVATE` | Never steals focus. |
-| `WS_EX_TOPMOST` | Above normal windows; re-asserted once a second because the taskbar is topmost too. |
+| Style               | Effect                                                                              |
+| ------------------- | ----------------------------------------------------------------------------------- |
+| `WS_POPUP`          | No frame, no title bar.                                                             |
+| `WS_EX_LAYERED`     | Per-pixel alpha via `UpdateLayeredWindow`.                                          |
+| `WS_EX_TRANSPARENT` | Mouse input passes through to whatever is behind.                                   |
+| `WS_EX_TOOLWINDOW`  | Not in the taskbar or Alt-Tab.                                                      |
+| `WS_EX_NOACTIVATE`  | Never steals focus.                                                                 |
+| `WS_EX_TOPMOST`     | Above normal windows; re-asserted once a second because the taskbar is topmost too. |
 
 Each frame the `Surface` pixels are copied into a 32-bit top-down DIB section
 selected into a memory DC, and `UpdateLayeredWindow` is called with
@@ -846,7 +845,7 @@ All motion is integrated with the measured frame time `dt` (clamped to
 
 `GetCursorPos` is polled; no global hooks are installed, so nothing is
 injected into other processes and no special permissions are needed. The
-position is compared with the last *anchor* position, and the anchor moves
+position is compared with the last _anchor_ position, and the anchor moves
 only when the cursor has travelled more than `MoveTolerance` pixels, so a
 jittery sensor cannot keep resetting the timer. `GetCursorPos` fails on the
 secure desktop (UAC prompt, lock screen); that is treated as "not moving".
@@ -989,7 +988,7 @@ one is used. The ground is therefore a step function, and the character treats
 it like platform-game terrain:
 
 - **Step up ahead** (`WallAhead`): it scans monitor edges within 400 px in
-  its direction of travel. For a step of height *h* it needs a take-off
+  its direction of travel. For a step of height _h_ it needs a take-off
   speed `v = sqrt(2 g (h + 6 cells))`; it starts the jump when the edge is
   `WalkSpeed * v / g` away so that the apex is over the edge. If it arrives
   early, the wall rule slides it up the edge; if it falls short it lands back
@@ -1014,12 +1013,12 @@ scaling, a 120x144 pixel canvas each, using a harness that drives the real
 reads the process's own CPU time. "One core" means 100% of a single
 logical processor.
 
-| State | CPU | Notes |
-|---|---|---|
-| Minions hidden (the normal state while you work) | 0.2% of one core | One wake-up every 100 ms to read the cursor, the monitors and the hot corners. No windows, no drawing. |
-| 1 Minion out | 11% of one core | 60 frames a second, 1.5 ms of software shading a frame. |
-| 5 Minions out (the default) | 35% of one core (3% of the machine) | 4.6 ms of shading a frame plus 1 ms to hand the layered windows to the compositor. |
-| 10 Minions out | 61% of one core | 8.5 ms a frame; the frame rate starts to dip below 60. |
+| State                                            | CPU                                 | Notes                                                                                                  |
+| ------------------------------------------------ | ----------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Minions hidden (the normal state while you work) | 0.2% of one core                    | One wake-up every 100 ms to read the cursor, the monitors and the hot corners. No windows, no drawing. |
+| 1 Minion out                                     | 11% of one core                     | 60 frames a second, 1.5 ms of software shading a frame.                                                |
+| 5 Minions out (the default)                      | 35% of one core (3% of the machine) | 4.6 ms of shading a frame plus 1 ms to hand the layered windows to the compositor.                     |
+| 10 Minions out                                   | 61% of one core                     | 8.5 ms a frame; the frame rate starts to dip below 60.                                                 |
 
 Memory is about 30-45 MB working set and stays flat: the renderer allocates
 nothing per frame (one gen-0 garbage collection in 12 s with five Minions
@@ -1069,18 +1068,18 @@ What keeps it out of the way:
 
 ## Troubleshooting
 
-| Symptom | Cause / fix |
-|---|---|
-| Nothing appears | Is the tray icon there? If not, the program is not running. Check **Minions** is ticked. The characters spawn on the monitor the *cursor* is on. |
-| Fewer walkers appear than expected | Check **Walkers** in the tray menu; the count is remembered between runs and defaults to 5. |
-| Walkers overlap each other | They can walk through one another; only meetings (greeting, shoving) are physical. This is by design. |
-| Appears, but immediately dives away | Something is moving the cursor (a jittery mouse, a wobbling desk, some remote-control software). Raise `MoveTolerance`. |
-| Does not appear while a game or film is up | By design: a full-screen window in front keeps the Minions hidden (and exclusive full-screen apps bypass the compositor anyway). Leave the app or un-fullscreen it. |
-| Blurry or wrong size on one monitor | Check Windows' per-monitor scaling; the cell size follows it. If a monitor reports an odd DPI, `ScaleFor` is where to adjust. |
-| `build.cmd` says the output file is in use | Exit IdleWalker from the tray first. |
+| Symptom                                         | Cause / fix                                                                                                                                                                                  |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Nothing appears                                 | Is the tray icon there? If not, the program is not running. Check **Minions** is ticked. The characters spawn on the monitor the _cursor_ is on.                                             |
+| Fewer walkers appear than expected              | Check **Walkers** in the tray menu; the count is remembered between runs and defaults to 5.                                                                                                  |
+| Walkers overlap each other                      | They can walk through one another; only meetings (greeting, shoving) are physical. This is by design.                                                                                        |
+| Appears, but immediately dives away             | Something is moving the cursor (a jittery mouse, a wobbling desk, some remote-control software). Raise `MoveTolerance`.                                                                      |
+| Does not appear while a game or film is up      | By design: a full-screen window in front keeps the Minions hidden (and exclusive full-screen apps bypass the compositor anyway). Leave the app or un-fullscreen it.                          |
+| Blurry or wrong size on one monitor             | Check Windows' per-monitor scaling; the cell size follows it. If a monitor reports an odd DPI, `ScaleFor` is where to adjust.                                                                |
+| `build.cmd` says the output file is in use      | Exit IdleWalker from the tray first.                                                                                                                                                         |
 | Brains dashboard is empty ("nothing saved yet") | They bank memories only while out and learning; leave them alone together for a few minutes. **Forget everything...** in the card also wipes it - the next minute's autosave starts it over. |
-| `build.cmd` cannot find `csc.exe` | On 32-bit Windows edit the path to use `Framework` instead of `Framework64`. |
-| It walks over something I want to click | It is click-through, so just click; the character does not intercept input. |
+| `build.cmd` cannot find `csc.exe`               | On 32-bit Windows edit the path to use `Framework` instead of `Framework64`.                                                                                                                 |
+| It walks over something I want to click         | It is click-through, so just click; the character does not intercept input.                                                                                                                  |
 
 ## Known limitations
 

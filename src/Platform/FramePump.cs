@@ -7,10 +7,14 @@ namespace IdleWalker.Platform
     /// <summary>
     /// Paces the animation: one tick per screen refresh while animating, a
     /// lazy poll while idle. Ticks are delivered on the UI thread.
+    /// The idle poll also drives the hot corners, so it must sample well
+    /// within the shortest corner dwell (100 ms): 30 ms gives three samples
+    /// per dwell with negligible cost (GetCursorPos plus a few integer
+    /// compares; the DPI lookup is cached in MonitorWorld).
     /// </summary>
     sealed class FramePump
     {
-        const int WatchIntervalMs = 100;
+        const int WatchIntervalMs = 30;
 
         readonly SynchronizationContext sync;
         readonly SendOrPostCallback callback;

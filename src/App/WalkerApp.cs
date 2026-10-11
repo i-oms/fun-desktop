@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.IO;
 using System.Threading;
 using System.Windows.Forms;
 using IdleWalker.Domain;
@@ -139,28 +140,39 @@ namespace IdleWalker.App
             bool moved = cursor.Poll(now);
             if (moved) summoned = false;
 
+            // Twice a second: a full-screen app in front keeps the Minions
+            // away (and sends them off if they are out), and on battery the
+            // animation runs at half rate. Checked before the hot corners so
+            // the corners can honour it too (like WinXCorners: no firing
+            // while a game or full-screen video is in front).
+            if (now >= nextCheck)
+            {
+                nextCheck = now + 0.5;
+                bool wasFull = fullScreen;
+                fullScreen = ForegroundWatch.IsFullScreen();
+                if (fullScreen && !wasFull) LogNote("foreground fullscreen: corners held");
+                else if (!fullScreen && wasFull) LogNote("foreground windowed: corners live");
+                pump.HalfRate = SystemInformation.PowerStatus.PowerLineStatus == PowerLineStatus.Offline;
+            }
+
             // The hot corners: the cursor resting in a corner of any monitor.
             // (The ripple ticks by itself once fired, so it needs no stepping here.)
-            if (tray.HotCornersEnabled)
+            if (tray.HotCornersEnabled && !fullScreen)
             {
+                int firedMonitor;
                 Corner corner;
-                if (corners.Step(now, cursor.Latest, monitors.MonitorBounds, CornerActions.MouseButtonDown(), out corner))
+                if (corners.Step(now, cursor.Latest, monitors.MonitorBounds, monitors.MonitorScales, CornerActions.MouseButtonDown(), out firedMonitor, out corner))
                 {
                     CornerAction action = tray.CornerActionFor(corner);
-                    if (action != CornerAction.None) RippleFor(corner);
+                    LogFire(firedMonitor, corner, action, cursor.Latest);
+                    if (action != CornerAction.None) RippleFor(firedMonitor, corner);
                     if (action == CornerAction.CallMinions) summoned = tray.WalkersEnabled;
                     else CornerActions.Perform(action);
                 }
             }
-
-            // Twice a second: a full-screen app in front keeps the Minions
-            // away (and sends them off if they are out), and on battery the
-            // animation runs at half rate.
-            if (now >= nextCheck)
+            else if (fullScreen)
             {
-                nextCheck = now + 0.5;
-                fullScreen = ForegroundWatch.IsFullScreen();
-                pump.HalfRate = SystemInformation.PowerStatus.PowerLineStatus == PowerLineStatus.Offline;
+                corners.Reset();
             }
 
             // Every minute: write what they learned to disk, so a restart
@@ -229,10 +241,54 @@ namespace IdleWalker.App
             pump.Animating = troupe.AnyVisible;
         }
 
-        /// <summary>Starts the ripple on the corner that just fired.</summary>
-        void RippleFor(Corner corner)
+        /// <summary>
+        /// One line per corner fire (and full-screen transition) in the temp
+        /// folder, so an open-close-open report can be settled by counting:
+        /// three toggles with one "fire" line is Windows, three "fire" lines
+        /// is us. Fires are human-paced, so the file stays tiny.
+        /// </summary>
+        static void LogFire(int firedMonitor, Corner corner, CornerAction action, Point cursor)
         {
-            Rectangle bounds = monitors.MonitorBoundsAt(cursor.Latest);
+            try
+            {
+                string line = string.Format("{0:yyyy-MM-dd HH:mm:ss.fff} fire monitor={1} corner={2} action={3} cursor={4},{5}\r\n",
+                    DateTime.Now, firedMonitor, corner, action, cursor.X, cursor.Y);
+                File.AppendAllText(Path.Combine(Path.GetTempPath(), "IdleWalker-hotcorners.log"), line);
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        static void LogNote(string note)
+        {
+            try
+            {
+                string line = string.Format("{0:yyyy-MM-dd HH:mm:ss.fff} {1}\r\n", DateTime.Now, note);
+                File.AppendAllText(Path.Combine(Path.GetTempPath(), "IdleWalker-hotcorners.log"), line);
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        /// <summary>Starts the ripple on the monitor corner that just fired (no re-lookup: the seam neighbour may differ).</summary>
+        void RippleFor(int firedMonitor, Corner corner)
+        {
+            Rectangle bounds;
+            int scale;
+            Rectangle[] all = monitors.MonitorBounds;
+            int[] scales = monitors.MonitorScales;
+            if (firedMonitor >= 0 && firedMonitor < all.Length)
+            {
+                bounds = all[firedMonitor];
+                scale = (scales != null && firedMonitor < scales.Length && scales[firedMonitor] > 0) ? scales[firedMonitor] : monitors.ScaleAtPoint(new Point(bounds.Left, bounds.Top));
+            }
+            else
+            {
+                bounds = monitors.MonitorBoundsAt(cursor.Latest);
+                scale = monitors.ScaleAtPoint(cursor.Latest);
+            }
             int x, y;
             switch (corner)
             {
@@ -253,7 +309,7 @@ namespace IdleWalker.App
                     y = bounds.Top;
                     break;
             }
-            ripple.Show(x, y, monitors.ScaleAt(x));
+            ripple.Show(x, y, scale);
         }
 
         /// <summary>Shows the About card; a second click while it is already up is ignored.</summary>

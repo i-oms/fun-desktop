@@ -22,6 +22,7 @@ namespace IdleWalker.Platform
 
         Monitor[] monitors = new Monitor[0];
         Rectangle[] monitorBounds = new Rectangle[0];
+        int[] monitorScales = new int[0];
         int[] edges = new int[0];
         int left, right;
 
@@ -33,6 +34,7 @@ namespace IdleWalker.Platform
             {
                 monitors = new Monitor[screens.Length];
                 monitorBounds = new Rectangle[screens.Length];
+                monitorScales = new int[screens.Length];
                 edges = new int[screens.Length * 2];
             }
 
@@ -41,10 +43,23 @@ namespace IdleWalker.Platform
             for (int i = 0; i < screens.Length; i++)
             {
                 Rectangle bounds = screens[i].Bounds;
-                monitors[i].Bounds = bounds;
-                monitorBounds[i] = bounds;
+                // The DPI lookup (MonitorFromPoint + GetDpiForMonitor) is the
+                // only expensive part here, so only pay it when the layout
+                // actually changed. Bounds themselves stay fresh every tick
+                // so plug/unplug and resolution changes apply at once.
+                if (monitors[i].Bounds.Equals(bounds) && monitors[i].Scale > 0)
+                {
+                    monitorBounds[i] = bounds;
+                }
+                else
+                {
+                    monitors[i].Bounds = bounds;
+                    monitorBounds[i] = bounds;
+                    monitors[i].Scale = ScaleFor(bounds);
+                    monitorScales[i] = monitors[i].Scale;
+                }
+                if (monitorScales[i] <= 0) monitorScales[i] = monitors[i].Scale;
                 monitors[i].Ground = screens[i].WorkingArea.Bottom;
-                monitors[i].Scale = ScaleFor(bounds);
                 edges[2 * i] = bounds.Left;
                 edges[2 * i + 1] = bounds.Right;
                 left = Math.Min(left, bounds.Left);
@@ -54,6 +69,9 @@ namespace IdleWalker.Platform
 
         /// <summary>Every monitor's bounds, as of the last Refresh (for the hot corners).</summary>
         public Rectangle[] MonitorBounds { get { return monitorBounds; } }
+
+        /// <summary>Every monitor's sprite scale, parallel to MonitorBounds (for DPI-aware hot corners).</summary>
+        public int[] MonitorScales { get { return monitorScales; } }
 
         public int Left { get { return left; } }
         public int Right { get { return right; } }
@@ -72,6 +90,26 @@ namespace IdleWalker.Platform
         public int ScaleAt(double x)
         {
             return monitors[IndexUnder((int)Math.Floor(x))].Scale;
+        }
+
+        public int ScaleAtPoint(Point point)
+        {
+            int best = 0;
+            int bestDist = int.MaxValue;
+            for (int i = 0; i < monitors.Length; i++)
+            {
+                Rectangle b = monitors[i].Bounds;
+                if (point.X >= b.Left && point.X < b.Right && point.Y >= b.Top && point.Y < b.Bottom) return monitors[i].Scale;
+                int dx = point.X < b.Left ? b.Left - point.X : (point.X >= b.Right ? point.X - b.Right + 1 : 0);
+                int dy = point.Y < b.Top ? b.Top - point.Y : (point.Y >= b.Bottom ? point.Y - b.Bottom + 1 : 0);
+                int dist = dx > dy ? dx : dy;
+                if (dist < bestDist)
+                {
+                    bestDist = dist;
+                    best = i;
+                }
+            }
+            return monitors.Length > 0 ? monitors[best].Scale : Settings.BasePixelSize;
         }
 
         // The monitor whose horizontal span contains x. When monitors are
