@@ -66,6 +66,10 @@ namespace IdleWalker.Domain
         int logPos;
         double optimism;                    // -1..1, the life-attitude under the moods
 
+        // Upgrade v2: lifetime stats for annealing + dashboard. Persisted.
+        int lifetimeDecisions;              // how many choices have been judged so far
+        double totalReward;                 // sum of clamped rewards, for AvgReward
+
         int HabitCount { get { return personality.Habits.Length; } }
         int VisitChoice { get { return HabitCount; } }
         int PrankChoice { get { return HabitCount + 1; } }
@@ -204,6 +208,17 @@ namespace IdleWalker.Domain
             double rate = LearnRateFor();
             values[prevState, prevChoice] += rate *
                 (reward + MindGamma() * MaxValue(MindState()) - values[prevState, prevChoice]);
+            // Upgrade v2: track lifetime stats for annealing + dashboard.
+            lifetimeDecisions++;
+            totalReward += reward;
+            if (lifetimeDecisions < 0) lifetimeDecisions = int.MaxValue;
+            if (totalReward > 1000000) totalReward = 1000000;
+            else if (totalReward < -1000000) totalReward = -1000000;
+            // Upgrade v2: slow forgetting so stale tastes fade and values cannot saturate.
+            // Global decay is tiny per lesson; the touched cell was just reinforced above.
+            for (int r = 0; r < values.GetLength(0); r++)
+                for (int c = 0; c < values.GetLength(1); c++)
+                    values[r, c] *= 0.9995;
             // The same lesson stains the map where it happened: hangouts form.
             int bin = PlaceIndex();
             place[bin] += rate * (reward - place[bin]);
@@ -286,7 +301,10 @@ namespace IdleWalker.Domain
             else if (personality.Name == "Kevin") baseRate -= 0.02;
             else if (personality.Name == "Blues") baseRate += 0.02;
             else if (personality.Name == "Terence") baseRate -= 0.03;
-            if (baseRate < 0.05) baseRate = 0.05;
+            // Upgrade v2: anneal with age - newborns rewire fast, elders stabilise but never freeze.
+            if (lifetimeDecisions > 0)
+                baseRate *= 1.0 / (1.0 + lifetimeDecisions / 600.0);
+            if (baseRate < 0.03) baseRate = 0.03;
             else if (baseRate > 0.25) baseRate = 0.25;
             return baseRate;
         }
@@ -313,6 +331,9 @@ namespace IdleWalker.Domain
             else if (personality.Name == "Tim") baseRate -= 0.03;
             // Boredom and curiosity drive novelty-seeking (curiosity-driven exploration).
             baseRate += 0.10 * curiosity + 0.05 * Boredom() + 0.03 * optimism;
+            // Upgrade v2: anneal exploration with age so elders mostly exploit.
+            if (lifetimeDecisions > 0)
+                baseRate *= 1.0 / (1.0 + lifetimeDecisions / 400.0);
             if (fear > 0.5) baseRate *= 1 - 0.6 * fear;   // scared: no experiments
             if (baseRate < 0.02) baseRate = 0.02;
             else if (baseRate > 0.35) baseRate = 0.35;
@@ -698,7 +719,8 @@ namespace IdleWalker.Domain
                 }
                 sb.Append("style=").Append(s.ToString()).Append("\n");
                 sb.Append("seeds=").Append(Dbl(swaggerSeed)).Append(",").Append(Dbl(fidgetSeed))
-                    .Append(",").Append(Dbl(fidgetFreq)).Append(",").Append(Dbl(trialBest)).Append("\n");
+                    .Append(",").Append(Dbl(fidgetFreq)).Append(",").Append(Dbl(trialBest))
+                    .Append(",").Append(styleTrials.ToString(CultureInfo.InvariantCulture)).Append("\n");
             }
             if (useCount != null)
             {
@@ -713,6 +735,8 @@ namespace IdleWalker.Domain
             sb.Append("last=").Append(lastChoice.ToString(CultureInfo.InvariantCulture))
                 .Append(",").Append(repeatCount.ToString(CultureInfo.InvariantCulture)).Append("\n");
             sb.Append("opt=").Append(Dbl(optimism)).Append("\n");
+            sb.Append("exp=").Append(lifetimeDecisions.ToString(CultureInfo.InvariantCulture)).Append("\n");
+            sb.Append("rew=").Append(Dbl(totalReward)).Append("\n");
             return sb.ToString();
         }
 
@@ -738,6 +762,18 @@ namespace IdleWalker.Domain
             return styleReady;
         }
 
+        /// <summary>How many judged choices this walker has lived through.</summary>
+        internal int Experience()
+        {
+            return lifetimeDecisions;
+        }
+
+        /// <summary>Mean clamped reward per judged choice: is life going well?</summary>
+        internal double AvgReward()
+        {
+            return lifetimeDecisions > 0 ? totalReward / lifetimeDecisions : 0;
+        }
+
         /// <summary>Forgets everything learned: taste, friendships, hangouts, walk, novelty.</summary>
         internal void ForgetMind()
         {
@@ -746,12 +782,16 @@ namespace IdleWalker.Domain
             for (int i = 0; i < place.Length; i++) place[i] = 0;
             styleReady = false;
             for (int i = 0; i < StyleDims; i++) style[i] = 0;
+            styleTrials = 0;
+            trialBest = -10;
             useCount = null;
             lastChoice = -1;
             repeatCount = 0;
             cheer = 0;
             fear = 0;
             optimism = 0;
+            lifetimeDecisions = 0;
+            totalReward = 0;
             logPos = 0;
             for (int i = 0; i < log.Length; i++) log[i].Who = null;
             pendingBonus = 0;
@@ -865,13 +905,24 @@ namespace IdleWalker.Domain
             {
                 string[] nums = sd.Split(',');
                 double a, b, fr, tb;
-                if (nums.Length == 4 && TryDbl(nums[0], out a) && TryDbl(nums[1], out b) &&
+                if ((nums.Length == 4 || nums.Length == 5) && TryDbl(nums[0], out a) && TryDbl(nums[1], out b) &&
                     TryDbl(nums[2], out fr) && TryDbl(nums[3], out tb))
                 {
                     swaggerSeed = a;
                     fidgetSeed = b;
                     if (fr >= 1.0 && fr <= 5.0) fidgetFreq = fr;
                     if (tb >= -2 && tb <= 2) trialBest = tb;
+                    if (nums.Length == 5)
+                    {
+                        try
+                        {
+                            int tr = int.Parse(nums[4], CultureInfo.InvariantCulture);
+                            if (tr >= 0 && tr <= 1000000) styleTrials = tr;
+                        }
+                        catch (Exception)
+                        {
+                        }
+                    }
                 }
             }
             string us;
@@ -929,6 +980,25 @@ namespace IdleWalker.Domain
                 double o;
                 if (TryDbl(opt, out o) && !double.IsNaN(o) && !double.IsInfinity(o))
                     optimism = Clamp(o, -1, 1);
+            }
+            string exp;
+            if (fields.TryGetValue("exp", out exp))
+            {
+                try
+                {
+                    int e = int.Parse(exp, CultureInfo.InvariantCulture);
+                    if (e >= 0 && e <= 1000000) lifetimeDecisions = e;
+                }
+                catch (Exception)
+                {
+                }
+            }
+            string rw;
+            if (fields.TryGetValue("rew", out rw))
+            {
+                double t;
+                if (TryDbl(rw, out t) && !double.IsNaN(t) && !double.IsInfinity(t))
+                    totalReward = Clamp(t, -1000000, 1000000);
             }
         }
     }

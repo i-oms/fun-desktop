@@ -41,7 +41,7 @@ namespace IdleWalker.App
             MinimizeBox = false;
             ShowInTaskbar = false;
             StartPosition = FormStartPosition.CenterScreen;
-            ClientSize = new Size(700, 470);
+            ClientSize = new Size(760, 470);
 
             fileLabel = new Label();
             fileLabel.Bounds = new Rectangle(12, 10, 560, 18);
@@ -49,31 +49,31 @@ namespace IdleWalker.App
             Controls.Add(fileLabel);
 
             updatedLabel = new Label();
-            updatedLabel.Bounds = new Rectangle(578, 10, 110, 18);
+            updatedLabel.Bounds = new Rectangle(638, 10, 110, 18);
             updatedLabel.TextAlign = ContentAlignment.TopRight;
             updatedLabel.ForeColor = Color.FromArgb(0x1A, 0x7F, 0x37);
             Controls.Add(updatedLabel);
 
             sizeLabel = new Label();
-            sizeLabel.Bounds = new Rectangle(12, 30, 676, 18);
+            sizeLabel.Bounds = new Rectangle(12, 30, 736, 18);
             sizeLabel.AutoEllipsis = true;
             Controls.Add(sizeLabel);
 
             totalsLabel = new Label();
             totalsLabel.Font = new Font(totalsLabel.Font, FontStyle.Bold);
-            totalsLabel.Bounds = new Rectangle(12, 52, 676, 18);
+            totalsLabel.Bounds = new Rectangle(12, 52, 736, 18);
             totalsLabel.AutoEllipsis = true;
             Controls.Add(totalsLabel);
 
             noteLabel = new Label();
             noteLabel.ForeColor = SystemColors.GrayText;
             noteLabel.Text = "Live - they keep playing behind this card. Click a header to sort.";
-            noteLabel.Bounds = new Rectangle(12, 72, 676, 18);
+            noteLabel.Bounds = new Rectangle(12, 72, 736, 18);
             noteLabel.AutoEllipsis = true;
             Controls.Add(noteLabel);
 
             grid = new DataGridView();
-            grid.Bounds = new Rectangle(12, 96, 676, 326);
+            grid.Bounds = new Rectangle(12, 96, 736, 326);
             grid.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom;
             grid.ReadOnly = true;
             grid.AllowUserToAddRows = false;
@@ -85,13 +85,15 @@ namespace IdleWalker.App
             grid.BackgroundColor = SystemColors.Window;
             grid.BorderStyle = BorderStyle.Fixed3D;
             grid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(0xF2, 0xF4, 0xF7);
-            AddColumn("Name", 120, null, DataGridViewContentAlignment.MiddleLeft);
-            AddColumn("Temperament", 100, null, DataGridViewContentAlignment.MiddleLeft);
-            AddColumn("Tastes", 70, typeof(int), DataGridViewContentAlignment.MiddleRight);
-            AddColumn("Friends", 70, typeof(int), DataGridViewContentAlignment.MiddleRight);
-            AddColumn("Best friend", 110, null, DataGridViewContentAlignment.MiddleLeft);
-            AddColumn("Rival", 110, null, DataGridViewContentAlignment.MiddleLeft);
-            AddColumn("Own walk", 70, null, DataGridViewContentAlignment.MiddleCenter);
+            AddColumn("Name", 90, null, DataGridViewContentAlignment.MiddleLeft);
+            AddColumn("Temperament", 80, null, DataGridViewContentAlignment.MiddleLeft);
+            AddColumn("Tastes", 55, typeof(int), DataGridViewContentAlignment.MiddleRight);
+            AddColumn("Friends", 55, typeof(int), DataGridViewContentAlignment.MiddleRight);
+            AddColumn("Best friend", 90, null, DataGridViewContentAlignment.MiddleLeft);
+            AddColumn("Rival", 90, null, DataGridViewContentAlignment.MiddleLeft);
+            AddColumn("Own walk", 60, null, DataGridViewContentAlignment.MiddleCenter);
+            AddColumn("Decisions", 65, typeof(int), DataGridViewContentAlignment.MiddleRight);
+            AddColumn("Avg reward", 70, null, DataGridViewContentAlignment.MiddleRight);
             Controls.Add(grid);
 
             openButton = new Button();
@@ -111,7 +113,7 @@ namespace IdleWalker.App
             closeButton = new Button();
             closeButton.Text = "Close";
             closeButton.DialogResult = DialogResult.OK;
-            closeButton.Bounds = new Rectangle(608, 430, 80, 28);
+            closeButton.Bounds = new Rectangle(668, 430, 80, 28);
             closeButton.Anchor = AnchorStyles.Right | AnchorStyles.Bottom;
             Controls.Add(closeButton);
             AcceptButton = closeButton;
@@ -184,19 +186,22 @@ namespace IdleWalker.App
 
             int friendships = 0;
             int tastes = 0;
+            int decisions = 0;
             foreach (Walker walker in troupe.Walkers)
             {
                 try
                 {
                     friendships += walker.Friendships();
                     tastes += walker.LearnedEntries();
+                    decisions += walker.Experience();
                 }
                 catch (Exception)
                 {
                 }
             }
             totalsLabel.Text = troupe.Walkers.Count + " walkers  -  " +
-                friendships + " friendships  -  " + tastes + " learned tastes";
+                friendships + " friendships  -  " + tastes + " learned tastes  -  " +
+                decisions + " decisions";
             updatedLabel.Text = "Live - " + DateTime.Now.ToString("HH:mm:ss");
 
             // Rows are built once and updated in place afterwards: the rows
@@ -236,12 +241,13 @@ namespace IdleWalker.App
         /// <summary>One row of table values: name, temperament, tastes, friends, best friend, rival, own walk.</summary>
         static object[] RowCells(Walker walker)
         {
-            int t = 0, f = 0;
+            int t = 0, f = 0, exp = 0;
             bool walk = false;
             string temper = "";
             string name = "";
             string best = "-";
             string rival = "-";
+            string avg = "-";
             try
             {
                 name = walker.Personality.Name;
@@ -251,11 +257,13 @@ namespace IdleWalker.App
                 temper = walker.Personality.Temperament.ToString();
                 best = walker.BestFriendName();
                 rival = walker.RivalName();
+                exp = walker.Experience();
+                avg = walker.AvgReward().ToString("0.00");
             }
             catch (Exception)
             {
             }
-            return new object[] { name, temper, t, f, best, rival, walk ? "Yes" : "-" };
+            return new object[] { name, temper, t, f, best, rival, walk ? "Yes" : "-", exp, avg };
         }
 
         static string DescribeSize(long bytes)

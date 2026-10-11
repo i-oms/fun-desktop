@@ -15,7 +15,9 @@ namespace IdleWalker.Platform
     /// </summary>
     static class BrainStore
     {
-        const string Header = "# IdleWalker brains v1";
+        const string Header = "# IdleWalker brains v2";
+        const string HeaderV1 = "# IdleWalker brains v1";
+        static readonly object SaveLock = new object();
 
         /// <summary>Test hook: a fixed file path instead of %APPDATA%. Null means the real one.</summary>
 #pragma warning disable 0649
@@ -80,6 +82,20 @@ namespace IdleWalker.Platform
                 if (path == null || !File.Exists(path)) return;
                 string text = File.ReadAllText(path, Encoding.UTF8);
                 if (text == null || text.Length == 0) return;
+                // Upgrade v2: accept v1 (migrates: missing exp/rew/trials default to 0)
+                // and v2 headers; unknown headers mean a foreign file - start fresh.
+                string first = null;
+                string[] head = text.Split('\n');
+                for (int i = 0; i < head.Length; i++)
+                {
+                    string t = head[i].Trim();
+                    if (t.Length == 0) continue;
+                    first = t;
+                    break;
+                }
+                if (first != null && first.Length > 0 && first[0] == '#' &&
+                    first != Header && first != HeaderV1)
+                    return;
                 troupe.EnsureCast();
                 Dictionary<string, Walker> byName = new Dictionary<string, Walker>();
                 foreach (Walker walker in troupe.Walkers)
@@ -121,43 +137,64 @@ namespace IdleWalker.Platform
         /// <summary>Saves lasting memories; safe to call periodically and on exit.</summary>
         public static void Save(Troupe troupe)
         {
-            try
+            lock (SaveLock)
             {
-                string path = FilePath();
-                if (path == null) return;
-                StringBuilder sb = new StringBuilder();
-                sb.Append(Header).Append("\n");
-                foreach (Walker walker in troupe.Walkers)
+                try
                 {
-                    string pack;
+                    string path = FilePath();
+                    if (path == null) return;
+                    StringBuilder sb = new StringBuilder();
+                    sb.Append(Header).Append("\n");
+                    foreach (Walker walker in troupe.Walkers)
+                    {
+                        string pack;
+                        try
+                        {
+                            pack = walker.PackMind();
+                        }
+                        catch (Exception)
+                        {
+                            continue;
+                        }
+                        sb.Append("[").Append(walker.Personality.Name).Append("]\n");
+                        sb.Append(pack);
+                    }
+                    string dir = Path.GetDirectoryName(path);
+                    if (dir != null && dir.Length > 0 && !Directory.Exists(dir))
+                        Directory.CreateDirectory(dir);
+                    // Upgrade v2: atomic save - write tmp then replace, so a crash
+                    // can never leave a half-written brains.txt behind.
+                    string tmp = path + ".tmp";
+                    File.WriteAllText(tmp, sb.ToString(), Encoding.UTF8);
                     try
                     {
-                        pack = walker.PackMind();
+                        if (File.Exists(path))
+                            File.Replace(tmp, path, path + ".bak");
+                        else
+                            File.Move(tmp, path);
                     }
                     catch (Exception)
                     {
-                        continue;
+                        try
+                        {
+                            if (File.Exists(tmp)) File.Copy(tmp, path, true);
+                        }
+                        catch (Exception)
+                        {
+                        }
+                        try
+                        {
+                            if (File.Exists(tmp)) File.Delete(tmp);
+                        }
+                        catch (Exception)
+                        {
+                        }
                     }
-                    sb.Append("[").Append(walker.Personality.Name).Append("]\n");
-                    sb.Append(pack);
-                }
-                string dir = Path.GetDirectoryName(path);
-                if (dir != null && dir.Length > 0 && !Directory.Exists(dir))
-                    Directory.CreateDirectory(dir);
-                string tmp = path + ".tmp";
-                File.WriteAllText(tmp, sb.ToString(), Encoding.UTF8);
-                File.Copy(tmp, path, true);
-                try
-                {
-                    File.Delete(tmp);
                 }
                 catch (Exception)
                 {
+                    // Saving must never interrupt the program; it just retries later.
                 }
-            }
-            catch (Exception)
-            {
-                // Saving must never interrupt the program; it just retries later.
             }
         }
     }

@@ -19,7 +19,7 @@ namespace IdleWalker.Domain
     partial class Walker
     {
         const int StyleDims = 6;
-        const double TrialSeconds = 24;
+        const double TrialSeconds = 18;
 
         // What each dimension means: 0 bob, 1 lean, 2 speed, 3 hop, 4 swagger, 5 fidget.
         readonly double[] style = new double[StyleDims];
@@ -30,6 +30,7 @@ namespace IdleWalker.Domain
         double trialEnergy0, trialBonus, trialDist, trialBest = -10;
         int trialDim;
         double trialSaved;
+        int styleTrials;
 
         /// <summary>Bob amplitude for the stride, from its build plus its own touch.</summary>
         double EffBob()
@@ -121,16 +122,21 @@ namespace IdleWalker.Domain
             if (trialTimer > 0) return;
 
             // Judge the trial: energy kept, good things banked, ground covered.
-            double score = 2.0 * trialBonus + (energy - trialEnergy0) + 0.0004 * trialDist / sizeFactor;
+            // Upgrade v2: distance weight lowered (was rewarding pacing, not skill).
+            double score = 2.0 * trialBonus + (energy - trialEnergy0) + 0.00025 * trialDist / sizeFactor;
             if (score > 2) score = 2; else if (score < -2) score = -2;
             if (score >= trialBest) trialBest = score;
             else style[trialDim] = trialSaved;
             trialBest *= 0.995;   // the world changes, so keep exploring
+            styleTrials++;
 
             // Next trial: change one thing a little.
+            // Upgrade v2: anneal mutation with age so the walk settles but never freezes.
             trialDim = rng.Next(StyleDims);
             trialSaved = style[trialDim];
-            double push = (rng.NextDouble() + rng.NextDouble() + rng.NextDouble() - 1.5) * StepSize(trialDim);
+            double anneal = 1.0 / (1.0 + styleTrials / 60.0);
+            if (anneal < 0.35) anneal = 0.35;
+            double push = (rng.NextDouble() + rng.NextDouble() + rng.NextDouble() - 1.5) * StepSize(trialDim) * anneal;
             style[trialDim] = ClampDim(trialDim, trialSaved + push);
             trialEnergy0 = energy;
             trialBonus = 0;
