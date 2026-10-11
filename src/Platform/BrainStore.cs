@@ -15,8 +15,9 @@ namespace IdleWalker.Platform
     /// </summary>
     static class BrainStore
     {
-        const string Header = "# IdleWalker brains v2";
+        const string Header = "# IdleWalker brains v3";
         const string HeaderV1 = "# IdleWalker brains v1";
+        const string HeaderV2 = "# IdleWalker brains v2";
         static readonly object SaveLock = new object();
 
         /// <summary>Test hook: a fixed file path instead of %APPDATA%. Null means the real one.</summary>
@@ -82,8 +83,8 @@ namespace IdleWalker.Platform
                 if (path == null || !File.Exists(path)) return;
                 string text = File.ReadAllText(path, Encoding.UTF8);
                 if (text == null || text.Length == 0) return;
-                // Upgrade v2: accept v1 (migrates: missing exp/rew/trials default to 0)
-                // and v2 headers; unknown headers mean a foreign file - start fresh.
+                // Upgrade v3: accept v1/v2 (migrate: missing exp/rew/trials/MLP default
+                // to fresh) and v3 headers; unknown headers mean a foreign file.
                 string first = null;
                 string[] head = text.Split('\n');
                 for (int i = 0; i < head.Length; i++)
@@ -94,7 +95,7 @@ namespace IdleWalker.Platform
                     break;
                 }
                 if (first != null && first.Length > 0 && first[0] == '#' &&
-                    first != Header && first != HeaderV1)
+                    first != Header && first != HeaderV1 && first != HeaderV2)
                     return;
                 troupe.EnsureCast();
                 Dictionary<string, Walker> byName = new Dictionary<string, Walker>();

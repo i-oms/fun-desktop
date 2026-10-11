@@ -85,15 +85,16 @@ namespace IdleWalker.App
             grid.BackgroundColor = SystemColors.Window;
             grid.BorderStyle = BorderStyle.Fixed3D;
             grid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(0xF2, 0xF4, 0xF7);
-            AddColumn("Name", 90, null, DataGridViewContentAlignment.MiddleLeft);
-            AddColumn("Temperament", 80, null, DataGridViewContentAlignment.MiddleLeft);
-            AddColumn("Tastes", 55, typeof(int), DataGridViewContentAlignment.MiddleRight);
-            AddColumn("Friends", 55, typeof(int), DataGridViewContentAlignment.MiddleRight);
-            AddColumn("Best friend", 90, null, DataGridViewContentAlignment.MiddleLeft);
-            AddColumn("Rival", 90, null, DataGridViewContentAlignment.MiddleLeft);
-            AddColumn("Own walk", 60, null, DataGridViewContentAlignment.MiddleCenter);
-            AddColumn("Decisions", 65, typeof(int), DataGridViewContentAlignment.MiddleRight);
-            AddColumn("Avg reward", 70, null, DataGridViewContentAlignment.MiddleRight);
+            AddColumn("Name", 85, null, DataGridViewContentAlignment.MiddleLeft);
+            AddColumn("Temperament", 75, null, DataGridViewContentAlignment.MiddleLeft);
+            AddColumn("Tastes", 50, typeof(int), DataGridViewContentAlignment.MiddleRight);
+            AddColumn("Friends", 50, typeof(int), DataGridViewContentAlignment.MiddleRight);
+            AddColumn("Best friend", 85, null, DataGridViewContentAlignment.MiddleLeft);
+            AddColumn("Rival", 85, null, DataGridViewContentAlignment.MiddleLeft);
+            AddColumn("Own walk", 55, null, DataGridViewContentAlignment.MiddleCenter);
+            AddColumn("Decisions", 60, typeof(int), DataGridViewContentAlignment.MiddleRight);
+            AddColumn("Avg reward", 65, null, DataGridViewContentAlignment.MiddleRight);
+            AddColumn("Net", 55, null, DataGridViewContentAlignment.MiddleRight);
             Controls.Add(grid);
 
             openButton = new Button();
@@ -248,6 +249,7 @@ namespace IdleWalker.App
             string best = "-";
             string rival = "-";
             string avg = "-";
+            string net = "-";
             try
             {
                 name = walker.Personality.Name;
@@ -259,11 +261,12 @@ namespace IdleWalker.App
                 rival = walker.RivalName();
                 exp = walker.Experience();
                 avg = walker.AvgReward().ToString("0.00");
+                net = walker.MlpWeightNorm().ToString("0.00");
             }
             catch (Exception)
             {
             }
-            return new object[] { name, temper, t, f, best, rival, walk ? "Yes" : "-", exp, avg };
+            return new object[] { name, temper, t, f, best, rival, walk ? "Yes" : "-", exp, avg, net };
         }
 
         static string DescribeSize(long bytes)

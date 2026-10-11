@@ -205,7 +205,34 @@ namespace IdleWalker.Domain
             int choice;
             if (rng.NextDouble() < Explore())
             {
-                choice = acts[rng.Next(n)];
+                // Upgrade v3: motivated experiment, not dice - try what the
+                // personality fancies + what is untried, minus what just repeated.
+                // Still an experiment (not the best value), but never looks random.
+                double total = 0;
+                double[] w = new double[n];
+                for (int i = 0; i < n; i++)
+                {
+                    double pw = PriorFor(acts[i]) + NoveltyBonus(acts[i]) - HabituationPenalty(acts[i]) + 0.05;
+                    if (pw < 0.05) pw = 0.05;
+                    // Scared: scary show-offs are not even tried.
+                    if (fear > 0.4 && acts[i] < habits.Length)
+                    {
+                        Antic a = habits[acts[i]].Antic;
+                        if (a == Antic.Dance || a == Antic.Twirl || a == Antic.Strum || a == Antic.Jive ||
+                            a == Antic.Flex || a == Antic.Box || a == Antic.Taunt || a == Antic.Launch ||
+                            a == Antic.Blast || a == Antic.Rage)
+                            pw *= 1 - 0.6 * fear;
+                    }
+                    w[i] = pw;
+                    total += pw;
+                }
+                double r = rng.NextDouble() * total;
+                choice = acts[n - 1];
+                for (int i = 0; i < n; i++)
+                {
+                    r -= w[i];
+                    if (r <= 0) { choice = acts[i]; break; }
+                }
             }
             else
             {
@@ -251,6 +278,11 @@ namespace IdleWalker.Domain
         double OptionValue(int state, int choice, Walker other)
         {
             bool eccentric = personality.Temperament == Temperament.Eccentric;
+            // Upgrade v3: continuous generalizer. Same feat for all choices this Decide,
+            // small at birth so newborns act from personality, elders from lived nuance.
+            double[] featNow = new double[12];
+            FillFeatures(featNow);
+            double mlp = MlpFor(featNow, choice);
             double v;
             if (choice < HabitCount)
             {
@@ -258,7 +290,7 @@ namespace IdleWalker.Domain
                 // A tired one means rest; a curious one means look and point.
                 Habit h = personality.Habits[choice];
                 double drive = h.Weight > 0 ? HabitWeight(h) / h.Weight : 1;
-                v = values[state, choice] + PriorFor(choice) * drive;
+                v = values[state, choice] + mlp + PriorFor(choice) * drive;
                 if (eccentric && h.Antic == Antic.Teddy)
                 {
                     v += social * 0.4;   // lonely: cling to the only friend
@@ -309,7 +341,7 @@ namespace IdleWalker.Domain
             }
             else
             {
-                v = values[state, choice] + PriorFor(choice);
+                v = values[state, choice] + mlp + PriorFor(choice);
                 if (choice == VisitChoice && other != null)
                 {
                     v += FondOf(other) * 0.5;

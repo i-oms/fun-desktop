@@ -70,6 +70,17 @@ namespace IdleWalker.Domain
         int lifetimeDecisions;              // how many choices have been judged so far
         double totalReward;                 // sum of clamped rewards, for AvgReward
 
+        // Upgrade v3: tiny MLP-Q generalizer (12 feats -> 12 tanh -> N actions).
+        // Hybrid with the table: total = table + mlp. Table learns fast discrete,
+        // MLP learns slow continuous so new combos still feel motivated, never random.
+        const int MlpFeats = 12;
+        const int MlpHidden = 12;
+        double[,] mlpW1;                    // [feat, hidden], small init
+        double[] mlpB1;                     // [hidden]
+        double[,] mlpW2;                    // [hidden, action]
+        double[] mlpB2;                     // [action]
+        double[] prevFeat;                  // continuous features at previous choice
+
         int HabitCount { get { return personality.Habits.Length; } }
         int VisitChoice { get { return HabitCount; } }
         int PrankChoice { get { return HabitCount + 1; } }
@@ -89,6 +100,155 @@ namespace IdleWalker.Domain
                 }
                 useCount = grown;
             }
+            EnsureMlp();
+        }
+
+        void EnsureMlp()
+        {
+            int n = HabitCount + 3;
+            if (mlpW1 != null && mlpB1 != null && mlpW2 != null && mlpB2 != null)
+            {
+                if (mlpW1.GetLength(0) == MlpFeats && mlpW1.GetLength(1) == MlpHidden &&
+                    mlpB1.Length == MlpHidden && mlpW2.GetLength(0) == MlpHidden &&
+                    mlpW2.GetLength(1) == n && mlpB2.Length == n)
+                    return;
+            }
+            mlpW1 = new double[MlpFeats, MlpHidden];
+            mlpB1 = new double[MlpHidden];
+            mlpW2 = new double[MlpHidden, n];
+            mlpB2 = new double[n];
+            for (int f = 0; f < MlpFeats; f++)
+                for (int h = 0; h < MlpHidden; h++)
+                    mlpW1[f, h] = (rng.NextDouble() + rng.NextDouble() - 1) * 0.05;
+            for (int h = 0; h < MlpHidden; h++)
+                for (int a = 0; a < n; a++)
+                    mlpW2[h, a] = (rng.NextDouble() + rng.NextDouble() - 1) * 0.05;
+            if (prevFeat == null || prevFeat.Length != MlpFeats)
+                prevFeat = new double[MlpFeats];
+        }
+
+        void FillFeatures(double[] f)
+        {
+            f[0] = energy;
+            f[1] = social;
+            f[2] = curiosity;
+            f[3] = cheer;
+            f[4] = fear;
+            f[5] = NightTiredness();
+            f[6] = optimism;
+            f[7] = Boredom();
+            bool hasCompany = company != null && company.IsVisible && !company.IsLeaving;
+            f[8] = hasCompany ? 1 : 0;
+            bool bullyNear = hasCompany &&
+                (company.Temperament == Temperament.Aggressive || company.Temperament == Temperament.Feisty) &&
+                fear > 0.15;
+            f[9] = bullyNear ? 1 : 0;
+            bool upsetNear = hasCompany && company.IsUpset;
+            f[10] = upsetNear ? 1 : 0;
+            double q = place[BestPlace()];
+            if (q > 1) q = 1; else if (q < -1) q = -1;
+            f[11] = q;
+        }
+
+        double MlpFor(double[] feat, int choice)
+        {
+            EnsureMlp();
+            int n = HabitCount + 3;
+            if (choice < 0 || choice >= n) return 0;
+            double[] hid = new double[MlpHidden];
+            for (int h = 0; h < MlpHidden; h++)
+            {
+                double s = mlpB1[h];
+                for (int f = 0; f < MlpFeats; f++) s += feat[f] * mlpW1[f, h];
+                // tanh, clamped input for safety
+                if (s > 8) s = 8; else if (s < -8) s = -8;
+                double e2 = Math.Exp(2 * s);
+                hid[h] = (e2 - 1) / (e2 + 1);
+            }
+            double q = mlpB2[choice];
+            for (int h = 0; h < MlpHidden; h++) q += hid[h] * mlpW2[h, choice];
+            if (q > MaxReward) q = MaxReward;
+            else if (q < -MaxReward) q = -MaxReward;
+            return q;
+        }
+
+        double MaxLearned(int state, double[] featNow)
+        {
+            EnsureTable();
+            int n = HabitCount + 3;
+            double best = double.MinValue;
+            bool first = true;
+            for (int a = 0; a < n; a++)
+            {
+                double q = values[state, a] + MlpFor(featNow, a);
+                if (first || q > best) { best = q; first = false; }
+            }
+            return best;
+        }
+
+        void MlpLearn(double[] feat, int choice, double error, double rate)
+        {
+            EnsureMlp();
+            int n = HabitCount + 3;
+            if (choice < 0 || choice >= n) return;
+            if (error > MaxReward) error = MaxReward;
+            else if (error < -MaxReward) error = -MaxReward;
+            double[] hid = new double[MlpHidden];
+            for (int h = 0; h < MlpHidden; h++)
+            {
+                double s = mlpB1[h];
+                for (int f = 0; f < MlpFeats; f++) s += feat[f] * mlpW1[f, h];
+                if (s > 8) s = 8; else if (s < -8) s = -8;
+                double e2 = Math.Exp(2 * s);
+                hid[h] = (e2 - 1) / (e2 + 1);
+            }
+            // Output layer: only the taken action moves (Q-learning).
+            for (int h = 0; h < MlpHidden; h++)
+                mlpW2[h, choice] += rate * error * hid[h];
+            mlpB2[choice] += rate * error;
+            // Hidden layer backprop through tanh.
+            for (int h = 0; h < MlpHidden; h++)
+            {
+                double dh = error * mlpW2[h, choice] * (1 - hid[h] * hid[h]);
+                // Clamp the backprop signal so one thrill cannot rewire the net.
+                if (dh > 1) dh = 1; else if (dh < -1) dh = -1;
+                for (int f = 0; f < MlpFeats; f++)
+                    mlpW1[f, h] += rate * dh * feat[f];
+                mlpB1[h] += rate * dh * 0.5;
+            }
+            // Gentle decay + clamps: the net generalises, the table remembers.
+            for (int f = 0; f < MlpFeats; f++)
+                for (int h = 0; h < MlpHidden; h++)
+                {
+                    mlpW1[f, h] *= 0.9995;
+                    if (mlpW1[f, h] > 2) mlpW1[f, h] = 2;
+                    else if (mlpW1[f, h] < -2) mlpW1[f, h] = -2;
+                }
+            for (int h = 0; h < MlpHidden; h++)
+            {
+                if (mlpB1[h] > 2) mlpB1[h] = 2;
+                else if (mlpB1[h] < -2) mlpB1[h] = -2;
+                for (int a = 0; a < n; a++)
+                {
+                    mlpW2[h, a] *= 0.9995;
+                    if (mlpW2[h, a] > 2) mlpW2[h, a] = 2;
+                    else if (mlpW2[h, a] < -2) mlpW2[h, a] = -2;
+                }
+            }
+            for (int a = 0; a < n; a++)
+            {
+                if (mlpB2[a] > 2) mlpB2[a] = 2;
+                else if (mlpB2[a] < -2) mlpB2[a] = -2;
+            }
+        }
+
+        internal double MlpWeightNorm()
+        {
+            if (mlpW1 == null || mlpW2 == null) return 0;
+            double s = 0;
+            foreach (double v in mlpW1) s += v * v;
+            foreach (double v in mlpW2) s += v * v;
+            return Math.Sqrt(s);
         }
 
         /// <summary>The situation in one number: tired? lonely? curious? (8 combinations).</summary>
@@ -175,6 +335,8 @@ namespace IdleWalker.Domain
             prevEnergy = energy;
             prevCheer = cheer;
             prevFear = fear;
+            EnsureMlp();
+            FillFeatures(prevFeat);
         }
 
         /// <summary>
@@ -206,8 +368,19 @@ namespace IdleWalker.Domain
             if (reward > MaxReward) reward = MaxReward;
             else if (reward < -MaxReward) reward = -MaxReward;
             double rate = LearnRateFor();
-            values[prevState, prevChoice] += rate *
-                (reward + MindGamma() * MaxValue(MindState()) - values[prevState, prevChoice]);
+            // Upgrade v3: hybrid TD - total = table + MLP. Bootstrap from total,
+            // update table fast + MLP slow so behaviour stays smooth while generalising.
+            int nextState = MindState();
+            double[] featNow = new double[MlpFeats];
+            FillFeatures(featNow);
+            double prevMlp = MlpFor(prevFeat, prevChoice);
+            double prevTotal = values[prevState, prevChoice] + prevMlp;
+            double target = reward + MindGamma() * MaxLearned(nextState, featNow);
+            double error = target - prevTotal;
+            if (error > MaxReward * 2) error = MaxReward * 2;
+            else if (error < -MaxReward * 2) error = -MaxReward * 2;
+            values[prevState, prevChoice] += rate * error;
+            MlpLearn(prevFeat, prevChoice, error, rate * 0.25);
             // Upgrade v2: track lifetime stats for annealing + dashboard.
             lifetimeDecisions++;
             totalReward += reward;
@@ -238,6 +411,7 @@ namespace IdleWalker.Domain
             prevEnergy = energy;
             prevCheer = cheer;
             prevFear = fear;
+            FillFeatures(prevFeat);
             if (choice >= 0 && choice < useCount.Length) useCount[choice]++;
             if (choice == lastChoice) repeatCount++;
             else
@@ -737,6 +911,43 @@ namespace IdleWalker.Domain
             sb.Append("opt=").Append(Dbl(optimism)).Append("\n");
             sb.Append("exp=").Append(lifetimeDecisions.ToString(CultureInfo.InvariantCulture)).Append("\n");
             sb.Append("rew=").Append(Dbl(totalReward)).Append("\n");
+            if (mlpW1 != null && mlpB1 != null && mlpW2 != null && mlpB2 != null)
+            {
+                int mn = mlpB2.Length;
+                sb.Append("mshape=").Append(MlpFeats.ToString(CultureInfo.InvariantCulture))
+                    .Append(",").Append(MlpHidden.ToString(CultureInfo.InvariantCulture))
+                    .Append(",").Append(mn.ToString(CultureInfo.InvariantCulture)).Append("\n");
+                StringBuilder w1 = new StringBuilder();
+                for (int f = 0; f < MlpFeats; f++)
+                    for (int h = 0; h < MlpHidden; h++)
+                    {
+                        if (f != 0 || h != 0) w1.Append(",");
+                        w1.Append(Dbl(mlpW1[f, h]));
+                    }
+                sb.Append("mw1=").Append(w1.ToString()).Append("\n");
+                StringBuilder b1 = new StringBuilder();
+                for (int h = 0; h < MlpHidden; h++)
+                {
+                    if (h != 0) b1.Append(",");
+                    b1.Append(Dbl(mlpB1[h]));
+                }
+                sb.Append("mb1=").Append(b1.ToString()).Append("\n");
+                StringBuilder w2 = new StringBuilder();
+                for (int h = 0; h < MlpHidden; h++)
+                    for (int a = 0; a < mn; a++)
+                    {
+                        if (h != 0 || a != 0) w2.Append(",");
+                        w2.Append(Dbl(mlpW2[h, a]));
+                    }
+                sb.Append("mw2=").Append(w2.ToString()).Append("\n");
+                StringBuilder b2 = new StringBuilder();
+                for (int a = 0; a < mn; a++)
+                {
+                    if (a != 0) b2.Append(",");
+                    b2.Append(Dbl(mlpB2[a]));
+                }
+                sb.Append("mb2=").Append(b2.ToString()).Append("\n");
+            }
             return sb.ToString();
         }
 
@@ -792,6 +1003,12 @@ namespace IdleWalker.Domain
             optimism = 0;
             lifetimeDecisions = 0;
             totalReward = 0;
+            mlpW1 = null;
+            mlpB1 = null;
+            mlpW2 = null;
+            mlpB2 = null;
+            if (prevFeat != null)
+                for (int i = 0; i < prevFeat.Length; i++) prevFeat[i] = 0;
             logPos = 0;
             for (int i = 0; i < log.Length; i++) log[i].Who = null;
             pendingBonus = 0;
@@ -999,6 +1216,72 @@ namespace IdleWalker.Domain
                 double t;
                 if (TryDbl(rw, out t) && !double.IsNaN(t) && !double.IsInfinity(t))
                     totalReward = Clamp(t, -1000000, 1000000);
+            }
+            // Upgrade v3: MLP weights. Missing (v1/v2 files) means fresh small net -
+            // the table still carries the old taste, so migration stays smooth.
+            string mshape;
+            string mw1, mb1, mw2, mb2;
+            if (fields.TryGetValue("mshape", out mshape) &&
+                fields.TryGetValue("mw1", out mw1) && fields.TryGetValue("mb1", out mb1) &&
+                fields.TryGetValue("mw2", out mw2) && fields.TryGetValue("mb2", out mb2))
+            {
+                try
+                {
+                    string[] dims = mshape.Split(',');
+                    int mf = int.Parse(dims[0], CultureInfo.InvariantCulture);
+                    int mh = int.Parse(dims[1], CultureInfo.InvariantCulture);
+                    int mn = int.Parse(dims[2], CultureInfo.InvariantCulture);
+                    if (mf == MlpFeats && mh == MlpHidden && mn == HabitCount + 3)
+                    {
+                        string[] sW1 = mw1.Split(',');
+                        string[] sB1 = mb1.Split(',');
+                        string[] sW2 = mw2.Split(',');
+                        string[] sB2 = mb2.Split(',');
+                        if (sW1.Length == mf * mh && sB1.Length == mh &&
+                            sW2.Length == mh * mn && sB2.Length == mn)
+                        {
+                            double[,] nw1 = new double[mf, mh];
+                            double[] nb1 = new double[mh];
+                            double[,] nw2 = new double[mh, mn];
+                            double[] nb2 = new double[mn];
+                            bool ok = true;
+                            for (int i = 0; i < sW1.Length && ok; i++)
+                            {
+                                double v;
+                                if (!TryDbl(sW1[i], out v) || double.IsNaN(v) || double.IsInfinity(v)) ok = false;
+                                else nw1[i / mh, i % mh] = Clamp(v, -2, 2);
+                            }
+                            for (int i = 0; i < sB1.Length && ok; i++)
+                            {
+                                double v;
+                                if (!TryDbl(sB1[i], out v) || double.IsNaN(v) || double.IsInfinity(v)) ok = false;
+                                else nb1[i] = Clamp(v, -2, 2);
+                            }
+                            for (int i = 0; i < sW2.Length && ok; i++)
+                            {
+                                double v;
+                                if (!TryDbl(sW2[i], out v) || double.IsNaN(v) || double.IsInfinity(v)) ok = false;
+                                else nw2[i / mn, i % mn] = Clamp(v, -2, 2);
+                            }
+                            for (int i = 0; i < sB2.Length && ok; i++)
+                            {
+                                double v;
+                                if (!TryDbl(sB2[i], out v) || double.IsNaN(v) || double.IsInfinity(v)) ok = false;
+                                else nb2[i] = Clamp(v, -2, 2);
+                            }
+                            if (ok)
+                            {
+                                mlpW1 = nw1;
+                                mlpB1 = nb1;
+                                mlpW2 = nw2;
+                                mlpB2 = nb2;
+                            }
+                        }
+                    }
+                }
+                catch (Exception)
+                {
+                }
             }
         }
     }
