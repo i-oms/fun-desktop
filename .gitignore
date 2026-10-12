@@ -4,6 +4,13 @@ IdleWalker.exe
 *.pdb
 *.obj
 
+# Signing secrets (see build.cmd) - never commit these
+sign.local.cmd
+*.pfx
+*.p12
+*.pvk
+*.spc
+
 # Visual Studio / .NET SDK leftovers, if you open the file in an IDE
 bin/
 obj/
