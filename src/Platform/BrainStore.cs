@@ -16,9 +16,10 @@ namespace IdleWalker.Platform
     /// </summary>
     static class BrainStore
     {
-        const string Header = "# IdleWalker brains v3";
+        const string Header = "# IdleWalker brains v4";   // v4: 81 situations, sparse table
         const string HeaderV1 = "# IdleWalker brains v1";
         const string HeaderV2 = "# IdleWalker brains v2";
+        const string HeaderV3 = "# IdleWalker brains v3";
         static readonly object SaveLock = new object();
 
         /// <summary>Test hook: a fixed file path instead of %APPDATA%. Null means the real one.</summary>
@@ -96,7 +97,7 @@ namespace IdleWalker.Platform
                     break;
                 }
                 if (first != null && first.Length > 0 && first[0] == '#' &&
-                    first != Header && first != HeaderV1 && first != HeaderV2)
+                    first != Header && first != HeaderV1 && first != HeaderV2 && first != HeaderV3)
                     return;
                 troupe.EnsureCast();
                 Dictionary<string, Walker> byName = new Dictionary<string, Walker>();

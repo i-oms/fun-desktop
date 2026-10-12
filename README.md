@@ -396,7 +396,14 @@ Everything they learn is kept between runs in one small text file:
 Each walker gets a section under its name with its learned taste (every
 situation and choice), its friendships and grudges, its hangouts, its
 walk, its experience counts and its optimism; moods (cheer, fear, energy)
-are the moment, not the character, and start fresh. It is saved every
+are the moment, not the character, and start fresh. A situation (since
+v4) is how tired, how lonely and how curious it is, each in three steps,
+times who is near - nobody, somebody harmless, a bully - 81 in all; one
+lesson also teaches the neighbouring situations a share, the choice
+before it a decaying share, and the net replays recent lessons, so the
+finer table learns faster than the old eight-way one did. Only the cells
+that have learned something are written. A v3 file still loads, its
+eight situations spread over the fine ones. It is saved every
 minute and on exit, so even a crash keeps almost everything, and a
 missing or corrupt file just means a fresh cast - startup never fails
 because of it. To start over, quit the program, delete the file (or one

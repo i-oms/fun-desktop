@@ -152,12 +152,35 @@ namespace IdleWalker.Tools
                 Check(File.Exists(tmp), "brains file saved");
                 Check(!File.Exists(tmp + ".tmp"), "no tmp left behind");
                 string text = File.ReadAllText(tmp, Encoding.UTF8);
-                Check(text.IndexOf("# IdleWalker brains v3") >= 0, "v3 header written");
+                Check(text.IndexOf("# IdleWalker brains v4") >= 0, "v4 header written");
+                Check(text.IndexOf("\nvs=") >= 0 && text.IndexOf("\nv=") < 0, "v4 table written sparse");
                 Troupe loaded = new Troupe(world, new Random(555));
                 BrainStore.Load(loaded);
-                int loadedExp = 0;
-                foreach (Walker w in loaded.Walkers) loadedExp += w.Experience();
+                int loadedExp = 0, loadedTastes = 0;
+                foreach (Walker w in loaded.Walkers)
+                {
+                    loadedExp += w.Experience();
+                    loadedTastes += w.LearnedEntries();
+                }
                 Check(loadedExp == decisions, "save/load preserves decisions");
+                int tastesNow = 0;
+                foreach (Walker w in troupe.Walkers) tastesNow += w.LearnedEntries();
+                Check(loadedTastes == tastesNow, "save/load preserves every learned cell");
+                // A v3 file (eight situations, dense table) must still load, spread over the fine situations.
+                int cols = Personality.Roster[2].Habits.Length + 3;   // Bob
+                StringBuilder dense = new StringBuilder();
+                for (int i = 0; i < 8 * cols; i++)
+                {
+                    if (i > 0) dense.Append(",");
+                    dense.Append(i % cols == 0 ? "0.5" : "0");   // the first choice is liked in every old situation
+                }
+                File.WriteAllText(tmp, "# IdleWalker brains v3\n[Bob]\nvrows=8\nvcols=" + cols + "\nv=" + dense + "\nexp=42\n", Encoding.UTF8);
+                Troupe old = new Troupe(world, new Random(999));
+                BrainStore.Load(old);
+                Walker bob = null;
+                foreach (Walker w in old.Walkers) if (w.Personality.Name == "Bob") bob = w;
+                Check(bob != null && bob.Experience() == 42, "v3 file still loads");
+                Check(bob != null && bob.LearnedEntries() == 81, "v3 table spread over the 81 fine situations");
                 // Corrupt header must not crash and must not load.
                 File.WriteAllText(tmp, "# foreign file\n[Bob]\nexp=9999\n", Encoding.UTF8);
                 Troupe foreign = new Troupe(world, new Random(777));

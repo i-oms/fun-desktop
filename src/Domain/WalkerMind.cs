@@ -33,7 +33,27 @@ namespace IdleWalker.Domain
         const double Gamma = 0.9;           // how much the future matters to the learner
         const double MaxReward = 1.5;       // clamp on one lesson, so a single thrill cannot rewire it
 
+        // Situations: three levels each of energy, the wish for company and
+        // curiosity, times who is near (nobody, somebody harmless, a bully):
+        // 81 in all. A finer table learns each cell more slowly, so one
+        // lesson is shared with the neighbouring situations (same tired /
+        // lonely / curious reading, other levels) at a fraction, the
+        // choice before the judged one gets a decaying share (an eligibility
+        // trace), and the net replays recent lessons. Together they learn
+        // faster than the old eight-way table did, not slower.
+        const int StateCount = 81;
+        const double SiblingShare = 0.35;   // what a lesson teaches the neighbouring situations
+        const double TraceDecay = 0.5;      // what the choice before the judged one gets of the lesson
+        const int ReplaySize = 24;          // recent lessons the net keeps to replay
+        const int ReplayPerLesson = 3;      // how many of them it replays each time it learns
+
         double[,] values;                   // learned value [situation, choice], starts at zero
+        int olderState = -1, olderChoice = -1;   // the choice judged last time, for the trace
+        double[] olderFeat;
+        double[][] replayFeat;              // the replay memory: features, choice, net target
+        int[] replayChoice;
+        double[] replayTarget;
+        int replayCount, replayPos;
         readonly Dictionary<Walker, double> fondness = new Dictionary<Walker, double>();
         readonly double[] place = new double[8];  // how good each stretch of the desktop proved, left to right
         double steerCooldown, bondCooldown;
@@ -88,7 +108,7 @@ namespace IdleWalker.Domain
 
         void EnsureTable()
         {
-            if (values == null) values = new double[8, HabitCount + 3];
+            if (values == null) values = new double[StateCount, HabitCount + 3];
             if (useCount == null || useCount.Length != HabitCount + 3)
             {
                 int n = HabitCount + 3;
@@ -242,6 +262,40 @@ namespace IdleWalker.Domain
             }
         }
 
+        /// <summary>
+        /// Banks a lesson for the net (features, choice, what the net should
+        /// have said) and replays a few earlier ones at a gentle rate.
+        /// </summary>
+        void Replay(double[] feat, int choice, double netTarget, double rate)
+        {
+            if (replayFeat == null || replayFeat.Length != ReplaySize)
+            {
+                replayFeat = new double[ReplaySize][];
+                replayChoice = new int[ReplaySize];
+                replayTarget = new double[ReplaySize];
+                replayCount = 0;
+                replayPos = 0;
+            }
+            if (netTarget > MaxReward) netTarget = MaxReward;
+            else if (netTarget < -MaxReward) netTarget = -MaxReward;
+            if (replayFeat[replayPos] == null) replayFeat[replayPos] = new double[MlpFeats];
+            Array.Copy(feat, replayFeat[replayPos], MlpFeats);
+            replayChoice[replayPos] = choice;
+            replayTarget[replayPos] = netTarget;
+            replayPos = (replayPos + 1) % ReplaySize;
+            if (replayCount < ReplaySize) replayCount++;
+
+            int n = HabitCount + 3;
+            for (int k = 0; k < ReplayPerLesson && k < replayCount; k++)
+            {
+                int i = rng.Next(replayCount);
+                int c = replayChoice[i];
+                if (c < 0 || c >= n) continue;
+                double error = replayTarget[i] - MlpFor(replayFeat[i], c);
+                MlpLearn(replayFeat[i], c, error, rate);
+            }
+        }
+
         internal double MlpWeightNorm()
         {
             if (mlpW1 == null || mlpW2 == null) return 0;
@@ -251,14 +305,49 @@ namespace IdleWalker.Domain
             return Math.Sqrt(s);
         }
 
-        /// <summary>The situation in one number: tired? lonely? curious? (8 combinations).</summary>
+        /// <summary>
+        /// The situation in one number (0..80): how tired, how lonely, how
+        /// curious, each in three steps, and who is near - nobody, somebody
+        /// harmless, or a bully within sight on the same ground.
+        /// </summary>
         int MindState()
         {
-            int s = 0;
-            if (energy < 0.45) s |= 1;
-            if (social > 0.5) s |= 2;
-            if (curiosity > 0.55) s |= 4;
-            return s;
+            int e = energy < 0.45 ? 0 : energy < 0.75 ? 1 : 2;
+            int s = social < 0.25 ? 0 : social <= 0.5 ? 1 : 2;
+            int c = curiosity < 0.3 ? 0 : curiosity <= 0.55 ? 1 : 2;
+            int k = 0;
+            Walker other = company;
+            if (other != null && other.IsVisible && !other.IsLeaving &&
+                Math.Abs(other.FeetY - feetY) <= 2 && Math.Abs(other.CentreX - cx) < 500 * sizeFactor)
+                k = other.Temperament == Temperament.Aggressive || other.Temperament == Temperament.Feisty ? 2 : 1;
+            return e + 3 * s + 9 * c + 27 * k;
+        }
+
+        /// <summary>
+        /// The old eight-way reading of a situation (tired, lonely, curious
+        /// bits): the family a fine situation belongs to, for sharing
+        /// lessons and for reading v3 files. The level boundaries were
+        /// chosen so the old thresholds fall exactly on them.
+        /// </summary>
+        static int CoarseOf(int state)
+        {
+            int e = state % 3, s = (state / 3) % 3, c = (state / 9) % 3;
+            return (e == 0 ? 1 : 0) | (s == 2 ? 2 : 0) | (c == 2 ? 4 : 0);
+        }
+
+        /// <summary>
+        /// One lesson for a cell. The other situations in the same family
+        /// learn a share of it too, so the finer table fills in quickly and
+        /// a walker that has only ever been tired-and-alone still has a
+        /// view on tired-with-a-friend-near.
+        /// </summary>
+        void Teach(int state, int choice, double delta)
+        {
+            values[state, choice] += delta;
+            int family = CoarseOf(state);
+            double share = delta * SiblingShare;
+            for (int s = 0; s < StateCount; s++)
+                if (s != state && CoarseOf(s) == family) values[s, choice] += share;
         }
 
         double MaxValue(int state)
@@ -329,6 +418,7 @@ namespace IdleWalker.Domain
         void ResetMind()
         {
             hasPrev = false;
+            olderState = -1;
             pendingBonus = 0;
             prevSocial = social;
             prevCuriosity = curiosity;
@@ -379,8 +469,23 @@ namespace IdleWalker.Domain
             double error = target - prevTotal;
             if (error > MaxReward * 2) error = MaxReward * 2;
             else if (error < -MaxReward * 2) error = -MaxReward * 2;
-            values[prevState, prevChoice] += rate * error;
-            MlpLearn(prevFeat, prevChoice, error, rate * 0.25);
+            Teach(prevState, prevChoice, rate * error);
+            MlpLearn(prevFeat, prevChoice, error, rate * 0.4);
+            // The trace: the choice before this one set the scene for it, so
+            // it earns a decaying share of the same lesson.
+            if (olderState >= 0 && olderFeat != null)
+            {
+                Teach(olderState, olderChoice, rate * error * TraceDecay);
+                MlpLearn(olderFeat, olderChoice, error * TraceDecay, rate * 0.4);
+            }
+            // Replay: the net goes over a few recent lessons again, which is
+            // what lets a dozen weights settle on a trend after a handful of
+            // real events instead of hundreds.
+            Replay(prevFeat, prevChoice, target - values[prevState, prevChoice], rate * 0.2);
+            olderState = prevState;
+            olderChoice = prevChoice;
+            if (olderFeat == null || olderFeat.Length != MlpFeats) olderFeat = new double[MlpFeats];
+            Array.Copy(prevFeat, olderFeat, MlpFeats);
             // Upgrade v2: track lifetime stats for annealing + dashboard.
             lifetimeDecisions++;
             totalReward += reward;
@@ -475,11 +580,14 @@ namespace IdleWalker.Domain
             else if (personality.Name == "Kevin") baseRate -= 0.02;
             else if (personality.Name == "Blues") baseRate += 0.02;
             else if (personality.Name == "Terence") baseRate -= 0.03;
-            // Upgrade v2: anneal with age - newborns rewire fast, elders stabilise but never freeze.
+            // Quicker on the uptake since the finer table (v4): a quarter
+            // more per lesson, and the ageing is slower, so an elder still
+            // moves at a third of a newborn's pace after a thousand choices.
+            baseRate *= 1.25;
             if (lifetimeDecisions > 0)
-                baseRate *= 1.0 / (1.0 + lifetimeDecisions / 600.0);
-            if (baseRate < 0.03) baseRate = 0.03;
-            else if (baseRate > 0.25) baseRate = 0.25;
+                baseRate *= 1.0 / (1.0 + lifetimeDecisions / 1500.0);
+            if (baseRate < 0.04) baseRate = 0.04;
+            else if (baseRate > 0.3) baseRate = 0.3;
             return baseRate;
         }
 
@@ -852,16 +960,22 @@ namespace IdleWalker.Domain
             StringBuilder sb = new StringBuilder();
             if (values != null)
             {
+                // Sparse since v4: the fine table is mostly zero for a long
+                // time, so only the cells that have learned something are
+                // written, as index:value pairs.
                 sb.Append("vrows=").Append(values.GetLength(0)).Append("\n");
                 sb.Append("vcols=").Append(values.GetLength(1)).Append("\n");
                 StringBuilder v = new StringBuilder();
+                int cols = values.GetLength(1);
                 for (int r = 0; r < values.GetLength(0); r++)
-                    for (int c = 0; c < values.GetLength(1); c++)
+                    for (int c = 0; c < cols; c++)
                     {
-                        if (r != 0 || c != 0) v.Append(",");
-                        v.Append(Dbl(values[r, c]));
+                        double x = values[r, c];
+                        if (x == 0) continue;
+                        if (v.Length > 0) v.Append(",");
+                        v.Append((r * cols + c).ToString(CultureInfo.InvariantCulture)).Append(":").Append(Dbl(x));
                     }
-                sb.Append("v=").Append(v.ToString()).Append("\n");
+                sb.Append("vs=").Append(v.ToString()).Append("\n");
             }
             if (fondness.Count > 0)
             {
@@ -1021,8 +1135,9 @@ namespace IdleWalker.Domain
             EnsureTable();
             string rows, cols, flat;
             int r = 0, c = 0;
+            bool sparse = fields.TryGetValue("vs", out flat);
             if (fields.TryGetValue("vrows", out rows) && fields.TryGetValue("vcols", out cols) &&
-                fields.TryGetValue("v", out flat))
+                (sparse || fields.TryGetValue("v", out flat)))
             {
                 try
                 {
@@ -1034,13 +1149,35 @@ namespace IdleWalker.Domain
                     r = 0;
                     c = 0;
                 }
-                if (r == 8 && c == HabitCount + 3)
+                // The file's table: v4's 81 situations, or v3's 8 (dense or
+                // sparse either way). A v3 table is spread over the fine
+                // situations in its family, so nothing learned is lost.
+                if ((r == StateCount || r == 8) && c == HabitCount + 3)
                 {
+                    bool ok = true;
+                    double[,] loaded = new double[r, c];
                     string[] nums = flat.Split(',');
-                    if (nums.Length == r * c)
+                    if (sparse)
                     {
-                        bool ok = true;
-                        double[,] loaded = new double[r, c];
+                        for (int i = 0; i < nums.Length && ok; i++)
+                        {
+                            string item = nums[i].Trim();
+                            if (item.Length == 0) continue;
+                            int colon = item.IndexOf(':');
+                            int index;
+                            double v;
+                            if (colon <= 0 || !int.TryParse(item.Substring(0, colon), NumberStyles.Integer, CultureInfo.InvariantCulture, out index) ||
+                                index < 0 || index >= r * c ||
+                                !TryDbl(item.Substring(colon + 1), out v) || double.IsNaN(v) || double.IsInfinity(v))
+                            {
+                                ok = false;
+                                break;
+                            }
+                            loaded[index / c, index % c] = Clamp(v, -MaxReward * 4, MaxReward * 4);
+                        }
+                    }
+                    else if (nums.Length == r * c)
+                    {
                         for (int i = 0; i < nums.Length; i++)
                         {
                             double v;
@@ -1051,8 +1188,22 @@ namespace IdleWalker.Domain
                             }
                             loaded[i / c, i % c] = Clamp(v, -MaxReward * 4, MaxReward * 4);
                         }
-                        if (ok) values = loaded;
                     }
+                    else
+                    {
+                        ok = false;
+                    }
+                    if (ok && r == 8)
+                    {
+                        double[,] spread = new double[StateCount, c];
+                        for (int s = 0; s < StateCount; s++)
+                        {
+                            int family = CoarseOf(s);
+                            for (int a = 0; a < c; a++) spread[s, a] = loaded[family, a];
+                        }
+                        loaded = spread;
+                    }
+                    if (ok) values = loaded;
                 }
             }
             string fond;
