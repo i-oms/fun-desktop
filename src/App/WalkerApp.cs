@@ -53,8 +53,8 @@ namespace IdleWalker.App
         public WalkerApp()
         {
             troupe = new Troupe(monitors, new Random());
-            troupe.Count = UserSettings.LoadWalkerCount();
-            troupe.BirdCount = UserSettings.LoadBirdCount();
+            troupe.MinionMask = UserSettings.LoadMinionMask();
+            troupe.BirdMask = UserSettings.LoadBirdMask();
             troupe.Dress = UserSettings.LoadDress();
             troupe.MinionsEnabled = UserSettings.LoadMinionsEnabled();
             troupe.BeanEnabled = UserSettings.LoadBeanEnabled();
@@ -70,7 +70,7 @@ namespace IdleWalker.App
             // Before the menu reads the tick state.
             StartupRegistration.ApplyDefault();
 
-            tray = new TrayMenu(troupe.Count, troupe.BirdCount, UserSettings.LoadIdleSeconds(), troupe.Dress,
+            tray = new TrayMenu(troupe.MinionMask, troupe.BirdMask, UserSettings.LoadIdleSeconds(), troupe.Dress,
                                 UserSettings.LoadWalkersEnabled(), troupe.MinionsEnabled, troupe.BeanEnabled, troupe.BirdsEnabled, troupe.PantherEnabled,
                                 UserSettings.LoadHideOnMove(),
                                 UserSettings.LoadHotCornersEnabled(), actions, delayMs);
@@ -81,10 +81,10 @@ namespace IdleWalker.App
                 troupe.MinionsEnabled = tray.MinionsEnabled;
                 UserSettings.SaveMinionsEnabled(tray.MinionsEnabled);
             };
-            tray.CountChanged += delegate
+            tray.MinionSelectionChanged += delegate
             {
-                troupe.Count = tray.Count;
-                UserSettings.SaveWalkerCount(tray.Count);
+                troupe.MinionMask = tray.MinionMask;
+                UserSettings.SaveMinionMask(tray.MinionMask);
             };
             tray.IdleChanged += delegate { UserSettings.SaveIdleSeconds(tray.IdleSeconds); };
             tray.HideOnMoveToggled += delegate { UserSettings.SaveHideOnMove(tray.HideOnMove); };
@@ -108,10 +108,10 @@ namespace IdleWalker.App
                 troupe.BirdsEnabled = tray.BirdsEnabled;
                 UserSettings.SaveBirdsEnabled(tray.BirdsEnabled);
             };
-            tray.BirdCountChanged += delegate
+            tray.BirdSelectionChanged += delegate
             {
-                troupe.BirdCount = tray.BirdCount;
-                UserSettings.SaveBirdCount(tray.BirdCount);
+                troupe.BirdMask = tray.BirdMask;
+                UserSettings.SaveBirdMask(tray.BirdMask);
             };
             tray.HotCornersToggled += delegate
             {

@@ -17,6 +17,8 @@ namespace IdleWalker.Platform
         const string BeanValue = "MrBeanEnabled";
         const string BirdsValue = "BirdsEnabled";
         const string BirdCountValue = "BirdCount";
+        const string MinionMaskValue = "MinionMask";
+        const string BirdMaskValue = "BirdMask";
         const string PantherValue = "PantherEnabled";
         const string HideOnMoveValue = "HideOnMove";
         const string CornersValue = "HotCornersEnabled";
@@ -47,6 +49,45 @@ namespace IdleWalker.Platform
         public static void SaveWalkerCount(int count)
         {
             Save(CountValue, count);
+        }
+
+        /// <summary>
+        /// Which Minions may come out, as a bit mask over the roster
+        /// (bit i enables the i-th Minion). Zero means none. Upgrades from
+        /// the old WalkerCount (first N) when no mask was saved yet.
+        /// </summary>
+        public static int LoadMinionMask()
+        {
+            int fallback = FirstNMask(Load(CountValue, Settings.DefaultWalkers), Settings.MaxWalkers);
+            return Load(MinionMaskValue, fallback) & ((1 << Settings.MaxWalkers) - 1);
+        }
+
+        public static void SaveMinionMask(int mask)
+        {
+            Save(MinionMaskValue, mask & ((1 << Settings.MaxWalkers) - 1));
+        }
+
+        /// <summary>
+        /// Which Angry Birds may come out, as a bit mask over the flock.
+        /// Upgrades from the old BirdCount (first N) when no mask was saved yet.
+        /// </summary>
+        public static int LoadBirdMask()
+        {
+            int fallback = FirstNMask(Load(BirdCountValue, Settings.DefaultBirds), Settings.MaxBirds);
+            return Load(BirdMaskValue, fallback) & ((1 << Settings.MaxBirds) - 1);
+        }
+
+        public static void SaveBirdMask(int mask)
+        {
+            Save(BirdMaskValue, mask & ((1 << Settings.MaxBirds) - 1));
+        }
+
+        static int FirstNMask(int n, int max)
+        {
+            n = Math.Max(0, Math.Min(max, n));
+            int mask = 0;
+            for (int i = 0; i < n; i++) mask |= (1 << i);
+            return mask;
         }
 
         /// <summary>The chosen rest time; anything not on the menu falls back to the default.</summary>

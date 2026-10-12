@@ -25,8 +25,8 @@ namespace IdleWalker.Domain
         bool beanEnabled;
         bool birdsEnabled;
         bool pantherEnabled;
-        int count = 1;
-        int birdCount = Settings.DefaultBirds;
+        int minionMask = FirstNMask(Settings.DefaultWalkers);
+        int birdMask = FirstNMask(Settings.DefaultBirds);
         int dress = Settings.DressColors[0];
         double spawnTimer;
 
@@ -51,18 +51,105 @@ namespace IdleWalker.Domain
 
         static int FullCast { get { return 2 + Settings.MaxWalkers + Settings.MaxBirds; } }
 
-        /// <summary>How many Minions should be out; the rest are sent away.</summary>
-        public int Count
+        /// <summary>
+        /// Which Minions may come out, as a bit mask over Personality.Roster:
+        /// bit i set means Roster[i] is enabled. Zero means none of them.
+        /// </summary>
+        public int MinionMask
         {
-            get { return count; }
-            set { count = Math.Max(1, Math.Min(Settings.MaxWalkers, value)); }
+            get { return minionMask; }
+            set { minionMask = value & AllMinionsMask; }
         }
 
-        /// <summary>How many Angry Birds should be out; the rest are sent away.</summary>
+        /// <summary>
+        /// Which Angry Birds may come out, as a bit mask over Personality.BirdRoster.
+        /// </summary>
+        public int BirdMask
+        {
+            get { return birdMask; }
+            set { birdMask = value & AllBirdsMask; }
+        }
+
+        public bool IsMinionEnabled(int index)
+        {
+            return index >= 0 && index < Settings.MaxWalkers && ((minionMask >> index) & 1) != 0;
+        }
+
+        public void SetMinionEnabled(int index, bool on)
+        {
+            if (index < 0 || index >= Settings.MaxWalkers) return;
+            if (on) minionMask |= (1 << index);
+            else minionMask &= ~(1 << index);
+        }
+
+        public void SetAllMinions(bool on)
+        {
+            minionMask = on ? AllMinionsMask : 0;
+        }
+
+        public bool IsBirdEnabled(int index)
+        {
+            return index >= 0 && index < Settings.MaxBirds && ((birdMask >> index) & 1) != 0;
+        }
+
+        public void SetBirdEnabled(int index, bool on)
+        {
+            if (index < 0 || index >= Settings.MaxBirds) return;
+            if (on) birdMask |= (1 << index);
+            else birdMask &= ~(1 << index);
+        }
+
+        public void SetAllBirds(bool on)
+        {
+            birdMask = on ? AllBirdsMask : 0;
+        }
+
+        public static int AllMinionsMask
+        {
+            get { return (1 << Settings.MaxWalkers) - 1; }
+        }
+
+        public static int AllBirdsMask
+        {
+            get { return (1 << Settings.MaxBirds) - 1; }
+        }
+
+        public static int FirstNMask(int n)
+        {
+            int mask = 0;
+            for (int i = 0; i < n; i++) mask |= (1 << i);
+            return mask;
+        }
+
+        static int PopCount(int mask)
+        {
+            int n = 0;
+            while (mask != 0)
+            {
+                n += mask & 1;
+                mask >>= 1;
+            }
+            return n;
+        }
+
+        /// <summary>
+        /// Compatibility shim for the headless tools: how many Minions are
+        /// enabled. Setting it enables the first N in roster order.
+        /// </summary>
+        public int Count
+        {
+            get { return PopCount(minionMask); }
+            set { minionMask = FirstNMask(Math.Max(1, Math.Min(Settings.MaxWalkers, value))); }
+        }
+
+        /// <summary>
+        /// Compatibility shim for the headless tools: how many birds are
+        /// enabled. Setting it enables the first N in flock order.
+        /// </summary>
         public int BirdCount
         {
-            get { return birdCount; }
-            set { birdCount = Math.Max(1, Math.Min(Settings.MaxBirds, value)); }
+            get { return PopCount(birdMask); }
+            set { birdMask = FirstNMask(Math.Max(1, Math.Min(Settings.MaxBirds, value))); }
         }
 
         /// <summary>Whether the Minions come out. Switching them off sends them away at once; Mr. Bean is not affected.</summary>
@@ -174,13 +261,13 @@ namespace IdleWalker.Domain
                 spawnTimer = 0;
             }
 
-            // The Minions beyond the count - all of them, if they are switched off - go home,
-            // as do the birds beyond the bird count, and Mr. Bean and the Panther if off.
-            int wanted = minionsEnabled ? count : 0;
-            for (int i = wanted + 1; i <= Settings.MaxWalkers; i++) walkers[i + 1].Leave();
-            int wantedBirds = birdsEnabled ? birdCount : 0;
+            // Disabled Minions go home - all of them if the group is switched
+            // off, else just the unticked ones - as do disabled birds, and
+            // Mr. Bean and the Panther if off.
+            for (int m = 0; m < Settings.MaxWalkers; m++)
+                if (!minionsEnabled || ((minionMask >> m) & 1) == 0) walkers[m + 2].Leave();
             for (int b = 0; b < Settings.MaxBirds; b++)
-                if (b >= wantedBirds) walkers[Settings.MaxWalkers + 2 + b].Leave();
+                if (!birdsEnabled || ((birdMask >> b) & 1) == 0) walkers[Settings.MaxWalkers + 2 + b].Leave();
             if (!beanEnabled) bean.Leave();
             if (!pantherEnabled) panther.Leave();
 
@@ -191,15 +278,16 @@ namespace IdleWalker.Domain
             Spread();
         }
 
-        // The Minions in roster order, then the birds in flock order, then Bean and Panther.
+        // The enabled Minions in roster order, then the enabled birds in
+        // flock order, then Bean and Panther.
         Walker NextToAppear()
         {
             if (minionsEnabled)
-                for (int i = 1; i <= count; i++)
-                    if (walkers[i + 1].IsHidden) return walkers[i + 1];
+                for (int m = 0; m < Settings.MaxWalkers; m++)
+                    if (((minionMask >> m) & 1) != 0 && walkers[m + 2].IsHidden) return walkers[m + 2];
             if (birdsEnabled)
-                for (int b = 0; b < birdCount; b++)
-                    if (walkers[Settings.MaxWalkers + 2 + b].IsHidden) return walkers[Settings.MaxWalkers + 2 + b];
+                for (int b = 0; b < Settings.MaxBirds; b++)
+                    if (((birdMask >> b) & 1) != 0 && walkers[Settings.MaxWalkers + 2 + b].IsHidden) return walkers[Settings.MaxWalkers + 2 + b];
             if (beanEnabled && bean.IsHidden) return bean;
             if (pantherEnabled && panther.IsHidden) return panther;
             return null;

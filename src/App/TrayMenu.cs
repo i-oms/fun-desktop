@@ -22,7 +22,8 @@ namespace IdleWalker.App
         readonly ToolStripMenuItem walkersItem = new ToolStripMenuItem("Walkers");
         readonly ToolStripMenuItem minionsMenu = new ToolStripMenuItem("Minions");
         readonly ToolStripMenuItem minionsItem = new ToolStripMenuItem("Enabled");
-        readonly ToolStripMenuItem countMenu = new ToolStripMenuItem("Count");
+        readonly ToolStripMenuItem minionsAllItem = new ToolStripMenuItem("All");
+        readonly ToolStripMenuItem[] minionItems = new ToolStripMenuItem[Settings.MaxWalkers];
         readonly ToolStripMenuItem idleMenu = new ToolStripMenuItem("Appear after");
         readonly ToolStripMenuItem hideOnMoveItem = new ToolStripMenuItem("Hide on mouse move");
         readonly ToolStripMenuItem dressMenu = new ToolStripMenuItem("Dress");
@@ -30,7 +31,8 @@ namespace IdleWalker.App
         readonly ToolStripMenuItem beanItem = new ToolStripMenuItem("Mr. Bean");
         readonly ToolStripMenuItem birdsMenu = new ToolStripMenuItem("Angry Birds");
         readonly ToolStripMenuItem birdsItem = new ToolStripMenuItem("Enabled");
-        readonly ToolStripMenuItem birdCountMenu = new ToolStripMenuItem("Count");
+        readonly ToolStripMenuItem birdsAllItem = new ToolStripMenuItem("All");
+        readonly ToolStripMenuItem[] birdItems = new ToolStripMenuItem[Settings.MaxBirds];
         readonly ToolStripMenuItem pantherItem = new ToolStripMenuItem("Pink Panther");
         int[] customPalette;         // the colour dialog's own swatches, kept between openings
 
@@ -43,8 +45,8 @@ namespace IdleWalker.App
 
         readonly ToolStripMenuItem startupItem = new ToolStripMenuItem("Start with Windows");
         IntPtr iconHandle;
-        int count;
-        int birdCount;
+        int minionMask;
+        int birdMask;
         int idleSeconds;
         int dress;
         readonly CornerAction[] actions = new CornerAction[CornerNames.Length];
@@ -54,12 +56,12 @@ namespace IdleWalker.App
         public event EventHandler ExitRequested;
         public event EventHandler WalkersToggled;
         public event EventHandler MinionsToggled;
-        public event EventHandler CountChanged;
+        public event EventHandler MinionSelectionChanged;
         public event EventHandler IdleChanged;
         public event EventHandler DressChanged;
         public event EventHandler BeanToggled;
         public event EventHandler BirdsToggled;
-        public event EventHandler BirdCountChanged;
+        public event EventHandler BirdSelectionChanged;
         public event EventHandler PantherToggled;
         public event EventHandler HideOnMoveToggled;
         public event EventHandler HotCornersToggled;
@@ -80,10 +82,10 @@ namespace IdleWalker.App
             get { return minionsItem.Checked; }
         }
 
-        /// <summary>How many Minions the user wants (1..Settings.MaxWalkers).</summary>
-        public int Count
+        /// <summary>Bit mask over Personality.Roster: bit i set means that Minion may come out.</summary>
+        public int MinionMask
         {
-            get { return count; }
+            get { return minionMask; }
         }
 
         /// <summary>How long the cursor must be still before they come out, in seconds.</summary>
@@ -110,10 +112,10 @@ namespace IdleWalker.App
             get { return birdsItem.Checked; }
         }
 
-        /// <summary>How many birds the user wants (1..Settings.MaxBirds).</summary>
-        public int BirdCount
+        /// <summary>Bit mask over Personality.BirdRoster: bit i set means that bird may come out.</summary>
+        public int BirdMask
         {
-            get { return birdCount; }
+            get { return birdMask; }
         }
 
         /// <summary>True while the Pink Panther is switched on (independently of the rest).</summary>
@@ -146,7 +148,7 @@ namespace IdleWalker.App
             get { return delayMs; }
         }
 
-        public TrayMenu(int initialCount, int initialBirdCount, int initialIdleSeconds, int initialDress,
+        public TrayMenu(int initialMinionMask, int initialBirdMask, int initialIdleSeconds, int initialDress,
                         bool walkersOn, bool minionsOn, bool beanOn, bool birdsOn, bool pantherOn, bool hideOnMove,
                         bool cornersOn, CornerAction[] initialActions, int initialDelayMs)
         {
@@ -180,25 +182,27 @@ namespace IdleWalker.App
             birdsItem.CheckOnClick = true;
             birdsItem.CheckedChanged += OnBirdsToggled;
 
-            birdCount = Math.Max(1, Math.Min(Settings.MaxBirds, initialBirdCount));
-            for (int b = 1; b <= Settings.MaxBirds; b++)
+            birdMask = initialBirdMask & AllBirds;
+            birdsAllItem.Click += OnBirdsAllClick;
+            for (int b = 0; b < Settings.MaxBirds; b++)
             {
-                ToolStripMenuItem item = new ToolStripMenuItem(b.ToString());
+                ToolStripMenuItem item = new ToolStripMenuItem(Personality.BirdRoster[b].Name);
                 item.Tag = b;
-                item.Click += OnBirdCountClick;
-                birdCountMenu.DropDownItems.Add(item);
+                item.Click += OnBirdClick;
+                birdItems[b] = item;
             }
-            ShowBirdCount();
+            ShowBirds();
 
-            count = initialCount;
-            for (int n = 1; n <= Settings.MaxWalkers; n++)
+            minionMask = initialMinionMask & AllMinions;
+            minionsAllItem.Click += OnMinionsAllClick;
+            for (int n = 0; n < Settings.MaxWalkers; n++)
             {
-                ToolStripMenuItem item = new ToolStripMenuItem(n.ToString());
+                ToolStripMenuItem item = new ToolStripMenuItem(Personality.Roster[n].Name);
                 item.Tag = n;
-                item.Click += OnCountClick;
-                countMenu.DropDownItems.Add(item);
+                item.Click += OnMinionClick;
+                minionItems[n] = item;
             }
-            ShowCount();
+            ShowMinions();
 
             // Seconds first, then minutes, with a line between the two.
             idleSeconds = initialIdleSeconds;
@@ -265,13 +269,16 @@ namespace IdleWalker.App
             // ---- Grouping: each feature is a sub-menu with an "Enabled"
             // switch first, then its own settings after a line. ----
             minionsMenu.DropDownItems.Add(minionsItem);
+            minionsMenu.DropDownItems.Add(minionsAllItem);
             minionsMenu.DropDownItems.Add(new ToolStripSeparator());
-            minionsMenu.DropDownItems.Add(countMenu);
+            foreach (ToolStripMenuItem minion in minionItems) minionsMenu.DropDownItems.Add(minion);
+            minionsMenu.DropDownItems.Add(new ToolStripSeparator());
             minionsMenu.DropDownItems.Add(dressMenu);
 
             birdsMenu.DropDownItems.Add(birdsItem);
+            birdsMenu.DropDownItems.Add(birdsAllItem);
             birdsMenu.DropDownItems.Add(new ToolStripSeparator());
-            birdsMenu.DropDownItems.Add(birdCountMenu);
+            foreach (ToolStripMenuItem bird in birdItems) birdsMenu.DropDownItems.Add(bird);
 
             hotCornersMenu.DropDownItems.Add(cornersItem);
             hotCornersMenu.DropDownItems.Add(new ToolStripSeparator());
@@ -343,10 +350,13 @@ namespace IdleWalker.App
             birdsMenu.Enabled = walkers;
 
             bool minions = walkers && minionsItem.Checked;
-            countMenu.Enabled = minions;
+            minionsAllItem.Enabled = minions;
+            foreach (ToolStripMenuItem minion in minionItems) minion.Enabled = minions;
             dressMenu.Enabled = minions;
 
-            birdCountMenu.Enabled = walkers && birdsItem.Checked;
+            bool birds = walkers && birdsItem.Checked;
+            birdsAllItem.Enabled = birds;
+            foreach (ToolStripMenuItem bird in birdItems) bird.Enabled = birds;
 
             bool corners = cornersItem.Checked;
             foreach (ToolStripMenuItem cornerMenu in cornerMenus) cornerMenu.Enabled = corners;
@@ -377,38 +387,62 @@ namespace IdleWalker.App
             Raise(HotCornersToggled);
         }
 
-        // ---- The Minions ----
+        // ---- The Minions: each one ticked separately, plus All ----
 
-        void ShowCount()
+        static int AllMinions
         {
-            countMenu.Text = "Count: " + count;
-            foreach (ToolStripMenuItem item in countMenu.DropDownItems)
-                item.Checked = (int)item.Tag == count;
+            get { return (1 << Settings.MaxWalkers) - 1; }
         }
 
-        void OnCountClick(object sender, EventArgs e)
+        static int AllBirds
+        {
+            get { return (1 << Settings.MaxBirds) - 1; }
+        }
+
+        void ShowMinions()
+        {
+            minionsAllItem.Checked = minionMask == AllMinions;
+            for (int n = 0; n < minionItems.Length; n++)
+                minionItems[n].Checked = ((minionMask >> n) & 1) != 0;
+        }
+
+        void OnMinionClick(object sender, EventArgs e)
         {
             int chosen = (int)((ToolStripMenuItem)sender).Tag;
-            if (chosen == count) return;
-            count = chosen;
-            ShowCount();
-            Raise(CountChanged);
+            if (chosen < 0 || chosen >= Settings.MaxWalkers) return;
+            minionMask ^= (1 << chosen);
+            ShowMinions();
+            Raise(MinionSelectionChanged);
         }
 
-        void ShowBirdCount()
+        void OnMinionsAllClick(object sender, EventArgs e)
         {
-            birdCountMenu.Text = "Count: " + birdCount;
-            foreach (ToolStripMenuItem item in birdCountMenu.DropDownItems)
-                item.Checked = (int)item.Tag == birdCount;
+            minionMask = minionMask == AllMinions ? 0 : AllMinions;
+            ShowMinions();
+            Raise(MinionSelectionChanged);
         }
 
-        void OnBirdCountClick(object sender, EventArgs e)
+        void ShowBirds()
+        {
+            birdsAllItem.Checked = birdMask == AllBirds;
+            for (int b = 0; b < birdItems.Length; b++)
+                birdItems[b].Checked = ((birdMask >> b) & 1) != 0;
+        }
+
+        void OnBirdClick(object sender, EventArgs e)
         {
             int chosen = (int)((ToolStripMenuItem)sender).Tag;
-            if (chosen == birdCount) return;
-            birdCount = chosen;
-            ShowBirdCount();
-            Raise(BirdCountChanged);
+            if (chosen < 0 || chosen >= Settings.MaxBirds) return;
+            birdMask ^= (1 << chosen);
+            ShowBirds();
+            Raise(BirdSelectionChanged);
+        }
+
+        void OnBirdsAllClick(object sender, EventArgs e)
+        {
+            birdMask = birdMask == AllBirds ? 0 : AllBirds;
+            ShowBirds();
+            Raise(BirdSelectionChanged);
         }
 
         /// <summary>"1 second", "2 seconds", "1 minute", "5 minutes".</summary>

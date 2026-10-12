@@ -20,10 +20,10 @@ namespace IdleWalker
         /// <summary>Size of one sprite cell at 100% display scaling.</summary>
         public const int BasePixelSize = 3;
 
-        /// <summary>How many walkers can be out at once (the tray menu offers 1..MaxWalkers).</summary>
+        /// <summary>How many walkers can be ticked on at once (one menu entry per Minion).</summary>
         public const int MaxWalkers = 10;
 
-        /// <summary>How many come out until the user picks another number.</summary>
+        /// <summary>How many come out on a fresh install (the first ones ticked).</summary>
         public const int DefaultWalkers = 5;
 
         /// <summary>
@@ -37,10 +37,10 @@ namespace IdleWalker
         /// <summary>The furthest the budget may thin the drawing: every n-th refresh at most.</summary>
         public const int MaxPaintEvery = 4;
 
-        /// <summary>How many Angry Birds can be out at once (the tray menu offers 1..MaxBirds).</summary>
+        /// <summary>How many Angry Birds can be ticked on at once (one menu entry per bird).</summary>
         public const int MaxBirds = 10;
 
-        /// <summary>How many birds come out until the user picks another number.</summary>
+        /// <summary>How many birds come out on a fresh install (the first ones ticked).</summary>
         public const int DefaultBirds = 3;
 
         /// <summary>
