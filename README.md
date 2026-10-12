@@ -49,7 +49,7 @@ fun/
     │   ├── MinionPainter.cs  draws a Minion from solids: distance fields, normals, lighting
     │   ├── BeanPainter.cs    draws Mr. Bean the same way: knees, a tweed jacket and tie, a head on a neck, Teddy
     │   ├── BirdPainter.cs    draws an Angry Bird the same way: feathers, brows, beak, crest and tail
-    │   ├── PantherPainter.cs draws the Pink Panther the same way: sleek, yellow-eyed, long-tailed
+    │   ├── PantherPainter.cs draws the Pink Panther the same way: all pink, long-snouted, yellow-eyed, long-tailed
     │   ├── Surface.cs        software canvas, soft halo, shadow, dirty-region tracking
     │   ├── FrameRenderer.cs  snapshots changed walkers, paints snapshots into frames, skips unchanged ones
     │   └── RenderThread.cs   the background painter: snapshots in, pixels out
@@ -223,11 +223,12 @@ the Minions, as an extra on top of the Minions count, and with or without them: 
 same method as the Minions (lit solids, anti-aliased, see
 [Editing the character](#editing-the-character)) but is a different figure:
 28 units tall to their 18, with long legs that bend at the knee, a brown
-tweed jacket with elbow patches over a white shirt and a thin red tie,
-brown trousers with pressed creases and turn-ups, black shoes with laces
-and soles, and a round head on a neck with heavy bushy eyebrows, big eyes
+herringbone tweed jacket with elbow patches over a white shirt and a thin
+red tie, brown trousers with pressed creases and turn-ups over grey socks,
+black shoes with laces and soles, his black digital watch on the near
+wrist, and a round head on a neck with heavy bushy eyebrows, big eyes
 with tired bags, a long bulbous nose, a wide mouth with a chin crease,
-sticking-out ears and dark combed hair swept back from a receding hairline.
+sticking-out ears and black combed hair swept back from a receding hairline.
 Teddy has a belly patch, inner ears, glinting button eyes and a stitched
 smile. His head turns and nods on its own,
 he can go up on tiptoe, and his arms come forward out of the picture to put
@@ -1049,10 +1050,10 @@ logical processor.
 | Full cast out (10 Minions, 10 birds, Bean, Panther) | 48% of one core                  | The paint budget draws them every third refresh (20 fps); without it the same cast cost 116% of a core, a saturated painter plus a 22% UI thread, and dropped frames at random. |
 
 Headless, painting every changed frame at 60 Hz (`tools\Bench.cs`): one
-Minion repaint is about 1.0 ms, a bird 0.85 ms, Mr. Bean 1.7 ms, the
-Panther 1.9 ms. Five Minions demand 27% of a core, which fits the budget,
+Minion repaint is about 1.0 ms, a bird 0.55 ms, Mr. Bean 1.3 ms, the
+Panther 1.55 ms. Five Minions demand 27% of a core, which fits the budget,
 so the default cast is drawn at the full 60 Hz; the full cast demands
-125%, which is why it is thinned to a third.
+about 95%, which is why it is thinned to every second or third refresh.
 
 Memory is about 30-50 MB working set and stays flat. Canvases are pooled
 (one per walker in flight, kept at their largest size so a Minion's frame

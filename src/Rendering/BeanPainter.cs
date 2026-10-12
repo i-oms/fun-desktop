@@ -56,7 +56,7 @@ namespace IdleWalker.Rendering
 
         // Colours.
         const double SkinR = 0.96, SkinG = 0.81, SkinB = 0.70;
-        const double HairR = 0.13, HairG = 0.085, HairB = 0.06;
+        const double HairR = 0.10, HairG = 0.075, HairB = 0.06;   // black, combed over
         const double CoatR = 0.50, CoatG = 0.37, CoatB = 0.24;
         const double TrouserR = 0.32, TrouserG = 0.24, TrouserB = 0.17;
         const double ShirtR = 0.95, ShirtG = 0.95, ShirtB = 0.91;
@@ -336,9 +336,12 @@ namespace IdleWalker.Rendering
                 double qx, qy, t;
                 double crease = Seg(u, v, kneeU[i] + 0.15, kneeV[i] - 0.3, ankleU[i] + 0.15, ankleV[i] + 0.9, out qx, out qy, out t) - 0.07;
                 Over(0.42 * k, 0.33 * k, 0.25 * k, Cov(Math.Abs(crease) - 0.05) * 0.55);
-                // Turn-up cuff at the ankle.
+                // Turn-up cuff at the ankle, and the grey sock showing
+                // between the trouser hem and the shoe.
                 double cuff = Cov(Math.Max(Math.Abs(v - (ankleV[i] + 0.9)) - 0.12, Math.Abs(u - (ankleU[i] + 0.1)) - 0.85));
                 Over(0.24 * k, 0.18 * k, 0.13 * k, cuff * 0.7);
+                double sock = Cov(Math.Max(Math.Abs(v - (ankleV[i] + 0.25)) - 0.3, Math.Abs(u - ankleU[i]) - (ShinR + 0.02)));
+                Over(0.55 * k, 0.55 * k, 0.56 * k, sock);
             }
 
             // The shoe: a glossy black ellipsoid under the ankle, toe forward;
@@ -394,9 +397,12 @@ namespace IdleWalker.Rendering
             }
             else
             {
-                // The tweed: brown herringbone with two fleck frequencies.
-                double fleck = 0.035 * Math.Sin(arc * 7.5) * Math.Sin(v * 7.5)
-                             + 0.022 * Math.Sin(arc * 14 + v * 3.2) * Math.Sin(v * 11.3);
+                // The tweed: a herringbone weave - fine diagonal ribs that
+                // reverse direction every few rows - one sine, not four,
+                // and it reads as cloth rather than polka dots up close.
+                double band = Math.Floor(v * 1.6);
+                double diag = ((int)band & 1) == 0 ? arc + v : arc - v;
+                double fleck = 0.03 * Math.Sin(diag * 11);
                 cr = CoatR + fleck; cg = CoatG + fleck; cb = CoatB + fleck * 0.6; spec = 0.05; shine = 6;
 
                 // A breast pocket: a flap with a dark slit under it, on the far side of the chest.
@@ -792,6 +798,19 @@ namespace IdleWalker.Rendering
             }
 
             ArmTube(u, v, cuffU[i], cuffV[i], cuffZ[i], handU[i], handV[i], handZ[i], ForeR + 0.04, ShirtR, ShirtG, ShirtB, 0.1, 10);
+
+            // The black digital watch on the near wrist: a dark band over the cuff.
+            if (i == 1)
+            {
+                double wx = (cuffU[i] + handU[i]) / 2, wy = (cuffV[i] + handV[i]) / 2, wz = (cuffZ[i] + handZ[i]) / 2;
+                double ax = handU[i] - cuffU[i], ay = handV[i] - cuffV[i];
+                double len = Math.Sqrt(ax * ax + ay * ay);
+                if (len > 1e-6)
+                {
+                    ax /= len; ay /= len;
+                    ArmTube(u, v, wx - ax * 0.12, wy - ay * 0.12, wz, wx + ax * 0.12, wy + ay * 0.12, wz, ForeR + 0.1, 0.10, 0.10, 0.11, 0.3, 14);
+                }
+            }
 
             // Pointing: the index finger carries on past the hand.
             if (i == 1 && pose.PointNear)

@@ -6,11 +6,13 @@ namespace IdleWalker.Rendering
     /// <summary>
     /// Paints the Pink Panther into a <see cref="Surface"/> the way the other
     /// figures are painted: as lit solids with anti-aliased edges, composited
-    /// back to front (see <see cref="SolidPainter"/>). A tall, sleek bipedal
-    /// cat in the spirit of the cartoon: long legs with paws, a narrow waist,
-    /// a lighter belly and muzzle, a long curling tail, pointed ears, yellow
-    /// eyes with slit pupils, a dark pink nose, whiskers and a feline smile
-    /// with a fang when the mouth opens.
+    /// back to front (see <see cref="SolidPainter"/>). The DePatie-Freleng
+    /// cartoon cat: tall, thin and all pink - long legs with paws, a slim
+    /// waist, a long neck, a small head with a long tapering snout ending
+    /// in a big black nose, small pointed ears set back, large half-lidded
+    /// yellow eyes with round black pupils, thin whiskers, a feline smile
+    /// with a fang when the mouth opens, and a long thin tail curling at
+    /// the tip. No lighter markings anywhere: the cartoon has none.
     ///
     /// Model space is the Minions': u across in units, positive the way he
     /// faces; v up from the soles. He is <see cref="Height"/> units tall.
@@ -21,36 +23,45 @@ namespace IdleWalker.Rendering
     {
         public const double Height = 26;
 
-        // Legs: hips either side of the axis, thigh + shin with a knee between.
-        const double HipV = 11.0, HipX = 1.05, Thigh = 5.2, Shin = 5.0, ThighR = 0.95, ShinR = 0.78;
+        // The DePatie-Freleng panther: all pink, nothing else - no lighter
+        // chest, muzzle or belly - built long and thin: a slender torso on
+        // long legs, a long neck, a small head with a long tapering snout
+        // ending in a big black nose, small pointed ears set back, large
+        // half-lidded yellow eyes with round black pupils, thin whiskers,
+        // and a long thin tail curling at the tip.
 
-        // Torso: a capsule from hips to shoulders, narrow at the waist.
-        const double TorsoBottom = 11.2, TorsoTop = 17.8, HipR = 2.2, ChestR = 2.7;
+        // Legs: hips either side of the axis, thigh + shin with a knee between.
+        const double HipV = 11.0, HipX = 0.95, Thigh = 5.2, Shin = 5.0, ThighR = 0.78, ShinR = 0.62;
+
+        // Torso: a slim capsule from hips to shoulders, narrow at the waist.
+        const double TorsoBottom = 11.2, TorsoTop = 17.6, HipR = 1.85, ChestR = 2.25;
         // Shoulders rise this far above TorsoTop before rounding off: a low
         // cap so the neck stands clear instead of lying along the chest.
-        const double ShoulderCap = 0.9;
-        const double NeckBottom = 17.6, NeckTop = 20.2, NeckR = 0.9;
+        const double ShoulderCap = 0.8;
+        const double NeckBottom = 17.4, NeckTop = 21.0, NeckR = 0.68;
 
-        // Head: a rounded cat skull, slightly taller than wide.
-        const double HeadV = 22.6, HeadRx = 2.6, HeadRy = 2.9;
-        const double EyeV = 22.9, EyeAngle = 22, EyeRx = 0.78, EyeRy = 0.85, IrisR = 0.44;
-        const double BrowV = 24.05;
-        const double MuzzleV = 21.3, MuzzleRx = 1.35, MuzzleRy = 0.95;
-        const double NoseV = 21.75;
-        const double MouthV = 20.6;
+        // Head: a small rounded skull; the snout reaches forward from it.
+        const double HeadV = 23.0, HeadRx = 2.25, HeadRy = 2.45;
+        const double EyeV = 23.3, EyeAngle = 20, EyeRx = 0.72, EyeRy = 0.92, IrisR = 0.44;
+        const double BrowV = 24.4;
+        const double SnoutLen = 2.6, SnoutRBase = 1.05, SnoutRTip = 0.55;   // the muzzle: a tapering tube out of the face
+        const double MuzzleV = 21.9;                                        // where the snout leaves the face
+        const double SnoutDrop = 0.45;                                      // the tip sits this much lower than the base
+        const double NoseR0 = 0.46;                                         // the black nose at the tip
+        const double MouthV = 21.1;
         const double EarBaseV = 24.9;
 
         // Arms: shoulders on the chest surface.
-        const double ShoulderV = 17.8, ShoulderAngle = 80, ArmRadius = 2.8, UpperArm = 3.2, Forearm = 3.0;
+        const double ShoulderV = 17.6, ShoulderAngle = 80, ArmRadius = 2.35, UpperArm = 3.3, Forearm = 3.1;
         const double RestSpread = 6;
-        const double SleeveR = 0.65, ForeR = 0.58, PawR = 0.62, ClawLen = 0.5, ClawR = 0.16;
+        const double SleeveR = 0.55, ForeR = 0.48, PawR = 0.58, ClawLen = 0.5, ClawR = 0.16;
 
-        // Colours (linear-ish 0..1).
-        const double FurR = 0.93, FurG = 0.52, FurB = 0.66;
-        const double FurDarkR = 0.78, FurDarkG = 0.38, FurDarkB = 0.52;
-        const double CreamR = 0.99, CreamG = 0.78, CreamB = 0.86;
-        const double NoseR = 0.52, NoseG = 0.14, NoseB = 0.27;
-        const double IrisYR = 0.99, IrisYG = 0.83, IrisYB = 0.28;
+        // Colours (linear-ish 0..1): the cartoon's pastel pink and a deeper pink for shade.
+        const double FurR = 0.96, FurG = 0.63, FurB = 0.77;
+        const double FurDarkR = 0.84, FurDarkG = 0.46, FurDarkB = 0.63;
+        const double CreamR = 0.98, CreamG = 0.74, CreamB = 0.85;   // the inner ear only
+        const double NoseR = 0.08, NoseG = 0.06, NoseB = 0.08;
+        const double IrisYR = 0.99, IrisYG = 0.86, IrisYB = 0.30;
 
         readonly Pose pose;
         readonly Expression face;
@@ -76,12 +87,12 @@ namespace IdleWalker.Rendering
         readonly bool decorated;
         readonly double topV;
         readonly double mouthU;
-        readonly double muzzleU, muzzleV;
+        readonly double snoutU0, snoutV0, snoutU1, snoutV1;   // the snout's base on the face and its tip, on screen
         readonly double tailSway;
 
         // Tail centreline resampled along a smooth spline: one flowing curve,
         // never straight rods. Filled in BuildTail once per pose.
-        const int TailSpans = 5, TailPer = 6, TailSamples = TailSpans * TailPer;
+        const int TailSpans = 5, TailPer = 4, TailSamples = TailSpans * TailPer;
         readonly double[] tailU = new double[TailSamples + 1], tailV = new double[TailSamples + 1];
         double tailLo, tailHi, tailVlo, tailVhi;
 
@@ -98,9 +109,15 @@ namespace IdleWalker.Rendering
             headYaw = Wrap(pose.Yaw + pose.HeadTurn) * Deg;
             sinH = Math.Sin(headYaw);
             cosH = Math.Cos(headYaw);
-            mouthU = HeadRx * 0.55 * sinH;
-            muzzleU = HeadRx * 0.72 * sinH + dip * 0.5 * sinH;
-            muzzleV = MuzzleV - dip * 0.9;
+            // The snout leaves the face just below the eyes and reaches
+            // forward the way the head faces: a long profile from the side,
+            // a short bump from the front.
+            double shift = dip * 0.5 * sinH;
+            snoutU0 = (HeadRx - 0.5) * sinH + shift;
+            snoutV0 = MuzzleV - dip * 0.8;
+            snoutU1 = (HeadRx - 0.5 + SnoutLen) * sinH + shift;
+            snoutV1 = MuzzleV - SnoutDrop - dip * 1.1;
+            mouthU = (snoutU0 + snoutU1) / 2;
 
             PlaceEye(0, -EyeAngle * Deg);
             PlaceEye(1, EyeAngle * Deg);
@@ -108,8 +125,8 @@ namespace IdleWalker.Rendering
 
             for (int i = 0; i < 2; i++)
             {
-                double baseX = i == 0 ? -1.65 : 1.65;
-                earU[i] = baseX * cosH * 0.85 + 0.45 * sinH;
+                double baseX = i == 0 ? -1.4 : 1.4;
+                earU[i] = baseX * cosH * 0.85 + 0.2 * sinH;
                 earZ[i] = -baseX * sinH;
             }
 
@@ -321,15 +338,15 @@ namespace IdleWalker.Rendering
             Torso(ub, vb, dyEff, torsoDist, torsoR);
             if (earZ[0] <= 0) Ear(ub, vb, 0);
             if (earZ[1] <= 0) Ear(ub, vb, 1);
-            if (Math.Abs(hdy) < HeadRy + 1.6 && Math.Abs(ub) < HeadRx + 1.6)
+            if (Math.Abs(hdy) < HeadRy + 1.6 && Math.Abs(ub) < HeadRx + SnoutLen + 0.8)
             {
                 Head(ub, vb, hdy);
                 if (earZ[0] > 0) Ear(ub, vb, 0);
                 if (earZ[1] > 0) Ear(ub, vb, 1);
+                Snout(ub, vb);
                 Eye(ub, vb, firstEye);
                 Eye(ub, vb, 1 - firstEye);
                 Brows(ub, vb);
-                Muzzle(ub, vb);
                 Nose(ub, vb);
                 Mouth(ub, vb);
                 Whiskers(ub, vb);
@@ -406,19 +423,11 @@ namespace IdleWalker.Rendering
             double arc = r * phi;
             double a = Math.Abs(arc);
 
-            // Sleek pink coat with a very subtle vertical sheen.
-            double sheen = 0.03 * Math.Sin(v * 3.1) * Math.Sin(arc * 2.2);
-            double cr = FurR + sheen, cg = FurG + sheen, cb = FurB + sheen * 0.7;
+            // Sleek pink coat, plain as the cartoon's: no chest patch, no
+            // sheen; a slightly deeper pink down the back so the round reads.
+            double cr = FurR, cg = FurG, cb = FurB;
             double spec = 0.30, shine = 18;
-
-            // Lighter chest and belly up the front.
-            double bellyHw = 1.15 - 0.35 * ((v - TorsoBottom) / (TorsoTop - TorsoBottom));
-            if (bellyHw < 0.55) bellyHw = 0.55;
-            double belly = Cov(a - bellyHw) * Cov(Math.Abs(v - 14.5) - 3.6);
-            Mix(ref cr, ref cg, ref cb, ref spec, ref shine, CreamR, CreamG, CreamB, 0.30, 18, belly * 0.85);
-
-            // A slightly deeper pink saddle down the back so the round reads.
-            double back = Cov(2.5 - a);
+            double back = Cov(2.2 - a);
             Mix(ref cr, ref cg, ref cb, ref spec, ref shine, FurDarkR, FurDarkG, FurDarkB, 0.28, 16, back * 0.35 * cov);
 
             double lr, lg, lb;
@@ -438,35 +447,31 @@ namespace IdleWalker.Rendering
             double lr, lg, lb;
             Lit(FurR * 0.97, FurG * 0.97, FurB * 0.97, nx, ny, nz, 0.30, 18, out lr, out lg, out lb);
             Over(lr, lg, lb, cov);
-            // Cream throat up the front of the neck.
-            double throat = Cov(Math.Abs(u) - 0.55) * Cov(Math.Abs(v - 19.0) - 1.1);
-            Over(CreamR * 0.95, CreamG * 0.95, CreamB * 0.95, throat * 0.7 * cov);
         }
 
         void Ear(double u, double v, int i)
         {
             double cx = earU[i], cy = EarBaseV - dip * 0.7;
-            // Pointed ear: a round base with a pointed tip leaning outward.
-            double leanOut = i == 0 ? -0.35 : 0.35;
-            double tx = cx + leanOut, ty = cy + 1.5;
-            if (Math.Abs(u - cx) > 1.4 || v < cy - 0.8 || v > ty + 0.6) return;
-            double dx = u - cx, dy = v - (cy + 0.35);
-            double disc = Math.Sqrt(dx * dx + dy * dy) - 0.78;
-            double tipDx = u - tx, tipDy = v - ty;
-            double tipD = Math.Sqrt(tipDx * tipDx + tipDy * tipDy) - 0.42;
-            double d = Math.Min(disc, tipD);
+            // A small pointed ear: a tapering tube from a round base to a
+            // tip leaning outward, set back on the skull.
+            double leanOut = i == 0 ? -0.4 : 0.4;
+            double tx = cx + leanOut, ty = cy + 1.25;
+            if (Math.Abs(u - cx) > 1.2 || v < cy - 0.7 || v > ty + 0.5) return;
+            double qx, qy, t;
+            double d = Seg(u, v, cx, cy + 0.2, tx, ty, out qx, out qy, out t) - (0.62 - 0.42 * t);
             double cov = Cov(d);
             if (cov <= 0) return;
             double nx, ny, nz;
-            Normal(dx, dy, 0.9, out nx, out ny, out nz);
+            Normal(u - qx, v - qy, 0.62 - 0.42 * t, out nx, out ny, out nz);
             double lr, lg, lb;
             Lit(FurR, FurG, FurB, nx, ny, nz, 0.30, 18, out lr, out lg, out lb);
             Over(lr, lg, lb, cov);
-            // Inner ear: smaller, lighter, tufted.
-            double ix = u - cx, iy = v - (cy + 0.35);
-            Over(CreamR, CreamG, CreamB, Cov(Math.Sqrt(ix * ix + iy * iy) - 0.38) * 0.9 * cov);
-            // Dark tip fringe.
-            Over(FurDarkR, FurDarkG, FurDarkB, Cov(Math.Sqrt(tipDx * tipDx + tipDy * tipDy) - 0.30) * 0.35 * cov);
+            // Inner ear: a lighter pink hollow, only when the ear faces the viewer.
+            if (earZ[i] > 0)
+            {
+                double ix = u - (cx + leanOut * 0.3), iy = v - (cy + 0.5);
+                Over(CreamR, CreamG, CreamB, Cov(Math.Sqrt(ix * ix + iy * iy * 2.2) - 0.3) * 0.85 * cov);
+            }
         }
 
         void Head(double u, double v, double dy)
@@ -507,39 +512,34 @@ namespace IdleWalker.Rendering
             Normal(dx, dy, EyeRx * 1.6, out nx, out ny, out nz);
             Turn(ref nx, ref nz, alpha);
             double r, g, b;
-            // Feline eye: warm white-yellow sclera shading into the iris below.
-            Lit(0.99, 0.97, 0.90, nx, ny, nz, 0.4, 24, out r, out g, out b);
+            // The cartoon's eye: the whole eye is yellow, with a round black
+            // pupil, under a heavy half-closed lid - the cool look.
+            Lit(IrisYR, IrisYG, IrisYB, nx, ny, nz, 0.4, 24, out r, out g, out b);
 
-            double reach = EyeRx - IrisR - 0.05;
+            double pupilR = IrisR * 0.62 * face.PupilSize + 0.04;
+            double reach = EyeRx - pupilR - 0.08;
             double ox = pose.GazeX * reach * 0.9 + face.PupilDx * 0.4;
-            double oy = pose.GazeY * (EyeRy - IrisR * 0.6) * 0.8 + face.PupilDy * 0.3;
+            double oy = pose.GazeY * (EyeRy - pupilR) * 0.8 + face.PupilDy * 0.3;
             ox -= (i == 1 ? 1 : -1) * face.CrossEye * 0.3;
             double om = Math.Sqrt(ox * ox + oy * oy);
             if (om > reach) { ox *= reach / om; oy *= reach / om; }
             double ix = dx - ox, iy = dy - oy;
-            double covIris = Cov(Squeezed(ix, iy, k, IrisR));
-            if (covIris > 0)
+            double covPupil = Cov(Squeezed(ix, iy, k, pupilR));
+            if (covPupil > 0)
             {
-                // Yellow iris, darker rim, slit pupil.
-                double tt = Math.Sqrt(ix * ix + iy * iy) / IrisR;
-                double shade = 1.15 - 0.45 * tt;
-                r += (IrisYR * shade - r) * covIris;
-                g += (IrisYG * shade - g) * covIris;
-                b += (IrisYB * shade - b) * covIris;
-                // Slit pupil: narrow vertical ellipse.
-                double px0 = ix / (0.28 * face.PupilSize + 0.08), py0 = iy / (IrisR * 0.85 * face.PupilSize + 0.08);
-                double covPupil = Cov((Math.Sqrt(px0 * px0 + py0 * py0) - 1) * 0.22);
                 r += (0.04 - r) * covPupil;
                 g += (0.03 - g) * covPupil;
                 b += (0.04 - b) * covPupil;
-                double lx = ix + flip * 0.32 * IrisR, ly = iy - 0.32 * IrisR;
-                double covLight = Cov(Squeezed(lx, ly, k, IrisR * 0.24)) * 0.95;
+                double lx = ix + flip * 0.35 * pupilR, ly = iy - 0.35 * pupilR;
+                double covLight = Cov(Squeezed(lx, ly, k, pupilR * 0.3)) * 0.95;
                 r += (1 - r) * covLight;
                 g += (1 - g) * covLight;
                 b += (1 - b) * covLight;
             }
 
-            double upper = Math.Max(face.Lid, near ? face.Wink : 0);
+            // The lids sit a third of the way down even when the face is at
+            // rest; a wide-eyed face lifts them, a sleepy one drops them.
+            double upper = Math.Max(Math.Min(0.95, face.Lid + 0.3 - 0.35 * Math.Max(0, face.BrowRaise)), near ? face.Wink : 0);
             double lower = face.Squint;
             double s = ex * ex;
             double upperEdge = fv + EyeRy * (1 - 2 * upper) - 0.25 * upper * s;
@@ -587,43 +587,45 @@ namespace IdleWalker.Rendering
             Over(0.35, 0.12, 0.22, Cov(d) * show * 0.9);
         }
 
-        void Muzzle(double u, double v)
+        // The snout: a tapering tube out of the face, the full length in
+        // profile and a short bump head-on, in the same pink as the rest.
+        void Snout(double u, double v)
         {
-            double dx = u - muzzleU, dy = v - muzzleV;
-            double cov = Cov(Ellipse(dx, dy, MuzzleRx, MuzzleRy));
+            double vis = cosH > -0.5 ? 1 : cosH < -0.8 ? 0 : (cosH + 0.8) / 0.3;
+            if (vis <= 0) return;
+            if (v > snoutV0 + SnoutRBase + 0.4 || v < snoutV1 - SnoutRTip - 0.5) return;
+            if (u < Math.Min(snoutU0, snoutU1) - SnoutRBase - 0.4 || u > Math.Max(snoutU0, snoutU1) + SnoutRBase + 0.4) return;
+            double qx, qy, t;
+            double dist = Seg(u, v, snoutU0, snoutV0, snoutU1, snoutV1, out qx, out qy, out t);
+            double radius = SnoutRBase + (SnoutRTip - SnoutRBase) * t;
+            double cov = Cov(dist - radius) * vis;
             if (cov <= 0) return;
             double nx, ny, nz;
-            Normal(dx / MuzzleRx * 2, dy / MuzzleRy * 2, 2, out nx, out ny, out nz);
+            Normal(u - qx, v - qy, radius, out nx, out ny, out nz);
             double lr, lg, lb;
-            Lit(CreamR, CreamG, CreamB, nx, ny, nz, 0.30, 18, out lr, out lg, out lb);
+            Lit(FurR, FurG, FurB, nx, ny, nz, 0.30, 18, out lr, out lg, out lb);
             Over(lr, lg, lb, cov);
+            // A touch of shade under the snout where it meets the face.
+            Over(FurDarkR, FurDarkG, FurDarkB, Cov(v - (snoutV0 - radius * 0.3)) * 0.25 * (1 - t) * cov);
         }
 
+        // The big black nose on the tip of the snout, with a glint.
         void Nose(double u, double v)
         {
-            double vis = cosH > -0.3 ? 1 : cosH < -0.6 ? 0 : (cosH + 0.6) / 0.3;
+            double vis = cosH > -0.5 ? 1 : cosH < -0.8 ? 0 : (cosH + 0.8) / 0.3;
             if (vis <= 0) return;
-            double nu = muzzleU + 0.05 * sinH, nv = NoseV - dip * 0.9;
-            if (Math.Abs(u - nu) > 1.2 || Math.Abs(v - nv) > 1.0) return;
-            // Triangular feline nose: wide top, point below.
-            double dx = (u - nu) / 0.42, dy = (v - nv) / 0.32;
-            double tri = Math.Max(Math.Abs(dx) + (dy - 0.4) * 0.9, -dy - 0.4);
-            double d = tri * 0.32;
-            double cov = Cov(d) * vis;
-            if (cov > 0)
-            {
-                double nx, ny, nz;
-                Normal(dx, dy, 1, out nx, out ny, out nz);
-                double lr, lg, lb;
-                Lit(NoseR, NoseG, NoseB, nx, ny, nz, 0.5, 22, out lr, out lg, out lb);
-                Over(lr, lg, lb, cov);
-                double hx = u - (nu - 0.12 * flip), hy = v - (nv + 0.10);
-                Over(1, 0.8, 0.85, Cov(Math.Sqrt(hx * hx + hy * hy) - 0.09) * 0.6 * vis);
-            }
-            // Philtrum seam down to the mouth.
-            double qx, qy, tt;
-            double seam = Seg(u, v, nu, nv - 0.25, nu, MouthV + 0.25, out qx, out qy, out tt) - 0.045;
-            Over(0.45, 0.18, 0.28, Cov(seam) * 0.7 * vis);
+            double nu = snoutU1 + 0.15 * sinH, nv = snoutV1 + 0.1;
+            double dx = u - nu, dy = v - nv;
+            if (Math.Abs(dx) > NoseR0 + 0.5 || Math.Abs(dy) > NoseR0 + 0.5) return;
+            double cov = Cov(Math.Sqrt(dx * dx + dy * dy * 1.3) - NoseR0) * vis;
+            if (cov <= 0) return;
+            double nx, ny, nz;
+            Normal(dx, dy, NoseR0, out nx, out ny, out nz);
+            double lr, lg, lb;
+            Lit(NoseR, NoseG, NoseB, nx, ny, nz, 0.6, 24, out lr, out lg, out lb);
+            Over(lr, lg, lb, cov);
+            double hx = u - (nu - 0.14 * flip), hy = v - (nv + 0.14);
+            Over(0.9, 0.9, 0.95, Cov(Math.Sqrt(hx * hx + hy * hy) - 0.09) * 0.7 * cov);
         }
 
         void Mouth(double u, double v)
@@ -631,9 +633,11 @@ namespace IdleWalker.Rendering
             double vis = cosH > 0.17 ? 1 : cosH < -0.08 ? 0 : (cosH + 0.08) / 0.25;
             if (vis <= 0) return;
             double k = cosH > 0.35 ? cosH : 0.35;
-            double mu = muzzleU + face.MouthDx * 0.5 * k;
-            double mv = MouthV - dip * 0.9;
-            double w = (0.9 + face.MouthWidth * 0.9) * k;
+            // The mouth runs along the underside of the snout, from the
+            // cheek towards the nose.
+            double mu = (snoutU0 + snoutU1) / 2 + face.MouthDx * 0.5 * k;
+            double mv = MouthV - dip * 0.9 - 0.25 * Math.Abs(sinH);
+            double w = (0.8 + face.MouthWidth * 0.8) * k + 0.6 * Math.Abs(sinH);
             double hx = Math.Abs(u - mu) - w;
             if (hx > 0.7 || Math.Abs(v - mv) > 2.2) return;
 
@@ -687,23 +691,22 @@ namespace IdleWalker.Rendering
         {
             double vis = cosH > 0 ? 1 : cosH < -0.4 ? 0 : (cosH + 0.4) / 0.4;
             if (vis <= 0) return;
-            if (Math.Abs(v - muzzleV) > 1.6) return;
+            // Three long thin whiskers a side, from the snout's cheeks; from
+            // the side only the near ones show, sweeping back past the face.
+            double rootV = (snoutV0 + snoutV1) / 2 - 0.1;
+            if (Math.Abs(v - rootV) > 1.8) return;
             double qx, qy, tt;
+            double rootU = (snoutU0 + snoutU1) / 2;
+            double k = cosH > 0.35 ? cosH : 0.35;
             for (int side = -1; side <= 1; side += 2)
             {
-                double rootU = muzzleU + side * 0.9 * (cosH > 0.35 ? cosH : 0.35);
+                double ru = rootU + side * 0.75 * k;
                 for (int w = -1; w <= 1; w++)
                 {
-                    double tipU = rootU + side * (1.6 + Math.Abs(w) * 0.25);
-                    double tipV = muzzleV + w * 0.35 + 0.1;
-                    double d = Seg(u, v, rootU, muzzleV + w * 0.18, tipU, tipV, out qx, out qy, out tt) - 0.035;
-                    Over(1, 0.98, 0.99, Cov(d) * 0.65 * vis);
-                }
-                // Whisker root dots.
-                for (int dot = 0; dot < 3; dot++)
-                {
-                    double dx = u - (rootU + side * dot * 0.12), dy = v - (muzzleV - 0.25 + dot * 0.25);
-                    Over(0.55, 0.25, 0.35, Cov(Math.Sqrt(dx * dx + dy * dy) - 0.055) * 0.6 * vis);
+                    double tipU = ru + side * (2.0 + Math.Abs(w) * 0.2) * (0.4 + 0.6 * k) - 0.6 * sinH;
+                    double tipV = rootV + w * 0.5 + 0.15;
+                    double d = Seg(u, v, ru, rootV + w * 0.16, tipU, tipV, out qx, out qy, out tt) - 0.03;
+                    Over(0.25, 0.10, 0.16, Cov(d) * 0.7 * vis);
                 }
             }
         }
@@ -755,7 +758,7 @@ namespace IdleWalker.Rendering
                 if (d < best) { best = d; qx = sx; qy = sy; qt = st; hit = i; }
             }
             double g = (hit + qt) / TailSamples;
-            double radius = 0.50 - 0.22 * g;
+            double radius = 0.42 - 0.22 * g;
             double cov = Cov(best - radius);
             if (cov <= 0) return;
             double nx, ny, nz;
