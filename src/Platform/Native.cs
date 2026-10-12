@@ -129,6 +129,34 @@ namespace IdleWalker.Platform
         [DllImport("user32.dll")]
         public static extern bool DestroyIcon(IntPtr hicon);
 
+        // Screenshot / screen-capture exclusion. WDA_EXCLUDEFROMCAPTURE needs
+        // Windows 10 2004+; on older builds it fails and we fall back to
+        // WDA_MONITOR, which also keeps the window out of captures.
+        public const uint WDA_NONE = 0;
+        public const uint WDA_MONITOR = 1;
+        public const uint WDA_EXCLUDEFROMCAPTURE = 0x11;
+
+        [DllImport("user32.dll")]
+        static extern bool SetWindowDisplayAffinity(IntPtr hwnd, uint affinity);
+
+        /// <summary>
+        /// Keeps a window visible on screen but out of screenshots, Snipping
+        /// Tool, Game Bar, and most screen-share / recording captures.
+        /// Never throws: on systems without support the window just stays capturable.
+        /// </summary>
+        public static void ExcludeFromCapture(IntPtr hwnd)
+        {
+            try
+            {
+                if (hwnd == IntPtr.Zero) return;
+                if (!SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE))
+                    SetWindowDisplayAffinity(hwnd, WDA_MONITOR);
+            }
+            catch (Exception)
+            {
+            }
+        }
+
         [DllImport("user32.dll")]
         static extern bool SetProcessDpiAwarenessContext(IntPtr value);
 

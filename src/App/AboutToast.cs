@@ -95,6 +95,13 @@ namespace IdleWalker.App
             get { return true; }
         }
 
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            // Visible on screen, missing from screenshots / screen captures.
+            Native.ExcludeFromCapture(Handle);
+        }
+
         /// <summary>Shows the card and starts its clock.</summary>
         public void Present()
         {

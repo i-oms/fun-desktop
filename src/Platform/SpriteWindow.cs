@@ -27,6 +27,8 @@ namespace IdleWalker.Platform
             cp.ExStyle = Native.WS_EX_LAYERED | Native.WS_EX_TRANSPARENT | Native.WS_EX_TOOLWINDOW |
                          Native.WS_EX_TOPMOST | Native.WS_EX_NOACTIVATE;
             CreateHandle(cp);
+            // Visible on screen, missing from screenshots / screen captures.
+            Native.ExcludeFromCapture(Handle);
         }
 
         /// <summary>
