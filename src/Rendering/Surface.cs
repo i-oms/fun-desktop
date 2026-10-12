@@ -40,13 +40,23 @@ namespace IdleWalker.Rendering
 
         public void Reset(int width, int height)
         {
-            if (width != Width || height != Height)
+            int needed = width * height;
+            if (needed > Pixels.Length)
             {
-                Width = width;
-                Height = height;
-                Pixels = new int[width * height];
-                layer = new int[width * height];
-                rim = new bool[width * height];
+                // Grow once: a pooled canvas keeps its arrays for good, so a
+                // Minion's frame after Mr. Bean's costs no allocation.
+                Pixels = new int[needed];
+                layer = new int[needed];
+                rim = new bool[needed];
+            }
+            else if (width != Width || height != Height)
+            {
+                // Same arrays, new row stride: whatever was drawn last time
+                // lies scattered under the new layout, so clear the whole of
+                // the new canvas (a few microseconds).
+                Array.Clear(Pixels, 0, needed);
+                Array.Clear(layer, 0, needed);
+                Array.Clear(rim, 0, needed);
             }
             else if (x1 > x0 && y1 > y0)
             {
@@ -56,6 +66,8 @@ namespace IdleWalker.Rendering
                 Array.Clear(layer, start, length);
                 Array.Clear(rim, start, length);
             }
+            Width = width;
+            Height = height;
             x0 = Width;
             y0 = Height;
             x1 = 0;

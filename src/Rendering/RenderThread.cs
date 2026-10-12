@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading;
 
 namespace IdleWalker.Rendering
@@ -29,7 +30,11 @@ namespace IdleWalker.Rendering
     /// </summary>
     sealed class RenderThread : IDisposable
     {
-        const int PoolCap = 8;
+        // Room for every canvas the full cast can have in flight at once
+        // (one per walker between painting and showing). A smaller pool
+        // throws canvases away every frame once the cast outgrows it, which
+        // at twenty walkers is tens of megabytes of garbage a second.
+        const int PoolCap = 32;
 
         readonly object gate = new object();
         readonly Queue<int> queue = new Queue<int>();
@@ -40,13 +45,33 @@ namespace IdleWalker.Rendering
         Thread thread;
         volatile bool stopping;
         bool disposed;
+        long paintTicks;      // Stopwatch ticks spent painting since the last TakePaintMs
 
         public void Start()
         {
             thread = new Thread(Loop);
             thread.IsBackground = true;
+            // Pixels are the one dear thing here, and they are never urgent:
+            // below normal priority, the painter yields to whatever the user
+            // is actually doing and the animation skips a frame instead.
+            thread.Priority = ThreadPriority.BelowNormal;
             thread.Name = "IdleWalker paint";
             thread.Start();
+        }
+
+        /// <summary>
+        /// Milliseconds the painter has spent painting since the last call:
+        /// the load the cast puts on the machine, for the paint budget.
+        /// </summary>
+        public double TakePaintMs()
+        {
+            long ticks;
+            lock (gate)
+            {
+                ticks = paintTicks;
+                paintTicks = 0;
+            }
+            return ticks * 1000.0 / Stopwatch.Frequency;
         }
 
         /// <summary>Queues a snapshot; a newer one for the same walker wins.</summary>
@@ -142,6 +167,7 @@ namespace IdleWalker.Rendering
                     surface = pool.Count > 0 ? pool.Pop() : null;
                 }
                 if (surface == null) surface = new Surface();
+                long started = Stopwatch.GetTimestamp();
                 try
                 {
                     FrameRenderer.PaintJob(ref job, surface);
@@ -151,6 +177,7 @@ namespace IdleWalker.Rendering
                     Release(surface);
                     continue;   // one bad frame must never kill the painter
                 }
+                long spent = Stopwatch.GetTimestamp() - started;
                 PaintResult result = new PaintResult();
                 result.Walker = w;
                 result.Stamp = job.Stamp;
@@ -159,6 +186,7 @@ namespace IdleWalker.Rendering
                 result.Top = job.Top;
                 lock (gate)
                 {
+                    paintTicks += spent;
                     done.Enqueue(result);
                 }
             }

@@ -26,6 +26,17 @@ namespace IdleWalker
         /// <summary>How many come out until the user picks another number.</summary>
         public const int DefaultWalkers = 5;
 
+        /// <summary>
+        /// The share of one CPU core the painter may use (0..1). When the cast
+        /// needs more than this - many walkers, a slow machine - they are drawn
+        /// every 2nd (3rd, 4th) refresh instead of every one, while still moving
+        /// at full rate. The frame rate degrades; the computer does not.
+        /// </summary>
+        public const double PaintBudget = 0.5;
+
+        /// <summary>The furthest the budget may thin the drawing: every n-th refresh at most.</summary>
+        public const int MaxPaintEvery = 4;
+
         /// <summary>How many Angry Birds can be out at once (the tray menu offers 1..MaxBirds).</summary>
         public const int MaxBirds = 10;
 

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Threading;
 using IdleWalker.Domain;
 
 namespace IdleWalker.Platform
@@ -135,8 +136,56 @@ namespace IdleWalker.Platform
             }
         }
 
-        /// <summary>Saves lasting memories; safe to call periodically and on exit.</summary>
+        /// <summary>Saves lasting memories on this thread; for exit, when the write must have finished.</summary>
         public static void Save(Troupe troupe)
+        {
+            string text = Pack(troupe);
+            if (text != null) Write(text);
+        }
+
+        /// <summary>
+        /// Packs the memories on this thread (the walkers' own - their state
+        /// is read here) and writes the file on a pool thread, so the
+        /// once-a-minute save never holds a frame for the disk, or for an
+        /// antivirus taking an interest in the new file.
+        /// </summary>
+        public static void SaveInBackground(Troupe troupe)
+        {
+            string text = Pack(troupe);
+            if (text == null) return;
+            ThreadPool.QueueUserWorkItem(delegate { Write(text); });
+        }
+
+        /// <summary>Every walker's lasting memory as the file's text; null if it could not be built.</summary>
+        static string Pack(Troupe troupe)
+        {
+            try
+            {
+                StringBuilder sb = new StringBuilder();
+                sb.Append(Header).Append("\n");
+                foreach (Walker walker in troupe.Walkers)
+                {
+                    string pack;
+                    try
+                    {
+                        pack = walker.PackMind();
+                    }
+                    catch (Exception)
+                    {
+                        continue;
+                    }
+                    sb.Append("[").Append(walker.Personality.Name).Append("]\n");
+                    sb.Append(pack);
+                }
+                return sb.ToString();
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+
+        static void Write(string text)
         {
             lock (SaveLock)
             {
@@ -144,29 +193,13 @@ namespace IdleWalker.Platform
                 {
                     string path = FilePath();
                     if (path == null) return;
-                    StringBuilder sb = new StringBuilder();
-                    sb.Append(Header).Append("\n");
-                    foreach (Walker walker in troupe.Walkers)
-                    {
-                        string pack;
-                        try
-                        {
-                            pack = walker.PackMind();
-                        }
-                        catch (Exception)
-                        {
-                            continue;
-                        }
-                        sb.Append("[").Append(walker.Personality.Name).Append("]\n");
-                        sb.Append(pack);
-                    }
                     string dir = Path.GetDirectoryName(path);
                     if (dir != null && dir.Length > 0 && !Directory.Exists(dir))
                         Directory.CreateDirectory(dir);
                     // Upgrade v2: atomic save - write tmp then replace, so a crash
                     // can never leave a half-written brains.txt behind.
                     string tmp = path + ".tmp";
-                    File.WriteAllText(tmp, sb.ToString(), Encoding.UTF8);
+                    File.WriteAllText(tmp, text, Encoding.UTF8);
                     try
                     {
                         if (File.Exists(path))

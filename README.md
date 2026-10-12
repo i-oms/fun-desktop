@@ -59,7 +59,7 @@ fun/
     │   ├── ForegroundWatch.cs  is a full-screen app in front? (the Minions keep away)
     │   ├── MonitorWorld.cs   IWorld backed by the real monitors (cached per frame)
     │   ├── SpriteWindow.cs   layered click-through window
-    │   ├── FramePump.cs      vsync-paced tick thread (half rate on battery)
+    │   ├── FramePump.cs      vsync-paced tick thread (capped near 100 Hz, half rate on battery)
     │   ├── StartupRegistration.cs   the "Start with Windows" registry entry
     │   ├── UserSettings.cs   remembers every menu choice
     │   └── BrainStore.cs     remembers what the walkers learned, on disk
@@ -535,6 +535,8 @@ running copy, rebuild.
 | `BasePixelSize`                             | `3`                                                      | Size in screen pixels of one art pixel at 100% display scaling. `4` makes it a third bigger.                                                         |
 | `MaxWalkers`                                | `10`                                                     | Upper limit of the Minions count menu. The cast in `Personality.Roster` must have at least this many entries.                                        |
 | `DefaultWalkers`                            | `5`                                                      | How many come out until a number is picked from the menu.                                                                                            |
+| `PaintBudget`                               | `0.5`                                                    | The share of one CPU core the painter may use. Over it, the cast is drawn every 2nd (3rd, 4th) refresh while still moving at full rate.              |
+| `MaxPaintEvery`                             | `4`                                                      | The furthest the budget may thin the drawing: every n-th refresh at most.                                                                            |
 | `StartWithWindowsByDefault`                 | `true`                                                   | Whether the first run registers the program to start at sign-in.                                                                                     |
 | `WalkersEnabledByDefault`                   | `true`                                                   | The master switch: whether anyone comes out at all until the menu says otherwise.                                                                    |
 | `MinionsEnabledByDefault`                   | `true`                                                   | Whether the Minions are on until the menu says otherwise.                                                                                            |
@@ -831,15 +833,31 @@ unit for the same reason.
 
 ### Frame pacing
 
-A background thread (`PumpLoop`) calls `DwmFlush()`, which returns when the
+A background thread (`FramePump`) calls `DwmFlush()`, which returns when the
 desktop compositor has presented a frame - i.e. once per monitor refresh.
 After each flush it posts a tick to the UI thread through the WinForms
 `SynchronizationContext`; a pending-flag ensures ticks never pile up if the
-UI thread is slow. While the character is hidden the thread sleeps 100 ms
-between cursor polls instead.
+UI thread is slow. While the character is hidden the thread sleeps 30 ms
+between cursor polls instead (the hot corners need a few samples per dwell).
+
+A tick is never shorter than about 9 ms: on a 120, 144 or 240 Hz display the
+pump waits for the second (or third) vertical blank, so the animation runs
+at 60-100 Hz and the cost of a frame does not grow with the refresh rate.
+On battery the floor is 20 ms, i.e. every other refresh of a 60 Hz panel.
 
 All motion is integrated with the measured frame time `dt` (clamped to
 50 ms), so a 60 Hz and a 144 Hz monitor give the same speeds.
+
+On top of the tick rate sits the **paint budget** (`Settings.PaintBudget`,
+half of one core). Once a second `WalkerApp` asks the render thread how long
+it spent painting; scaled back to full rate, that is the cast's demand. Over
+the budget, snapshots are taken every 2nd (3rd, 4th) tick instead of every
+tick, so the cast keeps moving at full rate but is drawn at a lower, steady
+rate - 30, 20 or 15 frames a second on a 60 Hz panel. The rate climbs back
+only once the demand would fit comfortably, so it never flickers between
+two rates. This is what bounds the program's CPU use on any machine and any
+cast size; before it, twenty-two walkers saturated a core and still dropped
+frames at random.
 
 ### Idle detection
 
@@ -907,7 +925,9 @@ their defaults next time.
 What the walkers learned lives outside the registry, in
 `%APPDATA%\IdleWalker\brains.txt` (see [Brains](#brains)): taste,
 friendships, hangouts, walks, experience counts and optimism per walker,
-saved every minute and on exit. Delete it (quit first) for a fresh cast.
+saved once a minute while anyone is out (packed on the UI thread, written on a
+pool thread, skipped while everyone is hidden) and on exit. Delete it (quit
+first) for a fresh cast.
 
 ### Adding things
 
@@ -1019,12 +1039,21 @@ logical processor.
 | 1 Minion out                                     | 11% of one core                     | 60 frames a second, 1.5 ms of software shading a frame.                                                |
 | 5 Minions out (the default)                      | 35% of one core (3% of the machine) | 4.6 ms of shading a frame plus 1 ms to hand the layered windows to the compositor.                     |
 | 10 Minions out                                   | 61% of one core                     | 8.5 ms a frame; the frame rate starts to dip below 60.                                                 |
+| Full cast out (10 Minions, 10 birds, Bean, Panther) | 48% of one core                  | The paint budget draws them every third refresh (20 fps); without it the same cast cost 116% of a core, a saturated painter plus a 22% UI thread, and dropped frames at random. |
 
-Memory is about 30-45 MB working set and stays flat: the renderer allocates
-nothing per frame (one gen-0 garbage collection in 12 s with five Minions
-out), each Minion owns two small pixel buffers and one DIB, and there is no
-GPU work beyond the desktop compositor blending a few small layered
-windows, which it does for every window on screen anyway. The hot corners
+Headless, painting every changed frame at 60 Hz (`tools\Bench.cs`): one
+Minion repaint is about 1.0 ms, a bird 0.85 ms, Mr. Bean 1.7 ms, the
+Panther 1.9 ms. Five Minions demand 27% of a core, which fits the budget,
+so the default cast is drawn at the full 60 Hz; the full cast demands
+125%, which is why it is thinned to a third.
+
+Memory is about 30-50 MB working set and stays flat. Canvases are pooled
+(one per walker in flight, kept at their largest size so a Minion's frame
+after Mr. Bean's reallocates nothing), each walker owns one DIB, and there
+is no GPU work beyond the desktop compositor blending a few small layered
+windows, which it does for every window on screen anyway. The painter
+allocates about 2 KB per repaint (its own object and the hair strands), a
+gen-0 collection every few seconds with the full cast out. The hot corners
 add three `GetAsyncKeyState` calls and a handful of comparisons per tick,
 nothing measurable.
 
@@ -1047,11 +1076,21 @@ What keeps it out of the way:
   a game, a film, a presentation - the Minions stay hidden, and if they are
   out when one starts they leave at once (`ForegroundWatch`, checked twice a
   second). A maximised window does not count: it leaves the taskbar showing.
+- **The paint budget.** The painter may use half of one core
+  (`Settings.PaintBudget`). Over that - a big cast, a slow machine - the cast
+  is drawn every 2nd, 3rd or 4th refresh while still moving at full rate, so
+  the cost is bounded whatever the cast and whatever the computer (see
+  [Frame pacing](#frame-pacing)).
+- **Below-normal priority.** The painter thread runs below normal priority:
+  when something else wants the CPU it gets it, and the walkers skip a frame
+  rather than compete with your work.
+- **Fast displays.** A tick is never shorter than ~9 ms, so a 144 or 240 Hz
+  monitor does not double or quadruple the shading bill.
 - **Battery.** On battery the animation runs at half the refresh rate
   (`FramePump.HalfRate`), halving the shading cost.
 - **Nothing when hidden.** The frame pump only runs at the refresh rate while
-  a Minion is visible; the rest of the time it is a 10 Hz poll. No timers
-  fire and no hooks are installed.
+  a Minion is visible; the rest of the time it is a 33 Hz cursor poll (the
+  hot corners need it). No timers fire and no hooks are installed.
 - The simulation is trivial: stepping all ten walkers plus their
   interactions, faces and eyes takes a few tens of microseconds per frame.
 - Slow motions (breathing, swaying, a sleeper's nodding, floating letters)

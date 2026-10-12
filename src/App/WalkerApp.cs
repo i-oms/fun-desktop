@@ -40,6 +40,11 @@ namespace IdleWalker.App
         double nextTopmost;
         double nextCheck;           // when to look again at the foreground window and the power
         double nextBrainSave;       // when to write what the walkers learned to disk
+        int paintEvery = 1;         // snapshots on every n-th tick: 1 at full rate, more when the painter is over budget
+        int tick;                   // tick counter, for paintEvery
+        double loadSince;           // start of the current paint-load window
+        double loadPaintMs;         // painter time spent in that window
+        bool brainsDirty;           // somebody has been out since the last save: there is something new to write
         bool fullScreen;            // a full-screen app is in front: the Minions keep away
         bool summoned;              // a hot corner called the Minions out; cleared when the cursor moves
         AboutToast about;           // the card while it is showing
@@ -176,11 +181,17 @@ namespace IdleWalker.App
             }
 
             // Every minute: write what they learned to disk, so a restart
-            // (or a crash) keeps their taste, friendships and walks.
+            // (or a crash) keeps their taste, friendships and walks. Only
+            // when somebody has been out since the last save - a hidden
+            // walker learns nothing - and the disk work runs off this thread.
             if (now >= nextBrainSave)
             {
                 nextBrainSave = now + 60;
-                BrainStore.Save(troupe);
+                if (brainsDirty)
+                {
+                    brainsDirty = false;
+                    BrainStore.SaveInBackground(troupe);
+                }
             }
 
             // The master switch; which of the Minions and Mr. Bean actually come out is the troupe's business.
@@ -193,6 +204,28 @@ namespace IdleWalker.App
             // About card is up: that belongs above them.
             bool raise = now >= nextTopmost && about == null;
             if (raise) nextTopmost = now + 1;
+
+            // The paint budget. Once a second the painter is asked how long it
+            // spent; scaled back to full rate, that is the cast's demand as a
+            // share of one core. Over Settings.PaintBudget, snapshots are
+            // taken every 2nd (3rd, 4th) tick instead of every tick: the cast
+            // keeps moving at full rate and is drawn at a lower, steady one,
+            // whatever its size and whatever the machine. The rate comes back
+            // up only once the demand would fit comfortably (hysteresis), so
+            // it never flickers between two rates.
+            loadPaintMs += paint.TakePaintMs();
+            if (now - loadSince >= 1)
+            {
+                double demand = loadPaintMs / ((now - loadSince) * 1000) * paintEvery;
+                int want = (int)Math.Ceiling(demand / Settings.PaintBudget);
+                if (want < 1) want = 1; else if (want > Settings.MaxPaintEvery) want = Settings.MaxPaintEvery;
+                if (want > paintEvery || (want < paintEvery && demand <= 0.8 * Settings.PaintBudget * want))
+                    paintEvery = want;
+                loadSince = now;
+                loadPaintMs = 0;
+            }
+            tick++;
+            bool snapshot = tick % paintEvery == 0;
 
             // Painting is split across threads: snapshots are cheap and made
             // here for every walker that changed, the render thread turns
@@ -214,8 +247,11 @@ namespace IdleWalker.App
                     continue;
                 }
 
-                RenderJob job;
-                if (view.Renderer.Prepare(walker, out job)) paint.Request(i, job);
+                if (snapshot)
+                {
+                    RenderJob job;
+                    if (view.Renderer.Prepare(walker, out job)) paint.Request(i, job);
+                }
                 if (raise) view.Window.StayOnTop();
             }
 
@@ -238,7 +274,9 @@ namespace IdleWalker.App
                 paint.Release(result.Surface);
             }
 
-            pump.Animating = troupe.AnyVisible;
+            bool anyVisible = troupe.AnyVisible;
+            if (anyVisible) brainsDirty = true;
+            pump.Animating = anyVisible;
         }
 
         /// <summary>

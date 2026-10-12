@@ -5,8 +5,9 @@ using System.Threading;
 namespace IdleWalker.Platform
 {
     /// <summary>
-    /// Paces the animation: one tick per screen refresh while animating, a
-    /// lazy poll while idle. Ticks are delivered on the UI thread.
+    /// Paces the animation: one tick per screen refresh while animating (but
+    /// never faster than about 100 Hz), a lazy poll while idle. Ticks are
+    /// delivered on the UI thread.
     /// The idle poll also drives the hot corners, so it must sample well
     /// within the shortest corner dwell (100 ms): 30 ms gives three samples
     /// per dwell with negligible cost (GetCursorPos plus a few integer
@@ -15,6 +16,15 @@ namespace IdleWalker.Platform
     sealed class FramePump
     {
         const int WatchIntervalMs = 30;
+
+        // The animation never ticks faster than about 100 Hz: on a 120, 144
+        // or 240 Hz display a tick waits for the second (or third) vertical
+        // blank. The walkers move a pixel or two per tick either way, and
+        // the cost of a frame no longer grows with the refresh rate. On
+        // battery the floor doubles: every other refresh of a 60 Hz panel.
+        const double MinTickMs = 9;
+        const double HalfRateMinTickMs = 20;
+        const int MaxFlushesPerTick = 8;
 
         readonly SynchronizationContext sync;
         readonly SendOrPostCallback callback;
@@ -69,10 +79,21 @@ namespace IdleWalker.Platform
                 if (animating)
                 {
                     frame.Restart();
-                    // DwmFlush returns at the next vertical blank. Guard against
-                    // it returning at once (no compositor, remote session).
-                    if (Native.DwmFlush() != 0 || frame.ElapsedMilliseconds < 3) Thread.Sleep(12);
-                    if (halfRate && (Native.DwmFlush() != 0 || frame.ElapsedMilliseconds < 20)) Thread.Sleep(12);
+                    // DwmFlush returns at the next vertical blank; keep waiting
+                    // for blanks until the tick is long enough. Guard against
+                    // it failing or returning at once (no compositor, remote
+                    // session): then pace by the clock instead.
+                    double minMs = halfRate ? HalfRateMinTickMs : MinTickMs;
+                    for (int n = 0; n < MaxFlushesPerTick; n++)
+                    {
+                        if (Native.DwmFlush() != 0)
+                        {
+                            Thread.Sleep((int)minMs + 3);
+                            break;
+                        }
+                        if (frame.Elapsed.TotalMilliseconds >= minMs) break;
+                    }
+                    if (frame.Elapsed.TotalMilliseconds < 3) Thread.Sleep((int)minMs + 3);
                 }
                 else
                 {
