@@ -43,6 +43,7 @@ namespace IdleWalker.App
         readonly ToolStripMenuItem[] cornerMenus = new ToolStripMenuItem[CornerNames.Length];
         readonly ToolStripMenuItem delayMenu = new ToolStripMenuItem("Delay");
 
+        readonly ToolStripMenuItem keepAwakeItem = new ToolStripMenuItem("Keep system awake");
         readonly ToolStripMenuItem startupItem = new ToolStripMenuItem("Start with Windows");
         IntPtr iconHandle;
         int minionMask;
@@ -65,6 +66,7 @@ namespace IdleWalker.App
         public event EventHandler PantherToggled;
         public event EventHandler HideOnMoveToggled;
         public event EventHandler HotCornersToggled;
+        public event EventHandler KeepAwakeToggled;
         public event Action<Corner> CornerChanged;
         public event EventHandler DelayChanged;
         public event EventHandler AboutRequested;
@@ -136,6 +138,12 @@ namespace IdleWalker.App
             get { return cornersItem.Checked; }
         }
 
+        /// <summary>True while the machine is kept from going idle to sleep or the screen saver.</summary>
+        public bool KeepAwake
+        {
+            get { return keepAwakeItem.Checked; }
+        }
+
         /// <summary>What a corner does.</summary>
         public CornerAction CornerActionFor(Corner corner)
         {
@@ -150,7 +158,7 @@ namespace IdleWalker.App
 
         public TrayMenu(int initialMinionMask, int initialBirdMask, int initialIdleSeconds, int initialDress,
                         bool walkersOn, bool minionsOn, bool beanOn, bool birdsOn, bool pantherOn, bool hideOnMove,
-                        bool cornersOn, CornerAction[] initialActions, int initialDelayMs)
+                        bool cornersOn, CornerAction[] initialActions, int initialDelayMs, bool keepAwakeOn)
         {
             // ---- The walkers: the master switch ----
             walkersItem.Checked = walkersOn;
@@ -263,6 +271,10 @@ namespace IdleWalker.App
             ShowDelay();
 
             // ---- The program ----
+            keepAwakeItem.Checked = keepAwakeOn;
+            keepAwakeItem.CheckOnClick = true;
+            keepAwakeItem.CheckedChanged += delegate { Raise(KeepAwakeToggled); };
+
             startupItem.Checked = StartupRegistration.IsEnabled();
             startupItem.Click += OnStartupClick;
 
@@ -297,6 +309,7 @@ namespace IdleWalker.App
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(hotCornersMenu);
             menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add(keepAwakeItem);
             menu.Items.Add(startupItem);
             menu.Items.Add("Brains...", null, OnBrainsClick);
             menu.Items.Add("About", null, OnAboutClick);

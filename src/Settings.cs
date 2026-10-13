@@ -75,6 +75,12 @@ namespace IdleWalker
         /// <summary>Whether the hot corners are on until the tray menu says otherwise.</summary>
         public const bool HotCornersByDefault = true;
 
+        /// <summary>
+        /// Whether "Keep system awake" is on until the tray menu says otherwise.
+        /// Off by default: blocking sleep is the user's choice, never silent.
+        /// </summary>
+        public const bool KeepAwakeByDefault = false;
+
         /// <summary>What each corner does until the tray menu says otherwise, in Corner order.</summary>
         public static readonly CornerAction[] DefaultCornerActions =
         {

@@ -23,6 +23,7 @@ namespace IdleWalker.Platform
         const string HideOnMoveValue = "HideOnMove";
         const string CornersValue = "HotCornersEnabled";
         const string DelayValue = "HotCornerDelayMs";
+        const string KeepAwakeValue = "KeepAwake";
         static readonly string[] CornerValues = { "CornerTopLeft", "CornerTopRight", "CornerBottomLeft", "CornerBottomRight" };
 
         public static int LoadWalkerCount()
@@ -195,6 +196,16 @@ namespace IdleWalker.Platform
         public static void SaveHotCornersEnabled(bool on)
         {
             Save(CornersValue, on ? 1 : 0);
+        }
+
+        public static bool LoadKeepAwake()
+        {
+            return Load(KeepAwakeValue, Settings.KeepAwakeByDefault ? 1 : 0) != 0;
+        }
+
+        public static void SaveKeepAwake(bool on)
+        {
+            Save(KeepAwakeValue, on ? 1 : 0);
         }
 
         /// <summary>What a corner does; anything unknown falls back to the default for that corner.</summary>

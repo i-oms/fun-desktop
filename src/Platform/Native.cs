@@ -157,6 +157,58 @@ namespace IdleWalker.Platform
             }
         }
 
+        // ---- Keeping the machine awake ----
+        // SetThreadExecutionState is the official "stay awake" call: it tells
+        // Windows this thread needs the system and/or display up, so the idle
+        // timers that trigger sleep, the screen saver, and monitor-off stop
+        // counting. It fakes no input. The state lives on the calling thread
+        // and lasts until changed, so it must be set from a thread that stays
+        // alive - here the UI thread running Application.Run.
+        [Flags]
+        public enum ExecutionState : uint
+        {
+            Continuous = 0x80000000,
+            SystemRequired = 0x00000001,
+            DisplayRequired = 0x00000002,
+        }
+
+        [DllImport("kernel32.dll")]
+        static extern ExecutionState SetThreadExecutionState(ExecutionState state);
+
+        /// <summary>
+        /// Keeps the machine (and, when <paramref name="keepDisplayOn"/>, the
+        /// screen) from going idle to sleep, the screen saver, or monitor-off,
+        /// until <see cref="AllowSleep"/> is called. Idempotent: calling it
+        /// again just renews the request. Never throws.
+        /// </summary>
+        public static void KeepAwake(bool keepDisplayOn)
+        {
+            try
+            {
+                ExecutionState state = ExecutionState.Continuous | ExecutionState.SystemRequired;
+                if (keepDisplayOn) state |= ExecutionState.DisplayRequired;
+                SetThreadExecutionState(state);
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        /// <summary>
+        /// Releases the awake request so the normal power timers resume.
+        /// Safe to call when nothing was held. Never throws.
+        /// </summary>
+        public static void AllowSleep()
+        {
+            try
+            {
+                SetThreadExecutionState(ExecutionState.Continuous);
+            }
+            catch (Exception)
+            {
+            }
+        }
+
         [DllImport("user32.dll")]
         static extern bool SetProcessDpiAwarenessContext(IntPtr value);
 

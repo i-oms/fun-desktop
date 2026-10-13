@@ -73,7 +73,8 @@ namespace IdleWalker.App
             tray = new TrayMenu(troupe.MinionMask, troupe.BirdMask, UserSettings.LoadIdleSeconds(), troupe.Dress,
                                 UserSettings.LoadWalkersEnabled(), troupe.MinionsEnabled, troupe.BeanEnabled, troupe.BirdsEnabled, troupe.PantherEnabled,
                                 UserSettings.LoadHideOnMove(),
-                                UserSettings.LoadHotCornersEnabled(), actions, delayMs);
+                                UserSettings.LoadHotCornersEnabled(), actions, delayMs,
+                                UserSettings.LoadKeepAwake());
             tray.ExitRequested += delegate { ExitThread(); };
             tray.WalkersToggled += delegate { UserSettings.SaveWalkersEnabled(tray.WalkersEnabled); };
             tray.MinionsToggled += delegate
@@ -124,9 +125,18 @@ namespace IdleWalker.App
                 corners.DwellSeconds = tray.DelayMs / 1000.0;
                 UserSettings.SaveHotCornerDelay(tray.DelayMs);
             };
+            tray.KeepAwakeToggled += delegate
+            {
+                UserSettings.SaveKeepAwake(tray.KeepAwake);
+                ApplyKeepAwake();
+            };
             tray.AboutRequested += delegate { ShowAbout(); };
             tray.BrainsRequested += delegate { ShowBrains(); };
             StartupRegistration.RefreshPath();
+
+            // Arm the stored keep-awake choice now, from the UI thread that
+            // Application.Run keeps alive, so the request lasts the session.
+            ApplyKeepAwake();
 
             if (SynchronizationContext.Current == null)
                 SynchronizationContext.SetSynchronizationContext(new WindowsFormsSynchronizationContext());
@@ -392,10 +402,23 @@ namespace IdleWalker.App
             }
         }
 
+        /// <summary>
+        /// Arms or releases the keep-awake request to match the tray tick.
+        /// Keeps the display on too, so the walkers stay visible. Called from
+        /// the UI thread, where the request must live to last the session.
+        /// </summary>
+        void ApplyKeepAwake()
+        {
+            if (tray.KeepAwake) Native.KeepAwake(true);
+            else Native.AllowSleep();
+        }
+
         protected override void Dispose(bool disposing)
         {
             if (disposing)
             {
+                Native.AllowSleep();
+
                 try
                 {
                     BrainStore.Save(troupe);
