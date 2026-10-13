@@ -81,6 +81,15 @@ namespace IdleWalker
         /// </summary>
         public const bool KeepAwakeByDefault = false;
 
+        /// <summary>
+        /// While "Keep system awake" is on and the real mouse has sat still
+        /// this many seconds, a harmless F15 tap is sent this often to reset
+        /// the idle timer. Kept well under a one-minute screen-saver timeout,
+        /// so the session never reads as idle. Only fires once the user is
+        /// away, so it never disturbs active work.
+        /// </summary>
+        public const double AntiIdleSeconds = 30.0;
+
         /// <summary>What each corner does until the tray menu says otherwise, in Corner order.</summary>
         public static readonly CornerAction[] DefaultCornerActions =
         {

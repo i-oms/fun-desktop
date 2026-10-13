@@ -40,6 +40,7 @@ namespace IdleWalker.App
         double nextTopmost;
         double nextCheck;           // when to look again at the foreground window and the power
         double nextBrainSave;       // when to write what the walkers learned to disk
+        double nextNudge;           // when the anti-idle F15 tap may fire again
         int paintEvery = 1;         // snapshots on every n-th tick: 1 at full rate, more when the painter is over budget
         int tick;                   // tick counter, for paintEvery
         double loadSince;           // start of the current paint-load window
@@ -154,6 +155,20 @@ namespace IdleWalker.App
             monitors.Refresh();
             bool moved = cursor.Poll(now);
             if (moved) summoned = false;
+
+            // Keep the session counted as active while the user is away.
+            // SetThreadExecutionState (armed by ApplyKeepAwake) only blocks
+            // sleep and monitor-off; the screen saver, auto-lock and "Away"
+            // presence run off the separate last-input timer. Once the real
+            // mouse has sat still past AntiIdleSeconds, a harmless F15 tap at
+            // that cadence resets that timer so none of them fire. Gated on
+            // real mouse stillness - the tap moves no cursor - so it never
+            // fires while the mouse is in use, and it touches no open content.
+            if (tray.KeepAwake && cursor.IdleFor(now, Settings.AntiIdleSeconds) && now >= nextNudge)
+            {
+                nextNudge = now + Settings.AntiIdleSeconds;
+                Native.NudgeActivity();
+            }
 
             // Twice a second: a full-screen app in front keeps the Minions
             // away (and sends them off if they are out), and on battery the

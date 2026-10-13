@@ -79,6 +79,7 @@ namespace IdleWalker.Platform
         public static readonly IntPtr HWND_BROADCAST = new IntPtr(0xFFFF);
         public const int VK_LBUTTON = 0x01, VK_RBUTTON = 0x02, VK_MBUTTON = 0x04;
         public const byte VK_TAB = 0x09, VK_CONTROL = 0x11, VK_ESCAPE = 0x1B, VK_A = 0x41, VK_D = 0x44, VK_N = 0x4E, VK_LWIN = 0x5B;
+        public const byte VK_F15 = 0x7E;   // a key no application binds: safe to tap just to count as activity
         public const uint KEYEVENTF_KEYUP = 0x0002;
 
         // The foreground window, to stay out of the way of full-screen apps.
@@ -203,6 +204,27 @@ namespace IdleWalker.Platform
             try
             {
                 SetThreadExecutionState(ExecutionState.Continuous);
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        /// <summary>
+        /// Resets the "last input" timer with a single F15 key tap, so the
+        /// screen saver, auto-lock and "Away"/"Idle" presence never trigger
+        /// while the user is away. SetThreadExecutionState only blocks sleep
+        /// and monitor-off; this is what keeps the session counted as active.
+        /// F15 is a real key that no application binds, so it moves nothing
+        /// on screen, types nothing into the focused window, and leaves every
+        /// open page and document untouched. Never throws.
+        /// </summary>
+        public static void NudgeActivity()
+        {
+            try
+            {
+                keybd_event(VK_F15, 0, 0, UIntPtr.Zero);
+                keybd_event(VK_F15, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
             }
             catch (Exception)
             {

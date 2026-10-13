@@ -138,7 +138,7 @@ namespace IdleWalker.App
             get { return cornersItem.Checked; }
         }
 
-        /// <summary>True while the machine is kept from going idle to sleep or the screen saver.</summary>
+        /// <summary>True while the machine is kept awake and the session kept active: no sleep, screen saver, auto-lock, or "Away" presence while the user is away.</summary>
         public bool KeepAwake
         {
             get { return keepAwakeItem.Checked; }
