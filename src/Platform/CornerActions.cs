@@ -22,9 +22,16 @@ namespace IdleWalker.Platform
         /// <summary>
         /// Performs the action. CallMinions is the application's business
         /// and does nothing here.
+        /// The shortcuts are synthetic keystrokes, and Windows silently drops
+        /// those while an app running as administrator has the focus (UIPI) -
+        /// many portable tools ask for it. Then the shell is asked directly
+        /// instead: Explorer runs at our level, so it takes the request and
+        /// acts on every window, elevated ones included.
         /// </summary>
         public static void Perform(CornerAction action)
         {
+            if (ForegroundWatch.IsElevated() && PerformThroughShell(action)) return;
+
             switch (action)
             {
                 case CornerAction.TaskView:
@@ -52,6 +59,58 @@ namespace IdleWalker.Platform
                     Native.SendMessage(Native.HWND_BROADCAST, Native.WM_SYSCOMMAND, Native.SC_MONITORPOWER, new IntPtr(2));
                     break;
             }
+        }
+
+        /// <summary>
+        /// The keyboard-free route for the shell's own actions; false when
+        /// there is none (or it failed), and the shortcut is tried after all.
+        /// </summary>
+        static bool PerformThroughShell(CornerAction action)
+        {
+            try
+            {
+                switch (action)
+                {
+                    case CornerAction.TaskView:
+                        return ShellCall("WindowSwitcher");
+                    case CornerAction.ShowDesktop:
+                        return ShellCall("ToggleDesktop");
+                    case CornerAction.StartMenu:
+                        IntPtr taskbar = Native.FindWindow("Shell_TrayWnd", null);
+                        return taskbar != IntPtr.Zero && Native.PostMessage(taskbar, Native.WM_SYSCOMMAND, Native.SC_TASKLIST, IntPtr.Zero);
+                    case CornerAction.Notifications:
+                        return OpenUri("ms-actioncenter:");
+                    case CornerAction.QuickSettings:
+                        return OpenUri("ms-actioncenter:controlcenter/&showFooter=true");
+                }
+            }
+            catch (Exception)
+            {
+            }
+            return false;
+        }
+
+        // Shell.Application, late-bound: the same object a script gets.
+        static bool ShellCall(string method)
+        {
+            Type type = Type.GetTypeFromProgID("Shell.Application");
+            if (type == null) return false;
+            object shell = Activator.CreateInstance(type);
+            try
+            {
+                type.InvokeMember(method, System.Reflection.BindingFlags.InvokeMethod, null, shell, null);
+                return true;
+            }
+            finally
+            {
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(shell);
+            }
+        }
+
+        static bool OpenUri(string uri)
+        {
+            using (System.Diagnostics.Process.Start(uri)) { }
+            return true;
         }
 
         /// <summary>True while any mouse button is held: the cursor is dragging something.</summary>

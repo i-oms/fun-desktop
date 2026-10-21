@@ -98,8 +98,160 @@ namespace IdleWalker.Platform
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         public static extern int GetClassName(IntPtr hwnd, System.Text.StringBuilder name, int capacity);
 
+        public const int GWL_EXSTYLE = -20;
+        public const int DWMWA_CLOAKED = 14;
+
+        [DllImport("user32.dll")]
+        public static extern bool IsWindowVisible(IntPtr hwnd);
+
+        [DllImport("user32.dll")]
+        public static extern bool IsZoomed(IntPtr hwnd);
+
+        [DllImport("user32.dll")]
+        public static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
+
+        [DllImport("dwmapi.dll")]
+        public static extern int DwmGetWindowAttribute(IntPtr hwnd, int attribute, out int value, int size);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        public static extern IntPtr FindWindow(string className, string windowName);
+
+        [DllImport("user32.dll")]
+        public static extern bool PostMessage(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+        public static readonly IntPtr SC_TASKLIST = new IntPtr(0xF130);   // to the taskbar: opens Start
+
+        // ---- Integrity levels (UIPI) ----
+        // Windows drops synthetic input (keybd_event / SendInput) aimed at a
+        // window of a higher integrity level than ours - typically an app run
+        // as administrator, which many portable tools ask for. The call
+        // "succeeds" and nothing happens, so we look before we inject.
+        const uint PROCESS_QUERY_LIMITED_INFORMATION = 0x1000;
+        const uint TOKEN_QUERY = 0x0008;
+        const int TokenIntegrityLevel = 25;
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern IntPtr OpenProcess(uint access, bool inherit, uint processId);
+
+        [DllImport("kernel32.dll")]
+        static extern IntPtr GetCurrentProcess();
+
+        [DllImport("kernel32.dll")]
+        static extern bool CloseHandle(IntPtr handle);
+
+        [DllImport("advapi32.dll", SetLastError = true)]
+        static extern bool OpenProcessToken(IntPtr process, uint access, out IntPtr token);
+
+        [DllImport("advapi32.dll", SetLastError = true)]
+        static extern bool GetTokenInformation(IntPtr token, int infoClass, IntPtr info, int length, out int returned);
+
+        [DllImport("advapi32.dll")]
+        static extern IntPtr GetSidSubAuthorityCount(IntPtr sid);
+
+        [DllImport("advapi32.dll")]
+        static extern IntPtr GetSidSubAuthority(IntPtr sid, uint index);
+
+        static int ownIntegrity = -1;
+
+        /// <summary>
+        /// The integrity RID of a process (0x2000 medium, 0x3000 high, ...),
+        /// or int.MaxValue when its token cannot even be read - which, from a
+        /// normal process, means it sits above us. Never throws.
+        /// </summary>
+        static int IntegrityOf(IntPtr process)
+        {
+            IntPtr token;
+            if (!OpenProcessToken(process, TOKEN_QUERY, out token)) return int.MaxValue;
+            IntPtr buffer = IntPtr.Zero;
+            try
+            {
+                int length;
+                GetTokenInformation(token, TokenIntegrityLevel, IntPtr.Zero, 0, out length);
+                if (length <= 0) return int.MaxValue;
+                buffer = Marshal.AllocHGlobal(length);
+                if (!GetTokenInformation(token, TokenIntegrityLevel, buffer, length, out length)) return int.MaxValue;
+                IntPtr sid = Marshal.ReadIntPtr(buffer);   // TOKEN_MANDATORY_LABEL.Label.Sid
+                int count = Marshal.ReadByte(GetSidSubAuthorityCount(sid));
+                return Marshal.ReadInt32(GetSidSubAuthority(sid, (uint)(count - 1)));
+            }
+            finally
+            {
+                if (buffer != IntPtr.Zero) Marshal.FreeHGlobal(buffer);
+                CloseHandle(token);
+            }
+        }
+
+        /// <summary>
+        /// True when the window belongs to a process above our integrity
+        /// level (an elevated app), so synthetic keystrokes would be silently
+        /// dropped while it has the focus. Never throws; false when unsure.
+        /// </summary>
+        public static bool IsAboveUs(IntPtr hwnd)
+        {
+            try
+            {
+                if (hwnd == IntPtr.Zero) return false;
+                uint pid;
+                GetWindowThreadProcessId(hwnd, out pid);
+                if (pid == 0) return false;
+                if (ownIntegrity < 0) ownIntegrity = IntegrityOf(GetCurrentProcess());
+                IntPtr process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
+                if (process == IntPtr.Zero) return true;   // not even a limited query: protected or above us
+                try
+                {
+                    return IntegrityOf(process) > ownIntegrity;
+                }
+                finally
+                {
+                    CloseHandle(process);
+                }
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        // ---- The system's own idle clock ----
+        [StructLayout(LayoutKind.Sequential)]
+        struct LASTINPUTINFO
+        {
+            public uint cbSize;
+            public uint dwTime;
+        }
+
+        [DllImport("user32.dll")]
+        static extern bool GetLastInputInfo(ref LASTINPUTINFO info);
+
+        /// <summary>
+        /// Seconds since the last input of any kind, as Windows counts it for
+        /// the screen saver, auto-lock and "Away" presence. Keyboard input
+        /// counts, and so does nothing that merely moves the cursor (an app
+        /// calling SetCursorPos), which is why this, not the cursor, is the
+        /// clock the anti-idle nudge watches. 0 when unknown.
+        /// </summary>
+        public static double SystemIdleSeconds()
+        {
+            try
+            {
+                LASTINPUTINFO info = new LASTINPUTINFO();
+                info.cbSize = (uint)Marshal.SizeOf(typeof(LASTINPUTINFO));
+                if (!GetLastInputInfo(ref info)) return 0;
+                return unchecked((uint)Environment.TickCount - info.dwTime) / 1000.0;
+            }
+            catch (Exception)
+            {
+                return 0;
+            }
+        }
+
         [DllImport("user32.dll")]
         public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extraInfo);
+
+        [DllImport("user32.dll")]
+        static extern void mouse_event(uint flags, int dx, int dy, uint data, UIntPtr extraInfo);
+
+        const uint MOUSEEVENTF_MOVE = 0x0001;
 
         [DllImport("user32.dll")]
         public static extern bool LockWorkStation();
@@ -217,7 +369,13 @@ namespace IdleWalker.Platform
         /// and monitor-off; this is what keeps the session counted as active.
         /// F15 is a real key that no application binds, so it moves nothing
         /// on screen, types nothing into the focused window, and leaves every
-        /// open page and document untouched. Never throws.
+        /// open page and document untouched.
+        /// A zero-distance mouse move goes along with it: it resets the same
+        /// timer and moves nothing, but is delivered to the window under the
+        /// cursor rather than the focused one, so it still counts when the
+        /// focused app runs as administrator and the F15 tap is dropped
+        /// (UIPI), or when an app's keyboard hook swallows injected keys
+        /// (remote-desktop and VM clients). Never throws.
         /// </summary>
         public static void NudgeActivity()
         {
@@ -225,6 +383,7 @@ namespace IdleWalker.Platform
             {
                 keybd_event(VK_F15, 0, 0, UIntPtr.Zero);
                 keybd_event(VK_F15, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                mouse_event(MOUSEEVENTF_MOVE, 0, 0, 0, UIntPtr.Zero);
             }
             catch (Exception)
             {

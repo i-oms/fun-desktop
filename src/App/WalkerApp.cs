@@ -40,7 +40,9 @@ namespace IdleWalker.App
         double nextTopmost;
         double nextCheck;           // when to look again at the foreground window and the power
         double nextBrainSave;       // when to write what the walkers learned to disk
-        double nextNudge;           // when the anti-idle F15 tap may fire again
+        double nextNudge;           // when the anti-idle nudge may fire again
+        double nudgedAt;            // when the last nudge went out, until it shows on the idle clock; 0 once it has
+        bool nudgeBlocked;          // nudges stopped registering (logged once until they work again)
         int paintEvery = 1;         // snapshots on every n-th tick: 1 at full rate, more when the painter is over budget
         int tick;                   // tick counter, for paintEvery
         double loadSince;           // start of the current paint-load window
@@ -159,15 +161,30 @@ namespace IdleWalker.App
             // Keep the session counted as active while the user is away.
             // SetThreadExecutionState (armed by ApplyKeepAwake) only blocks
             // sleep and monitor-off; the screen saver, auto-lock and "Away"
-            // presence run off the separate last-input timer. Once the real
-            // mouse has sat still past AntiIdleSeconds, a harmless F15 tap at
-            // that cadence resets that timer so none of them fire. Gated on
-            // real mouse stillness - the tap moves no cursor - so it never
-            // fires while the mouse is in use, and it touches no open content.
-            if (tray.KeepAwake && cursor.IdleFor(now, Settings.AntiIdleSeconds) && now >= nextNudge)
+            // presence run off the separate last-input timer. Once that very
+            // timer has run past AntiIdleSeconds, a harmless nudge resets it
+            // so none of them fire. Watching Windows' own clock rather than
+            // our cursor means typing counts as activity, and an app that
+            // moves the cursor itself (which is not input) cannot hide the
+            // idling. If a nudge does not register - the app in front runs as
+            // administrator and the cursor sits on it, so Windows drops all
+            // our input - it is retried every few seconds, and logged once.
+            if (tray.KeepAwake && now >= nextNudge && Native.SystemIdleSeconds() >= Settings.AntiIdleSeconds)
             {
-                nextNudge = now + Settings.AntiIdleSeconds;
+                if (nudgedAt > 0 && !nudgeBlocked)
+                {
+                    nudgeBlocked = true;
+                    LogNote("anti-idle nudge did not register; foreground " + ForegroundWatch.Describe());
+                }
+                nextNudge = now + 5;
+                nudgedAt = now;
                 Native.NudgeActivity();
+            }
+            else if (nudgedAt > 0 && now - nudgedAt < 5 && Native.SystemIdleSeconds() < now - nudgedAt + 1)
+            {
+                nudgedAt = 0;   // the last nudge registered
+                if (nudgeBlocked) LogNote("anti-idle nudge registers again");
+                nudgeBlocked = false;
             }
 
             // Twice a second: a full-screen app in front keeps the Minions
@@ -180,7 +197,7 @@ namespace IdleWalker.App
                 nextCheck = now + 0.5;
                 bool wasFull = fullScreen;
                 fullScreen = ForegroundWatch.IsFullScreen();
-                if (fullScreen && !wasFull) LogNote("foreground fullscreen: corners held");
+                if (fullScreen && !wasFull) LogNote("foreground fullscreen: corners held (" + ForegroundWatch.Describe() + ")");
                 else if (!fullScreen && wasFull) LogNote("foreground windowed: corners live");
                 pump.HalfRate = SystemInformation.PowerStatus.PowerLineStatus == PowerLineStatus.Offline;
             }
@@ -194,7 +211,7 @@ namespace IdleWalker.App
                 if (corners.Step(now, cursor.Latest, monitors.MonitorBounds, monitors.MonitorScales, CornerActions.MouseButtonDown(), out firedMonitor, out corner))
                 {
                     CornerAction action = tray.CornerActionFor(corner);
-                    LogFire(firedMonitor, corner, action, cursor.Latest);
+                    LogFire(firedMonitor, corner, action, cursor.Latest, ForegroundWatch.Describe());
                     if (action != CornerAction.None) RippleFor(firedMonitor, corner);
                     if (action == CornerAction.CallMinions) summoned = tray.WalkersEnabled;
                     else CornerActions.Perform(action);
@@ -310,12 +327,12 @@ namespace IdleWalker.App
         /// three toggles with one "fire" line is Windows, three "fire" lines
         /// is us. Fires are human-paced, so the file stays tiny.
         /// </summary>
-        static void LogFire(int firedMonitor, Corner corner, CornerAction action, Point cursor)
+        static void LogFire(int firedMonitor, Corner corner, CornerAction action, Point cursor, string foreground)
         {
             try
             {
-                string line = string.Format("{0:yyyy-MM-dd HH:mm:ss.fff} fire monitor={1} corner={2} action={3} cursor={4},{5}\r\n",
-                    DateTime.Now, firedMonitor, corner, action, cursor.X, cursor.Y);
+                string line = string.Format("{0:yyyy-MM-dd HH:mm:ss.fff} fire monitor={1} corner={2} action={3} cursor={4},{5} foreground={6}\r\n",
+                    DateTime.Now, firedMonitor, corner, action, cursor.X, cursor.Y, foreground);
                 File.AppendAllText(Path.Combine(Path.GetTempPath(), "IdleWalker-hotcorners.log"), line);
             }
             catch (Exception)
