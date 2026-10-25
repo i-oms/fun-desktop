@@ -1,0 +1,39 @@
+#!/bin/sh
+# Pre-push hook: validates tags being pushed follow semver and branch is up to date.
+# Windows-native: uses PowerShell for parsing.
+
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
+[ -z "$REPO_ROOT" ] && exit 0
+cd "$REPO_ROOT" || exit 0
+
+# Ensure branch is up to date with upstream (skip if no upstream configured)
+current_branch=$(git symbolic-ref --short HEAD 2>/dev/null)
+if [ -n "$current_branch" ]; then
+    upstream=$(git rev-parse --abbrev-ref --symbolic-full-name "@{u}" 2>/dev/null)
+    if [ -n "$upstream" ]; then
+        git fetch --quiet 2>/dev/null || true
+        behind=$(git rev-list --count HEAD.."$upstream" 2>/dev/null)
+        if [ "${behind:-0}" -gt 0 ]; then
+            echo "[ERROR] Branch '$current_branch' is behind '$upstream' by ${behind} commit(s). Pull before pushing."
+            exit 1
+        fi
+    fi
+fi
+
+# Validate tags being pushed follow semver (vX.Y.Z)
+while read local_ref local_sha remote_ref remote_sha; do
+    case "$remote_ref" in
+        refs/tags/*)
+            tag=${remote_ref#refs/tags/}
+            powershell -NoProfile -Command "
+                \$tag = '$tag'
+                if (-not ([regex]::IsMatch(\$tag, '^v?[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?(-[A-Za-z0-9.-]+)?(\+[A-Za-z0-9.-]+)?\$'))) {
+                    Write-Host \"[ERROR] Tag '\$tag' does not follow semver naming (vX.Y.Z)\"
+                    exit 1
+                }
+            " || exit 1
+            ;;
+    esac
+done
+
+exit 0

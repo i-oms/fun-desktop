@@ -1,0 +1,42 @@
+#!/bin/sh
+# Pre-commit hook: validates AssemblyVersion and branch state.
+# Windows-native: uses PowerShell for parsing (no sed/grep/head required).
+
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
+[ -z "$REPO_ROOT" ] && exit 0
+cd "$REPO_ROOT" || exit 0
+
+# Ensure branch is up to date with upstream (skip if no upstream configured)
+current_branch=$(git symbolic-ref --short HEAD 2>/dev/null)
+if [ -n "$current_branch" ]; then
+    upstream=$(git rev-parse --abbrev-ref --symbolic-full-name "@{u}" 2>/dev/null)
+    if [ -n "$upstream" ]; then
+        git fetch --quiet 2>/dev/null || true
+        behind=$(git rev-list --count HEAD.."$upstream" 2>/dev/null)
+        if [ "${behind:-0}" -gt 0 ]; then
+            echo "[ERROR] Branch '$current_branch' is behind '$upstream' by ${behind} commit(s). Pull before committing."
+            exit 1
+        fi
+    fi
+fi
+
+if [ ! -f "src/AssemblyInfo.cs" ]; then
+    exit 0
+fi
+
+echo "[pre-commit] AssemblyInfo version validation..."
+
+# Extract and validate AssemblyVersion using PowerShell (Windows-native)
+powershell -NoProfile -Command "
+    \$content = Get-Content 'src/AssemblyInfo.cs' -Raw -ErrorAction Stop
+    \$match = [regex]::Match(\$content, 'AssemblyVersion\\(\"([^\"]+)\"\\)')
+    if (-not \$match.Success) { Write-Host '[ERROR] Cannot read AssemblyVersion from src/AssemblyInfo.cs'; exit 1 }
+    \$v = \$match.Groups[1].Value
+    if (-not ([regex]::IsMatch(\$v, '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'))) {
+        Write-Host '[ERROR] AssemblyVersion must follow MAJOR.MINOR.PATCH.BUILD'
+        exit 1
+    }
+    Write-Host \"[OK] AssemblyVersion=\$v\"
+" || exit 1
+
+exit 0

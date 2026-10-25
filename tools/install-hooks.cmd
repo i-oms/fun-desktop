@@ -1,0 +1,6 @@
+@echo off
+setlocal
+cd /d "%~dp0.."
+git config core.hooksPath .githooks
+git config alias.tag-version "!bash .githooks/tag-version.sh"
+echo Hooks installed. core.hooksPath=.githooks

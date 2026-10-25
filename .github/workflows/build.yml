@@ -1,0 +1,59 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Determine version
+        id: version
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $version = $tag -replace '^v', ''
+          $m = [regex]::Match($version, '^\d+(\.\d+)*')
+          $base = if ($m.Success) { $m.Value } else { $version }
+          $parts = $base.Split('.')
+          while ($parts.Count -lt 4) { $parts += '0' }
+          $assemblyVersion = ($parts[0..3]) -join '.'
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "assembly_version=$assemblyVersion" >> $env:GITHUB_OUTPUT
+
+      - name: Update application version
+        shell: pwsh
+        run: |
+          $v = "${{ steps.version.outputs.assembly_version }}"
+          $p = 'src/AssemblyInfo.cs'
+          $c = Get-Content $p
+          $c = $c -replace 'AssemblyVersion\(".*"\)', ('AssemblyVersion("' + $v + '")')
+          $c = $c -replace 'AssemblyFileVersion\(".*"\)', ('AssemblyFileVersion("' + $v + '")')
+          Set-Content $p $c
+
+      - name: Build exe
+        shell: cmd
+        run: build.cmd nosign
+
+      - name: Rename exe with version
+        shell: pwsh
+        run: |
+          $v = "${{ steps.version.outputs.version }}"
+          Rename-Item IdleWalker.exe "IdleWalker-$v.exe"
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: IdleWalker-${{ steps.version.outputs.version }}.exe
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
