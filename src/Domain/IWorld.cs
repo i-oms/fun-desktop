@@ -15,8 +15,9 @@ namespace IdleWalker.Domain
         /// <summary>Outer right edge of the whole desktop, in pixels.</summary>
         int Right { get; }
 
-        /// <summary>Every monitor's left and right edge.</summary>
-        IEnumerable<int> MonitorEdges { get; }
+        /// <summary>Every monitor's left and right edge. Read every tick by
+        /// every walking walker, so an array: no enumerator to allocate.</summary>
+        int[] MonitorEdges { get; }
 
         /// <summary>Bounds of the monitor containing a point.</summary>
         Rectangle MonitorBoundsAt(Point point);

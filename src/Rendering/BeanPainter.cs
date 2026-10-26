@@ -22,6 +22,9 @@ namespace IdleWalker.Rendering
     /// </summary>
     sealed class BeanPainter : SolidPainter
     {
+        // One painter per thread, set up afresh for every frame.
+        [ThreadStatic] static BeanPainter cached;
+
         public const double Height = 28;
 
         // Legs: hips either side of the axis, a thigh and a shin with a knee between.
@@ -63,15 +66,21 @@ namespace IdleWalker.Rendering
         const double TieR = 0.66, TieG = 0.11, TieB = 0.14;
         const double TeddyR = 0.76, TeddyG = 0.56, TeddyB = 0.33;
 
-        readonly Pose pose;
-        readonly Expression face;
-        readonly double yaw, sinY, cosY;             // the body
-        readonly double headYaw, sinH, cosH;         // the head, turned further
-        readonly double lean, dip;
+        Pose pose;
+        Expression face;
+        double yaw, sinY, cosY;             // the body
+        double headYaw, sinH, cosH;         // the head, turned further
+        double lean, dip;
 
         // Eyes: angle from the viewer, screen centre, horizontal squeeze, visibility.
         readonly double[] eyeAlpha = new double[2], eyeU = new double[2], eyeK = new double[2], eyeVis = new double[2];
-        readonly int firstEye;
+        readonly double[] eyeCos = new double[2], eyeSin = new double[2];   // of eyeAlpha
+        readonly double[] gazeU = new double[2], gazeV = new double[2];     // where each iris sits in its eye
+
+        // The props' moving parts: Teddy's waving paw and the wheel's spokes, from their roots.
+        double pawU, pawV;
+        readonly double[] spokeU = new double[3], spokeV = new double[3];
+        int firstEye;
 
         // Ears: screen centre and depth.
         readonly double[] earU = new double[2], earZ = new double[2];
@@ -79,7 +88,7 @@ namespace IdleWalker.Rendering
         // Legs: hip, knee and ankle of each, and which is behind.
         readonly double[] hipU = new double[2], kneeU = new double[2], kneeV = new double[2],
                           ankleU = new double[2], ankleV = new double[2], legZ = new double[2];
-        readonly double shoeLen, toe;
+        double shoeLen, toe;
 
         // Arms: shoulder, elbow, cuff and hand of each, with depths, and the screen box it all fits in.
         readonly double[] shU = new double[2], shZ = new double[2],
@@ -88,13 +97,13 @@ namespace IdleWalker.Rendering
                           handU = new double[2], handV = new double[2], handZ = new double[2],
                           armLo = new double[2], armHi = new double[2], armVlo = new double[2], armVhi = new double[2];
 
-        readonly bool decorated;
-        readonly double topV;
-        readonly double mouthU;                      // where the mouth is across the screen, for the note and the heart
+        bool decorated;
+        double topV;
+        double mouthU;                      // where the mouth is across the screen, for the note and the heart
 
-        BeanPainter(Pose pose, bool faceLeft, double px)
-            : base(faceLeft, px, ArmRadius)
+        void Init(Pose pose, bool faceLeft, double px)
         {
+            Setup(faceLeft, px, ArmRadius);
             this.pose = pose;
             face = pose.Face;
             lean = pose.Lean;
@@ -110,6 +119,21 @@ namespace IdleWalker.Rendering
             PlaceEye(0, -EyeAngle * Deg);
             PlaceEye(1, EyeAngle * Deg);
             firstEye = Math.Cos(eyeAlpha[0]) < Math.Cos(eyeAlpha[1]) ? 0 : 1;
+
+            // The irises follow the gaze, kept inside the whites: fixed for the frame.
+            double reach = EyeRx - IrisR - 0.05;
+            for (int i = 0; i < 2; i++)
+            {
+                eyeCos[i] = Math.Cos(eyeAlpha[i]);
+                eyeSin[i] = Math.Sin(eyeAlpha[i]);
+                double ox = pose.GazeX * reach * 0.9 + face.PupilDx * 0.4;
+                double oy = pose.GazeY * (EyeRy - IrisR * 0.6) * 0.8 + face.PupilDy * 0.3;
+                ox -= (i == 1 ? 1 : -1) * face.CrossEye * 0.3;
+                double om = Math.Sqrt(ox * ox + oy * oy);
+                if (om > reach) { ox *= reach / om; oy *= reach / om; }
+                gazeU[i] = ox;
+                gazeV[i] = oy;
+            }
 
             for (int i = 0; i < 2; i++)
             {
@@ -138,6 +162,17 @@ namespace IdleWalker.Rendering
             if (pose.ForeNear != 0 || pose.ForeFar != 0) foreSwing = 0;
             PlaceArm(0, -1, pose.ArmFar, pose.ForeFar, pose.ReachFar, armSwing, foreSwing);
             PlaceArm(1, 1, pose.ArmNear, pose.ForeNear, pose.ReachNear, -armSwing, foreSwing);
+
+            double ang = (25 + 85 * pose.TeddyWave) * Deg;
+            pawU = 0.85 * Math.Cos(ang);
+            pawV = 0.85 * Math.Sin(ang);
+            double turn = pose.WheelTurn * 0.9;
+            for (int s = 0; s < 3; s++)
+            {
+                double a = turn + s * 2 * Math.PI / 3;
+                spokeU[s] = 1.05 * Math.Cos(a);
+                spokeV[s] = 1.05 * Math.Sin(a);
+            }
 
             decorated = pose.Sweat > 0 || pose.Note || pose.Zzz || pose.Bubble || pose.Heart;
             topV = decorated ? 37 : Height + 0.8 + Math.Abs(pose.BodyDy) + Math.Max(0, -dip);
@@ -228,7 +263,8 @@ namespace IdleWalker.Rendering
         {
             double sx = scale * pose.StretchX, sy = scale * pose.StretchY;
             double px = 1 / Math.Min(sx, sy);
-            BeanPainter painter = new BeanPainter(pose, faceLeft, px);
+            BeanPainter painter = cached ?? (cached = new BeanPainter());
+            painter.Init(pose, faceLeft, px);
 
             int left = Math.Max(0, (int)Math.Floor(centreX - 11.5 * sx));
             int right = Math.Min(surface.Width, (int)Math.Ceiling(centreX + 11.5 * sx));
@@ -236,24 +272,10 @@ namespace IdleWalker.Rendering
             int bottom = Math.Min(surface.Height, (int)Math.Ceiling(soleY + 0.5));
             if (left >= right || top >= bottom) return;
 
-            int[] layer = surface.Layer;
-            int width = surface.Width;
-            double flip = faceLeft ? -1 : 1;
-            for (int y = top; y < bottom; y++)
-            {
-                double v = (soleY - (y + 0.5)) / sy;
-                int row = y * width;
-                for (int x = left; x < right; x++)
-                {
-                    double u = ((x + 0.5) - centreX) / sx * flip;
-                    int argb = painter.Shade(u, v);
-                    if (argb != 0) layer[row + x] = argb;
-                }
-            }
-            surface.Touch(left, top, right, bottom);
+            painter.Raster(surface, left, top, right, bottom, centreX, soleY, sx, sy);
         }
 
-        int Shade(double u, double v)
+        protected override int Shade(double u, double v)
         {
             Begin();
 
@@ -381,12 +403,6 @@ namespace IdleWalker.Rendering
             double nx, ny, nz;
             Normal(u, dy, r, out nx, out ny, out nz);
 
-            // Where on the surface this is, round from the front, as an arc length.
-            double phi = Math.Atan2(nx, nz) - yaw;
-            if (phi > Math.PI) phi -= 2 * Math.PI; else if (phi < -Math.PI) phi += 2 * Math.PI;
-            double arc = r * phi;
-            double a = Math.Abs(arc);
-
             double cr, cg, cb, spec, shine;
             if (v < HemV)
             {
@@ -397,6 +413,13 @@ namespace IdleWalker.Rendering
             }
             else
             {
+                // Where on the surface this is, round from the front, as an
+                // arc length. Only the jacket needs it.
+                double phi = Math.Atan2(nx, nz) - yaw;
+                if (phi > Math.PI) phi -= 2 * Math.PI; else if (phi < -Math.PI) phi += 2 * Math.PI;
+                double arc = r * phi;
+                double a = Math.Abs(arc);
+
                 // The tweed: a herringbone weave - fine diagonal ribs that
                 // reverse direction every few rows - one sine, not four,
                 // and it reads as cloth rather than polka dots up close.
@@ -478,6 +501,8 @@ namespace IdleWalker.Rendering
         void Ear(double u, double v, int i)
         {
             double dx = u - earU[i], dy = v - EarV;
+            double reach = EarR + 0.08 + px;
+            if (dx > reach || dx < -reach || dy > reach || dy < -reach) return;
             double d = Math.Sqrt(dx * dx + dy * dy);
             double cov = Cov(d - (EarR + 0.08));
             if (cov <= 0) return;
@@ -557,7 +582,7 @@ namespace IdleWalker.Rendering
         {
             double vis = eyeVis[i];
             if (vis <= 0) return;
-            double k = eyeK[i], alpha = eyeAlpha[i];
+            double k = eyeK[i];
             bool near = i != firstEye;
 
             // The eye's own frame: squeezed as it turns away, shifted down
@@ -573,18 +598,12 @@ namespace IdleWalker.Rendering
 
             double nx, ny, nz;
             Normal(dx, dy, EyeRx * 1.6, out nx, out ny, out nz);
-            Turn(ref nx, ref nz, alpha);
+            Turn(ref nx, ref nz, eyeCos[i], eyeSin[i]);
             double r, g, b;
             Lit(0.96, 0.95, 0.92, nx, ny, nz, 0.4, 24, out r, out g, out b);
 
             // The iris follows the gaze, kept inside the white.
-            double reach = EyeRx - IrisR - 0.05;
-            double ox = pose.GazeX * reach * 0.9 + face.PupilDx * 0.4;
-            double oy = pose.GazeY * (EyeRy - IrisR * 0.6) * 0.8 + face.PupilDy * 0.3;
-            ox -= (i == 1 ? 1 : -1) * face.CrossEye * 0.3;
-            double om = Math.Sqrt(ox * ox + oy * oy);
-            if (om > reach) { ox *= reach / om; oy *= reach / om; }
-            double ix = dx - ox, iy = dy - oy;
+            double ix = dx - gazeU[i], iy = dy - gazeV[i];
             double id = Math.Sqrt(ix * ix + iy * iy);
             double covIris = Cov(Squeezed(ix, iy, k, IrisR));
             if (covIris > 0)
@@ -649,18 +668,18 @@ namespace IdleWalker.Rendering
         {
             double baseV = BrowV - dip * 0.8 + face.BrowRaise * 0.35;
             if (Math.Abs(v - baseV) > 1.3) return;
-            Brow(u, v, eyeAlpha[0], -1, baseV, eyeVis[0]);
-            Brow(u, v, eyeAlpha[1], 1, baseV + face.BrowAsym * 0.3, eyeVis[1]);
+            Brow(u, v, 0, -1, baseV, eyeVis[0]);
+            Brow(u, v, 1, 1, baseV + face.BrowAsym * 0.3, eyeVis[1]);
         }
 
-        void Brow(double u, double v, double alpha, double outward, double cy, double show)
+        void Brow(double u, double v, int i, double outward, double cy, double show)
         {
             if (show <= 0) return;
-            double k = Math.Cos(alpha);
+            double k = eyeCos[i];
             if (k < 0.2) return;
             // Thick and dark, a little arched: heaviest over the inner half,
             // tapering to a point at the temple.
-            double ex = (HeadRx + 0.15) * Math.Sin(alpha) + dip * 0.5 * sinH;
+            double ex = (HeadRx + 0.15) * eyeSin[i] + dip * 0.5 * sinH;
             double ax = ex - outward * 1.0 * k, ay = cy - face.BrowAngle * 0.4 - 0.08;
             double mx = ex + outward * 0.15 * k, my = cy + 0.12;
             double bx = ex + outward * 1.05 * k, by = cy + face.BrowAngle * 0.4 - 0.1;
@@ -848,9 +867,8 @@ namespace IdleWalker.Rendering
             Tube(u, v, tx - 0.35, ty - 0.5, tx - 0.55, ty - 1.0, 0.19, TeddyR * 0.92, TeddyG * 0.92, TeddyB * 0.92, 0.1, 8);
             Tube(u, v, tx + 0.35, ty - 0.5, tx + 0.55, ty - 1.0, 0.19, TeddyR * 0.92, TeddyG * 0.92, TeddyB * 0.92, 0.1, 8);
             // The paws: one held out, one waving.
-            double ang = (25 + 85 * pose.TeddyWave) * Deg;
             double px0 = tx + 0.55, py0 = ty + 0.3;
-            Tube(u, v, px0, py0, px0 + 0.85 * Math.Cos(ang), py0 + 0.85 * Math.Sin(ang), 0.2, TeddyR, TeddyG, TeddyB, 0.1, 8);
+            Tube(u, v, px0, py0, px0 + pawU, py0 + pawV, 0.2, TeddyR, TeddyG, TeddyB, 0.1, 8);
             Tube(u, v, tx - 0.55, ty + 0.1, tx - 1.1, ty - 0.35, 0.2, TeddyR, TeddyG, TeddyB, 0.1, 8);
 
             Ball(u, v, tx, ty, 0.85, TeddyR, TeddyG, TeddyB, 0.1, 8);
@@ -909,11 +927,9 @@ namespace IdleWalker.Rendering
                 Lit(0.16, 0.15, 0.17, nx, ny, nz, 0.5, 20, out lr, out lg, out lb);
                 Over(lr, lg, lb, cov);
             }
-            double turn = pose.WheelTurn * 0.9;
             for (int s = 0; s < 3; s++)
             {
-                double a = turn + s * 2 * Math.PI / 3;
-                double bx = wx + 1.05 * Math.Cos(a), by = wy + 1.05 * Math.Sin(a);
+                double bx = wx + spokeU[s], by = wy + spokeV[s];
                 double qx, qy, t;
                 double spoke = Seg(u, v, wx, wy, bx, by, out qx, out qy, out t) - 0.09;
                 Over(0.22, 0.21, 0.23, Cov(spoke) * 0.95);

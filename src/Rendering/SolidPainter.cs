@@ -21,15 +21,15 @@ namespace IdleWalker.Rendering
 
         protected const double Deg = Math.PI / 180;
 
-        protected readonly double flip;   // -1 when facing left, so the light stays on the screen's left
-        protected readonly double px;     // one pixel in units, for anti-aliasing
+        protected double flip;   // -1 when facing left, so the light stays on the screen's left
+        protected double px;     // one pixel in units, for anti-aliasing
 
         // Depth of the body's surface at the pixel being shaded, and how far
         // in front of it a limb has to be to count as in front: a soft band
         // rather than a knife edge, so the join does not shimmer.
         protected double bodyZ;
-        readonly double depthBlend;
-        readonly double depthRadius;      // how far forward a limb can be: beyond this it is fully lit
+        double depthBlend;
+        double depthRadius;      // how far forward a limb can be: beyond this it is fully lit
 
         // Limb pieces that turned out to be in front of the body at this
         // pixel, held back until the face has been painted. Room for both
@@ -40,12 +40,58 @@ namespace IdleWalker.Rendering
         // The pixel being shaded, premultiplied.
         protected double ca, cr, cg, cb;
 
-        protected SolidPainter(bool faceLeft, double px, double depthRadius)
+        /// <summary>
+        /// Sets the painter up for one frame. Each painter is kept per thread
+        /// and set up afresh every frame, so a frame allocates nothing.
+        /// </summary>
+        protected void Setup(bool faceLeft, double px, double depthRadius)
         {
+            frontCount = 0;
             flip = faceLeft ? -1 : 1;
             this.px = px;
             this.depthRadius = depthRadius;
             depthBlend = 2.5 * px;
+        }
+
+        // ---- The raster -----------------------------------------------------------------
+
+        double[] columnU = new double[0];
+
+        /// <summary>The finished pixel at model point (u, v), premultiplied ARGB, 0 where nothing is.</summary>
+        protected abstract int Shade(double u, double v);
+
+        /// <summary>
+        /// Shades [left, right) x [top, bottom) of the surface's character
+        /// layer, the figure's soles on soleY and centred on centreX at sx, sy
+        /// pixels per unit, and marks as touched only the part that got
+        /// anything, so the halo and the upload skip the empty margins.
+        /// </summary>
+        protected void Raster(Surface surface, int left, int top, int right, int bottom,
+                              double centreX, double soleY, double sx, double sy)
+        {
+            // u depends on the column only: work it out once per column, not per pixel.
+            if (columnU.Length < right) columnU = new double[right + 64];
+            for (int x = left; x < right; x++) columnU[x] = ((x + 0.5) - centreX) / sx * flip;
+
+            int[] layer = surface.Layer;
+            int width = surface.Width;
+            int minX = right, maxX = left - 1, minY = bottom, maxY = top - 1;
+            for (int y = top; y < bottom; y++)
+            {
+                double v = (soleY - (y + 0.5)) / sy;
+                int row = y * width;
+                for (int x = left; x < right; x++)
+                {
+                    int argb = Shade(columnU[x], v);
+                    if (argb == 0) continue;
+                    layer[row + x] = argb;
+                    if (x < minX) minX = x;
+                    if (x > maxX) maxX = x;
+                    if (y < minY) minY = y;
+                    maxY = y;
+                }
+            }
+            surface.Touch(minX, minY, maxX + 1, maxY + 1);
         }
 
         // ---- The pixel ---------------------------------------------------------------
@@ -107,10 +153,29 @@ namespace IdleWalker.Rendering
             if (diffuse < 0) diffuse = 0;
             double k = (0.40 + 0.62 * diffuse) * (0.6 + 0.4 * Math.Sqrt(nz < 0 ? 0 : nz));
             double h = nx * Hx + ny * Hy + nz * Hz;
-            double s = h > 0 ? spec * Math.Pow(h, shine) : 0;
+            double s = h > 0 ? spec * Pow(h, shine) : 0;
             lr = r * k + s;
             lg = g * k + s;
             lb = b * k + s;
+        }
+
+        /// <summary>
+        /// x to the power n. The shines are nearly always whole numbers, and
+        /// for those a few multiplications beat the general Math.Pow by far;
+        /// a shine blended between two materials takes the general route.
+        /// </summary>
+        static double Pow(double x, double n)
+        {
+            int k = (int)n;
+            if (k != n || k < 1 || k > 64) return Math.Pow(x, n);
+            double result = 1, b = x;
+            while (true)
+            {
+                if ((k & 1) != 0) result *= b;
+                k >>= 1;
+                if (k == 0) return result;
+                b *= b;
+            }
         }
 
         /// <summary>Normal of a sphere (or a tube seen side on) from the offset to its axis.</summary>
@@ -132,7 +197,12 @@ namespace IdleWalker.Rendering
         /// <summary>Turns a normal about the vertical axis by angle a.</summary>
         protected static void Turn(ref double nx, ref double nz, double a)
         {
-            double c = Math.Cos(a), s = Math.Sin(a);
+            Turn(ref nx, ref nz, Math.Cos(a), Math.Sin(a));
+        }
+
+        /// <summary>Turns a normal about the vertical axis by the angle whose cosine and sine are c and s.</summary>
+        protected static void Turn(ref double nx, ref double nz, double c, double s)
+        {
             double x = nx * c + nz * s;
             nz = -nx * s + nz * c;
             nx = x;

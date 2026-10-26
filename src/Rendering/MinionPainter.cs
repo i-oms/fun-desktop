@@ -54,23 +54,29 @@ namespace IdleWalker.Rendering
 
         const double StrapShade = 0.78;                   // straps and pocket relative to the overalls
 
-        readonly Pose pose;
-        readonly Look look;
-        readonly Expression face;
-        readonly double dressR, dressG, dressB;        // the overalls
-        readonly double strapR, strapG, strapB;        // their straps and pocket, a shade darker
-        readonly double yaw, sinY, cosY;
-        readonly double lean;
+        // One painter per thread, set up afresh for every frame.
+        [ThreadStatic] static MinionPainter cached;
+
+        Pose pose;
+        Look look;
+        Expression face;
+        double dressR, dressG, dressB;        // the overalls
+        double strapR, strapG, strapB;        // their straps and pocket, a shade darker
+        double yaw, sinY, cosY;
+        double lean;
 
         // Eyes: angle from the viewer, screen centre, horizontal squeeze, visibility.
-        readonly int eyes;
-        readonly double lensR, ringR, tubeR;
+        int eyes;
+        double lensR, ringR, tubeR;
         readonly double[] eyeAlpha = new double[2], eyeU = new double[2], eyeK = new double[2], eyeVis = new double[2];
-        readonly int firstEye;  // the one further back is painted first
+        readonly double[] eyeCos = new double[2], eyeSin = new double[2];   // of eyeAlpha
+        readonly double[] gazeU = new double[2], gazeV = new double[2];     // where each iris sits in its lens
+        readonly double[] browAlpha = new double[2], browCos = new double[2], browSin = new double[2];
+        int firstEye;  // the one further back is painted first
 
         // Legs: hip and ankle of each, and which is behind.
         readonly double[] hipU = new double[2], ankleU = new double[2], ankleV = new double[2], legZ = new double[2];
-        readonly double shoeLen, toe;
+        double shoeLen, toe;
 
         // Arms: shoulder, elbow and hand of each, with the depth of each
         // joint (positive towards the viewer) and the screen box it all fits in.
@@ -79,16 +85,18 @@ namespace IdleWalker.Rendering
                           handU = new double[2], handV = new double[2], handZ = new double[2],
                           armLo = new double[2], armHi = new double[2], armVlo = new double[2], armVhi = new double[2];
 
-        readonly double[] hair;              // segments: u0, v0, u1, v1, r0, r1
-        readonly bool decorated;             // anything floating about the figure this frame
-        readonly double topV;                // nothing of the figure is drawn above this height
+        readonly double[] hair = new double[MaxHair]; // segments: u0, v0, u1, v1, r0, r1
+        int hairLength;                      // how much of hair is in use
+        double hairLo, hairHi, hairVlo;      // the box the strands fit in
+        bool decorated;                      // anything floating about the figure this frame
+        double topV;                         // nothing of the figure is drawn above this height
 
         // Where the shoulders sit, and how far forward an arm can come.
         const double ArmRadius = BodyR + ShoulderOut;
 
-        MinionPainter(Pose pose, Look look, int dress, bool faceLeft, double px)
-            : base(faceLeft, px, ArmRadius)
+        void Init(Pose pose, Look look, int dress, bool faceLeft, double px)
         {
+            Setup(faceLeft, px, ArmRadius);
             this.pose = pose;
             this.look = look;
             dressR = ((dress >> 16) & 0xFF) / 255.0;
@@ -148,15 +156,50 @@ namespace IdleWalker.Rendering
             PlaceArm(0, -1, pose.ArmFar, pose.ForeFar, armSwing, foreSwing);
             PlaceArm(1, 1, pose.ArmNear, pose.ForeNear, -armSwing, foreSwing);
 
-            hair = HairFor(look.Hair);
+            // Where each iris sits in its lens, following the gaze; and the
+            // brows' angles round the body. Fixed for the frame.
+            double irisR = lensR * 0.47;
+            double reach = lensR - irisR - 0.12;
+            for (int i = 0; i < eyes; i++)
+            {
+                eyeCos[i] = Math.Cos(eyeAlpha[i]);
+                eyeSin[i] = Math.Sin(eyeAlpha[i]);
+                double ox = pose.GazeX * reach * 0.9 + face.PupilDx;
+                double oy = pose.GazeY * reach * 0.7 + face.PupilDy;
+                if (eyes == 2) ox -= (i == 1 ? 1 : -1) * face.CrossEye * 0.75;
+                double om = Math.Sqrt(ox * ox + oy * oy);
+                if (om > reach) { ox *= reach / om; oy *= reach / om; }
+                gazeU[i] = ox;
+                gazeV[i] = oy;
+            }
+            browAlpha[0] = eyes == 2 ? eyeAlpha[0] : eyeAlpha[0] - 14 * Deg;
+            browAlpha[1] = eyes == 2 ? eyeAlpha[1] : eyeAlpha[0] + 14 * Deg;
+            for (int i = 0; i < 2; i++)
+            {
+                browCos[i] = Math.Cos(browAlpha[i]);
+                browSin[i] = Math.Sin(browAlpha[i]);
+            }
+
+            hairLength = HairFor(look.Hair);
             decorated = pose.Sweat > 0 || pose.Note || pose.Zzz || pose.Bubble || pose.Heart;
 
             // How high the figure reaches: the dome, or the hair above it;
             // only the floating decorations go higher. Rows above this are
             // never shaded, which is most of the saving on an empty canvas.
+            // The strands' box (with a pixel to spare for the soft edge)
+            // spares the pixels beside the hair the strand-by-strand test.
             double hairTop = 0;
-            for (int i = 0; i < hair.Length; i += 6)
+            hairLo = double.MaxValue;
+            hairHi = double.MinValue;
+            hairVlo = double.MaxValue;
+            for (int i = 0; i < hairLength; i += 6)
+            {
                 hairTop = Math.Max(hairTop, Math.Max(hair[i + 1] + hair[i + 4], hair[i + 3] + hair[i + 5]));
+                double r = Math.Max(hair[i + 4], hair[i + 5]) + px;
+                hairLo = Math.Min(hairLo, Math.Min(hair[i], hair[i + 2]) - r);
+                hairHi = Math.Max(hairHi, Math.Max(hair[i], hair[i + 2]) + r);
+                hairVlo = Math.Min(hairVlo, Math.Min(hair[i + 1], hair[i + 3]) - r);
+            }
             topV = decorated ? 26 : Math.Max(BodyTop + BodyR, hairTop) + 1 + Math.Abs(pose.BodyDy);
         }
 
@@ -233,16 +276,17 @@ namespace IdleWalker.Rendering
 
         // Hair strands are laid out as if seen from the front, then each is
         // swung round the dome to where the yaw puts its root.
-        double[] HairFor(HairStyle style)
+        // (The strand roots and tilts are in the static tables below the method.)
+        int HairFor(HairStyle style)
         {
-            double[] s;
+            double[] s = hair;
+            int length;
             switch (style)
             {
                 case HairStyle.Sprouts:
                 {
-                    double[] at = { -1.1, 0.1, 1.2 };
-                    double[] tilt = { -0.5, 0.1, 0.6 };
-                    s = new double[at.Length * 12];
+                    double[] at = SproutsAt, tilt = SproutsTilt;
+                    length = at.Length * 12;
                     for (int i = 0; i < at.Length; i++)
                     {
                         double u0 = at[i], v0 = DomeTop(at[i]) - 0.15;
@@ -255,8 +299,8 @@ namespace IdleWalker.Rendering
                 }
                 case HairStyle.Combed:
                 {
-                    double[] at = { -2.6, -1.9, -1.2, -0.5, 0.2, 0.9 };
-                    s = new double[at.Length * 12];
+                    double[] at = CombedAt;
+                    length = at.Length * 12;
                     for (int i = 0; i < at.Length; i++)
                     {
                         double u0 = at[i], u1 = at[i] + 1.4, u2 = at[i] + 2.5;
@@ -267,8 +311,8 @@ namespace IdleWalker.Rendering
                 }
                 case HairStyle.Parted:
                 {
-                    double[] at = { -0.4, -1.1, -1.8, 0.5, 1.2, 1.9 };
-                    s = new double[at.Length * 12];
+                    double[] at = PartedAt;
+                    length = at.Length * 12;
                     for (int i = 0; i < at.Length; i++)
                     {
                         double side = at[i] < 0 ? -1 : 1;
@@ -283,7 +327,7 @@ namespace IdleWalker.Rendering
                 case HairStyle.Crew:
                 {
                     const int n = 9;
-                    s = new double[n * 6];
+                    length = n * 6;
                     for (int i = 0; i < n; i++)
                     {
                         double u0 = -3.0 + 0.75 * i;
@@ -295,8 +339,8 @@ namespace IdleWalker.Rendering
                 case HairStyle.Spiky:
                 {
                     // Short, stiff spikes radiating straight out of the dome.
-                    double[] at = { -2.4, -1.3, -0.2, 0.9, 2.0 };
-                    s = new double[at.Length * 6];
+                    double[] at = SpikyAt;
+                    length = at.Length * 6;
                     for (int i = 0; i < at.Length; i++)
                     {
                         double u0 = at[i];
@@ -308,8 +352,8 @@ namespace IdleWalker.Rendering
                 case HairStyle.Quiff:
                 {
                     // A tall wave rising from the front and curling back.
-                    double[] at = { 1.8, 1.1, 0.4, -0.3, -1.0 };
-                    s = new double[at.Length * 12];
+                    double[] at = QuiffAt;
+                    length = at.Length * 12;
                     for (int i = 0; i < at.Length; i++)
                     {
                         double u0 = at[i], v0 = DomeTop(at[i]) - 0.15;
@@ -323,7 +367,7 @@ namespace IdleWalker.Rendering
                 case HairStyle.Tuft:
                 {
                     // One long curl: up from the crown, over, and back down.
-                    s = new double[3 * 6];
+                    length = 3 * 6;
                     double t0 = 0.1, tv0 = DomeTop(0.1) - 0.15;
                     Strand(s, 0, t0, tv0, t0 + 0.3, tv0 + 1.8, 0.34, 0.26);
                     Strand(s, 6, t0 + 0.3, tv0 + 1.8, t0 + 1.4, tv0 + 2.5, 0.26, 0.18);
@@ -333,10 +377,8 @@ namespace IdleWalker.Rendering
                 case HairStyle.Wild:
                 {
                     // Long strands sticking out every which way, as if it had a fright.
-                    double[] at = { -2.6, -1.6, -0.7, 0.3, 1.2, 2.3 };
-                    double[] tilt = { -1.1, -0.4, 0.5, -0.6, 0.9, 1.2 };
-                    double[] len = { 1.5, 2.1, 1.7, 2.3, 1.6, 1.9 };
-                    s = new double[at.Length * 12];
+                    double[] at = WildAt, tilt = WildTilt, len = WildLen;
+                    length = at.Length * 12;
                     for (int i = 0; i < at.Length; i++)
                     {
                         double u0 = at[i], v0 = DomeTop(at[i]) - 0.15;
@@ -348,12 +390,12 @@ namespace IdleWalker.Rendering
                     break;
                 }
                 default:
-                    return new double[0];
+                    return 0;
             }
 
             // Swing each strand round: its root is at some angle round the
             // dome's circle of latitude; move it to that angle plus the yaw.
-            for (int i = 0; i < s.Length; i += 6)
+            for (int i = 0; i < length; i += 6)
             {
                 double root = s[i], rootV = s[i + 1];
                 double dv = rootV - BodyTop;
@@ -364,8 +406,19 @@ namespace IdleWalker.Rendering
                 s[i] += shift;
                 s[i + 2] += shift;
             }
-            return s;
+            return length;
         }
+
+        // The longest style (six two-piece strands) sets the buffer's size.
+        const int MaxHair = 6 * 12;
+        static readonly double[] SproutsAt = { -1.1, 0.1, 1.2 }, SproutsTilt = { -0.5, 0.1, 0.6 };
+        static readonly double[] CombedAt = { -2.6, -1.9, -1.2, -0.5, 0.2, 0.9 };
+        static readonly double[] PartedAt = { -0.4, -1.1, -1.8, 0.5, 1.2, 1.9 };
+        static readonly double[] SpikyAt = { -2.4, -1.3, -0.2, 0.9, 2.0 };
+        static readonly double[] QuiffAt = { 1.8, 1.1, 0.4, -0.3, -1.0 };
+        static readonly double[] WildAt = { -2.6, -1.6, -0.7, 0.3, 1.2, 2.3 };
+        static readonly double[] WildTilt = { -1.1, -0.4, 0.5, -0.6, 0.9, 1.2 };
+        static readonly double[] WildLen = { 1.5, 2.1, 1.7, 2.3, 1.6, 1.9 };
 
         static void Strand(double[] s, int i, double u0, double v0, double u1, double v1, double r0, double r1)
         {
@@ -384,7 +437,8 @@ namespace IdleWalker.Rendering
         {
             double sx = scale * pose.StretchX, sy = scale * pose.StretchY;
             double px = 1 / Math.Min(sx, sy);
-            MinionPainter painter = new MinionPainter(pose, look, dress, faceLeft, px);
+            MinionPainter painter = cached ?? (cached = new MinionPainter());
+            painter.Init(pose, look, dress, faceLeft, px);
 
             int left = Math.Max(0, (int)Math.Floor(centreX - 10.5 * sx));
             int right = Math.Min(surface.Width, (int)Math.Ceiling(centreX + 10.5 * sx));
@@ -392,24 +446,10 @@ namespace IdleWalker.Rendering
             int bottom = Math.Min(surface.Height, (int)Math.Ceiling(soleY + 0.5));
             if (left >= right || top >= bottom) return;
 
-            int[] layer = surface.Layer;
-            int width = surface.Width;
-            double flip = faceLeft ? -1 : 1;
-            for (int y = top; y < bottom; y++)
-            {
-                double v = (soleY - (y + 0.5)) / sy;
-                int row = y * width;
-                for (int x = left; x < right; x++)
-                {
-                    double u = ((x + 0.5) - centreX) / sx * flip;
-                    int argb = painter.Shade(u, v);
-                    if (argb != 0) layer[row + x] = argb;
-                }
-            }
-            surface.Touch(left, top, right, bottom);
+            painter.Raster(surface, left, top, right, bottom, centreX, soleY, sx, sy);
         }
 
-        int Shade(double u, double v)
+        protected override int Shade(double u, double v)
         {
             Begin();
 
@@ -528,17 +568,18 @@ namespace IdleWalker.Rendering
             double nx, ny, nz;
             Normal(u, dy, BodyR, out nx, out ny, out nz);
 
-            // Where on the surface this is, measured round the body from the
-            // front of the Minion (not the front as seen), as an arc length.
-            double phi = Math.Atan2(nx, nz) - yaw;
-            if (phi > Math.PI) phi -= 2 * Math.PI; else if (phi < -Math.PI) phi += 2 * Math.PI;
-            double arc = BodyR * phi;
-
             // Yellow skin, with the overalls painted on below the goggle strap
             // and the strap itself above: the two never share a row.
             double r = 0.98, g = 0.84, b = 0.11, spec = 0.35, shine = 26;
             if (v < BandBottom - 0.2)
             {
+                // Where on the surface this is, measured round the body from the
+                // front of the Minion (not the front as seen), as an arc length.
+                // Only the overalls need it.
+                double phi = Math.Atan2(nx, nz) - yaw;
+                if (phi > Math.PI) phi -= 2 * Math.PI; else if (phi < -Math.PI) phi += 2 * Math.PI;
+                double arc = BodyR * phi;
+
                 // Trousers all round, and the bib on the front.
                 double above = Cov(WaistV - v);
                 double denim = 1 - above;
@@ -582,7 +623,7 @@ namespace IdleWalker.Rendering
         {
             double vis = eyeVis[i];
             if (vis <= 0) return;
-            double k = eyeK[i], alpha = eyeAlpha[i];
+            double k = eyeK[i], ac = eyeCos[i], asn = eyeSin[i];
             bool near = i == eyes - 1;
 
             // Work in the eye's own frame: squeezed horizontally as it turns away.
@@ -596,19 +637,13 @@ namespace IdleWalker.Rendering
                 // The eyeball: a white sphere bulging out through the lens.
                 double nx, ny, nz;
                 Normal(dx, dy, lensR * 1.3, out nx, out ny, out nz);
-                Turn(ref nx, ref nz, alpha);
+                Turn(ref nx, ref nz, ac, asn);
                 double r, g, b;
                 Lit(0.96, 0.96, 0.94, nx, ny, nz, 0.5, 30, out r, out g, out b);
 
                 // Where the iris sits: following the gaze, kept inside the lens.
                 double irisR = lensR * 0.47;
-                double reach = lensR - irisR - 0.12;
-                double ox = pose.GazeX * reach * 0.9 + face.PupilDx;
-                double oy = pose.GazeY * reach * 0.7 + face.PupilDy;
-                if (eyes == 2) ox -= (i == 1 ? 1 : -1) * face.CrossEye * 0.75;
-                double om = Math.Sqrt(ox * ox + oy * oy);
-                if (om > reach) { ox *= reach / om; oy *= reach / om; }
-                double ix = dx - ox, iy = dy - oy;
+                double ix = dx - gazeU[i], iy = dy - gazeV[i];
                 double id = Math.Sqrt(ix * ix + iy * iy);
 
                 double covIris = Cov(Squeezed(ix, iy, k, irisR));
@@ -684,7 +719,7 @@ namespace IdleWalker.Rendering
                 if (t > 0.995) t = 0.995; else if (t < -0.995) t = -0.995;
                 double ux = dist > 0 ? dx / dist : 0, uy = dist > 0 ? dy / dist : 1;
                 double nx = ux * t, ny = uy * t, nz = Math.Sqrt(1 - t * t);
-                Turn(ref nx, ref nz, alpha);
+                Turn(ref nx, ref nz, ac, asn);
                 double tone = 0.86 + 0.26 * uy * t; // a hint of sky above, ground below
                 double lr, lg, lb;
                 Lit(0.60 * tone, 0.62 * tone, 0.66 * tone, nx, ny, nz, 0.9, 14, out lr, out lg, out lb);
@@ -702,22 +737,22 @@ namespace IdleWalker.Rendering
 
             if (eyes == 2)
             {
-                Brow(u, v, eyeAlpha[0], -1, baseV, show * eyeVis[0]);
-                Brow(u, v, eyeAlpha[1], 1, baseV + face.BrowAsym * 0.6, show * eyeVis[1]);
+                Brow(u, v, 0, -1, baseV, show * eyeVis[0]);
+                Brow(u, v, 1, 1, baseV + face.BrowAsym * 0.6, show * eyeVis[1]);
             }
             else
             {
-                Brow(u, v, eyeAlpha[0] - 14 * Deg, -1, baseV, show);
-                Brow(u, v, eyeAlpha[0] + 14 * Deg, 1, baseV + face.BrowAsym * 0.6, show);
+                Brow(u, v, 0, -1, baseV, show);
+                Brow(u, v, 1, 1, baseV + face.BrowAsym * 0.6, show);
             }
         }
 
-        void Brow(double u, double v, double alpha, double outward, double cy, double show)
+        void Brow(double u, double v, int j, double outward, double cy, double show)
         {
             if (show <= 0) return;
-            double k = Math.Cos(alpha);
+            double k = browCos[j];
             if (k < 0.2) return;
-            double ex = (BodyR + 0.3) * Math.Sin(alpha);
+            double ex = (BodyR + 0.3) * browSin[j];
             double ax = ex - outward * 1.15 * k, ay = cy - face.BrowAngle * 0.55;
             double bx = ex + outward * 1.15 * k, by = cy + face.BrowAngle * 0.55;
             double qx, qy, t;
@@ -796,8 +831,8 @@ namespace IdleWalker.Rendering
 
         void Hair(double u, double v)
         {
-            if (v < BodyTop + BodyR - 2.5) return;
-            for (int i = 0; i < hair.Length; i += 6)
+            if (v < BodyTop + BodyR - 2.5 || v < hairVlo || u < hairLo || u > hairHi) return;
+            for (int i = 0; i < hairLength; i += 6)
             {
                 double qx, qy, t;
                 double dist = Seg(u, v, hair[i], hair[i + 1], hair[i + 2], hair[i + 3], out qx, out qy, out t);

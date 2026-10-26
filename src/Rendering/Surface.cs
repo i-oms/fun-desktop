@@ -25,6 +25,7 @@ namespace IdleWalker.Rendering
 
         int[] layer = new int[0];
         bool[] rim = new bool[0];
+        int[] columnGap = new int[0];   // CommitCharacter's per-column count
 
         // The region with content, as [x0, x1) x [y0, y1); empty when x1 <= x0.
         int x0, y0, x1, y1;
@@ -176,21 +177,30 @@ namespace IdleWalker.Rendering
                     else if (gap < thickness) { gap++; rim[row + x] = true; }
                 }
             }
-            for (int x = left; x < right; x++)
+            // The columns, swept a row at a time (each column keeping its own
+            // count) so memory is read in order rather than a row apart.
+            if (columnGap.Length < Width) columnGap = new int[Width];
+            int[] gaps = columnGap;
+            for (int x = left; x < right; x++) gaps[x] = thickness;
+            for (int y = top; y < bottom; y++)
             {
-                int gap = thickness;
-                for (int y = top; y < bottom; y++)
+                int row = y * Width;
+                for (int x = left; x < right; x++)
                 {
-                    int i = y * Width + x;
-                    if (layer[i] != 0) gap = 0;
-                    else if (gap < thickness) { gap++; rim[i] = true; }
+                    int i = row + x;
+                    if (layer[i] != 0) gaps[x] = 0;
+                    else if (gaps[x] < thickness) { gaps[x]++; rim[i] = true; }
                 }
-                gap = thickness;
-                for (int y = bottom - 1; y >= top; y--)
+            }
+            for (int x = left; x < right; x++) gaps[x] = thickness;
+            for (int y = bottom - 1; y >= top; y--)
+            {
+                int row = y * Width;
+                for (int x = left; x < right; x++)
                 {
-                    int i = y * Width + x;
-                    if (layer[i] != 0) gap = 0;
-                    else if (gap < thickness) { gap++; rim[i] = true; }
+                    int i = row + x;
+                    if (layer[i] != 0) gaps[x] = 0;
+                    else if (gaps[x] < thickness) { gaps[x]++; rim[i] = true; }
                 }
             }
 

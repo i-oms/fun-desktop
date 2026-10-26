@@ -600,8 +600,9 @@ namespace IdleWalker.Domain
 
                 case Antic.Hiccups:
                     // Holding its breath between the jolts.
-                    target = HiccupJolt(t) > 0 ? Expression.Surprised : Expression.Focused;
-                    rate = HiccupJolt(t) > 0 ? 40 : 12;
+                    bool jolted = HiccupJolt(t) > 0;
+                    target = jolted ? Expression.Surprised : Expression.Focused;
+                    rate = jolted ? 40 : 12;
                     atCursor = true;
                     break;
 
@@ -2169,9 +2170,11 @@ namespace IdleWalker.Domain
 
         // The hiccups come at 0.4, 1.0, 1.7 and 2.3 s; each is a sharp jolt
         // that dies away over 0.14 s.
+        static readonly double[] HiccupTimes = { 0.4, 1.0, 1.7, 2.3 };
+
         static double HiccupJolt(double t)
         {
-            double[] at = { 0.4, 1.0, 1.7, 2.3 };
+            double[] at = HiccupTimes;
             for (int i = 0; i < at.Length; i++)
                 if (t >= at[i] && t < at[i] + 0.14) return 1 - (t - at[i]) / 0.14;
             return 0;

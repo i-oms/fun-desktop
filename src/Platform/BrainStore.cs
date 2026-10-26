@@ -145,37 +145,76 @@ namespace IdleWalker.Platform
         }
 
         /// <summary>
-        /// Packs the memories on this thread (the walkers' own - their state
-        /// is read here) and writes the file on a pool thread, so the
-        /// once-a-minute save never holds a frame for the disk, or for an
-        /// antivirus taking an interest in the new file.
+        /// Copies the memories on this thread (the walkers' own - their state
+        /// is read here; a few array copies) and turns them into text and
+        /// writes the file on a pool thread, so the once-a-minute save never
+        /// holds a frame for the formatting, the disk, or an antivirus taking
+        /// an interest in the new file.
         /// </summary>
         public static void SaveInBackground(Troupe troupe)
         {
-            string text = Pack(troupe);
-            if (text == null) return;
-            ThreadPool.QueueUserWorkItem(delegate { Write(text); });
+            List<KeyValuePair<string, Walker.MindCopy>> minds = Copy(troupe);
+            if (minds == null) return;
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                string text = Format(minds);
+                if (text != null) Write(text);
+            });
         }
 
         /// <summary>Every walker's lasting memory as the file's text; null if it could not be built.</summary>
         static string Pack(Troupe troupe)
         {
+            List<KeyValuePair<string, Walker.MindCopy>> minds = Copy(troupe);
+            return minds == null ? null : Format(minds);
+        }
+
+        /// <summary>Every walker's lasting memory, copied out, by name; null if it could not be copied.</summary>
+        static List<KeyValuePair<string, Walker.MindCopy>> Copy(Troupe troupe)
+        {
             try
             {
-                StringBuilder sb = new StringBuilder();
-                sb.Append(Header).Append("\n");
+                List<KeyValuePair<string, Walker.MindCopy>> minds = new List<KeyValuePair<string, Walker.MindCopy>>();
                 foreach (Walker walker in troupe.Walkers)
                 {
-                    string pack;
+                    Walker.MindCopy mind;
                     try
                     {
-                        pack = walker.PackMind();
+                        mind = walker.CopyMind();
                     }
                     catch (Exception)
                     {
                         continue;
                     }
-                    sb.Append("[").Append(walker.Personality.Name).Append("]\n");
+                    minds.Add(new KeyValuePair<string, Walker.MindCopy>(walker.Personality.Name, mind));
+                }
+                return minds;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+
+        /// <summary>The copied memories as the file's text; null if it could not be built.</summary>
+        static string Format(List<KeyValuePair<string, Walker.MindCopy>> minds)
+        {
+            try
+            {
+                StringBuilder sb = new StringBuilder();
+                sb.Append(Header).Append("\n");
+                foreach (KeyValuePair<string, Walker.MindCopy> mind in minds)
+                {
+                    string pack;
+                    try
+                    {
+                        pack = mind.Value.Pack();
+                    }
+                    catch (Exception)
+                    {
+                        continue;
+                    }
+                    sb.Append("[").Append(mind.Key).Append("]\n");
                     sb.Append(pack);
                 }
                 return sb.ToString();

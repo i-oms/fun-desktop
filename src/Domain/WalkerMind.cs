@@ -775,13 +775,31 @@ namespace IdleWalker.Domain
             return worst == null ? "-" : worst.personality.Name;
         }
 
+        // The local hour, asked for by every walker every tick: converting
+        // the clock to local time each time is wasted work, so it is worked
+        // out once and kept until the hour ends (or the clock is set back).
+        static int cachedHour = -1;
+        static long hourEndsUtc;
+
+        static int LocalHour()
+        {
+            long now = DateTime.UtcNow.Ticks;
+            if (cachedHour < 0 || now >= hourEndsUtc || now < hourEndsUtc - TimeSpan.TicksPerHour)
+            {
+                DateTime local = DateTime.Now;
+                cachedHour = local.Hour;
+                hourEndsUtc = now + (TimeSpan.TicksPerHour - local.Ticks % TimeSpan.TicksPerHour);
+            }
+            return cachedHour;
+        }
+
         /// <summary>0 by day, up to 1 in the deep night: the world has a rhythm too.</summary>
         static double NightTiredness()
         {
             int hour;
             try
             {
-                hour = DateTime.Now.Hour;
+                hour = LocalHour();
             }
             catch (Exception)
             {
@@ -957,112 +975,173 @@ namespace IdleWalker.Domain
         /// <summary>Packs this walker's lasting memory into key=value lines (no header).</summary>
         internal string PackMind()
         {
-            StringBuilder sb = new StringBuilder();
-            if (values != null)
+            return CopyMind().Pack();
+        }
+
+        /// <summary>
+        /// A copy of everything PackMind writes, taken on the thread that
+        /// owns the walker; it can then be turned into text anywhere. The
+        /// copying is cheap; the text (tens of thousands of numbers) is not,
+        /// so the background save does that part off the UI thread.
+        /// </summary>
+        internal MindCopy CopyMind()
+        {
+            MindCopy m = new MindCopy();
+            m.values = values == null ? null : (double[,])values.Clone();
+            m.fondness = new List<KeyValuePair<string, double>>(fondness.Count);
+            foreach (KeyValuePair<Walker, double> kv in fondness)
             {
-                // Sparse since v4: the fine table is mostly zero for a long
-                // time, so only the cells that have learned something are
-                // written, as index:value pairs.
-                sb.Append("vrows=").Append(values.GetLength(0)).Append("\n");
-                sb.Append("vcols=").Append(values.GetLength(1)).Append("\n");
-                StringBuilder v = new StringBuilder();
-                int cols = values.GetLength(1);
-                for (int r = 0; r < values.GetLength(0); r++)
-                    for (int c = 0; c < cols; c++)
+                if (kv.Key == null || kv.Key == this) continue;
+                m.fondness.Add(new KeyValuePair<string, double>(kv.Key.personality.Name, kv.Value));
+            }
+            m.place = (double[])place.Clone();
+            m.styleReady = styleReady;
+            m.style = (double[])style.Clone();
+            m.swaggerSeed = swaggerSeed;
+            m.fidgetSeed = fidgetSeed;
+            m.fidgetFreq = fidgetFreq;
+            m.trialBest = trialBest;
+            m.styleTrials = styleTrials;
+            m.useCount = useCount == null ? null : (int[])useCount.Clone();
+            m.lastChoice = lastChoice;
+            m.repeatCount = repeatCount;
+            m.optimism = optimism;
+            m.lifetimeDecisions = lifetimeDecisions;
+            m.totalReward = totalReward;
+            m.mlpW1 = mlpW1 == null ? null : (double[,])mlpW1.Clone();
+            m.mlpB1 = mlpB1 == null ? null : (double[])mlpB1.Clone();
+            m.mlpW2 = mlpW2 == null ? null : (double[,])mlpW2.Clone();
+            m.mlpB2 = mlpB2 == null ? null : (double[])mlpB2.Clone();
+            return m;
+        }
+
+        /// <summary>A walker's lasting memory, copied out (see <see cref="CopyMind"/>).</summary>
+        internal sealed class MindCopy
+        {
+            internal double[,] values;
+            internal List<KeyValuePair<string, double>> fondness;   // by name, without itself
+            internal double[] place;
+            internal bool styleReady;
+            internal double[] style;
+            internal double swaggerSeed, fidgetSeed, fidgetFreq, trialBest;
+            internal int styleTrials;
+            internal int[] useCount;
+            internal int lastChoice, repeatCount;
+            internal double optimism;
+            internal int lifetimeDecisions;
+            internal double totalReward;
+            internal double[,] mlpW1;
+            internal double[] mlpB1;
+            internal double[,] mlpW2;
+            internal double[] mlpB2;
+
+            /// <summary>The key=value lines (no header).</summary>
+            internal string Pack()
+            {
+                StringBuilder sb = new StringBuilder();
+                if (values != null)
+                {
+                    // Sparse since v4: the fine table is mostly zero for a long
+                    // time, so only the cells that have learned something are
+                    // written, as index:value pairs.
+                    sb.Append("vrows=").Append(values.GetLength(0)).Append("\n");
+                    sb.Append("vcols=").Append(values.GetLength(1)).Append("\n");
+                    StringBuilder v = new StringBuilder();
+                    int cols = values.GetLength(1);
+                    for (int r = 0; r < values.GetLength(0); r++)
+                        for (int c = 0; c < cols; c++)
+                        {
+                            double x = values[r, c];
+                            if (x == 0) continue;
+                            if (v.Length > 0) v.Append(",");
+                            v.Append((r * cols + c).ToString(CultureInfo.InvariantCulture)).Append(":").Append(Dbl(x));
+                        }
+                    sb.Append("vs=").Append(v.ToString()).Append("\n");
+                }
+                if (fondness.Count > 0)
+                {
+                    StringBuilder f = new StringBuilder();
+                    for (int i = 0; i < fondness.Count; i++)
                     {
-                        double x = values[r, c];
-                        if (x == 0) continue;
-                        if (v.Length > 0) v.Append(",");
-                        v.Append((r * cols + c).ToString(CultureInfo.InvariantCulture)).Append(":").Append(Dbl(x));
+                        if (i != 0) f.Append(";");
+                        f.Append(fondness[i].Key).Append(",").Append(Dbl(fondness[i].Value));
                     }
-                sb.Append("vs=").Append(v.ToString()).Append("\n");
-            }
-            if (fondness.Count > 0)
-            {
-                StringBuilder f = new StringBuilder();
-                bool first = true;
-                foreach (KeyValuePair<Walker, double> kv in fondness)
-                {
-                    if (kv.Key == null || kv.Key == this) continue;
-                    if (!first) f.Append(";");
-                    first = false;
-                    f.Append(kv.Key.personality.Name).Append(",").Append(Dbl(kv.Value));
+                    sb.Append("fond=").Append(f.ToString()).Append("\n");
                 }
-                if (f.Length > 0) sb.Append("fond=").Append(f.ToString()).Append("\n");
-            }
-            StringBuilder p = new StringBuilder();
-            for (int i = 0; i < place.Length; i++)
-            {
-                if (i != 0) p.Append(",");
-                p.Append(Dbl(place[i]));
-            }
-            sb.Append("place=").Append(p.ToString()).Append("\n");
-            if (styleReady)
-            {
-                StringBuilder s = new StringBuilder();
-                for (int i = 0; i < StyleDims; i++)
+                StringBuilder p = new StringBuilder();
+                for (int i = 0; i < place.Length; i++)
                 {
-                    if (i != 0) s.Append(",");
-                    s.Append(Dbl(style[i]));
+                    if (i != 0) p.Append(",");
+                    p.Append(Dbl(place[i]));
                 }
-                sb.Append("style=").Append(s.ToString()).Append("\n");
-                sb.Append("seeds=").Append(Dbl(swaggerSeed)).Append(",").Append(Dbl(fidgetSeed))
-                    .Append(",").Append(Dbl(fidgetFreq)).Append(",").Append(Dbl(trialBest))
-                    .Append(",").Append(styleTrials.ToString(CultureInfo.InvariantCulture)).Append("\n");
-            }
-            if (useCount != null)
-            {
-                StringBuilder u = new StringBuilder();
-                for (int i = 0; i < useCount.Length; i++)
+                sb.Append("place=").Append(p.ToString()).Append("\n");
+                if (styleReady)
                 {
-                    if (i != 0) u.Append(",");
-                    u.Append(useCount[i].ToString(CultureInfo.InvariantCulture));
+                    StringBuilder s = new StringBuilder();
+                    for (int i = 0; i < StyleDims; i++)
+                    {
+                        if (i != 0) s.Append(",");
+                        s.Append(Dbl(style[i]));
+                    }
+                    sb.Append("style=").Append(s.ToString()).Append("\n");
+                    sb.Append("seeds=").Append(Dbl(swaggerSeed)).Append(",").Append(Dbl(fidgetSeed))
+                        .Append(",").Append(Dbl(fidgetFreq)).Append(",").Append(Dbl(trialBest))
+                        .Append(",").Append(styleTrials.ToString(CultureInfo.InvariantCulture)).Append("\n");
                 }
-                sb.Append("use=").Append(u.ToString()).Append("\n");
-            }
-            sb.Append("last=").Append(lastChoice.ToString(CultureInfo.InvariantCulture))
-                .Append(",").Append(repeatCount.ToString(CultureInfo.InvariantCulture)).Append("\n");
-            sb.Append("opt=").Append(Dbl(optimism)).Append("\n");
-            sb.Append("exp=").Append(lifetimeDecisions.ToString(CultureInfo.InvariantCulture)).Append("\n");
-            sb.Append("rew=").Append(Dbl(totalReward)).Append("\n");
-            if (mlpW1 != null && mlpB1 != null && mlpW2 != null && mlpB2 != null)
-            {
-                int mn = mlpB2.Length;
-                sb.Append("mshape=").Append(MlpFeats.ToString(CultureInfo.InvariantCulture))
-                    .Append(",").Append(MlpHidden.ToString(CultureInfo.InvariantCulture))
-                    .Append(",").Append(mn.ToString(CultureInfo.InvariantCulture)).Append("\n");
-                StringBuilder w1 = new StringBuilder();
-                for (int f = 0; f < MlpFeats; f++)
+                if (useCount != null)
+                {
+                    StringBuilder u = new StringBuilder();
+                    for (int i = 0; i < useCount.Length; i++)
+                    {
+                        if (i != 0) u.Append(",");
+                        u.Append(useCount[i].ToString(CultureInfo.InvariantCulture));
+                    }
+                    sb.Append("use=").Append(u.ToString()).Append("\n");
+                }
+                sb.Append("last=").Append(lastChoice.ToString(CultureInfo.InvariantCulture))
+                    .Append(",").Append(repeatCount.ToString(CultureInfo.InvariantCulture)).Append("\n");
+                sb.Append("opt=").Append(Dbl(optimism)).Append("\n");
+                sb.Append("exp=").Append(lifetimeDecisions.ToString(CultureInfo.InvariantCulture)).Append("\n");
+                sb.Append("rew=").Append(Dbl(totalReward)).Append("\n");
+                if (mlpW1 != null && mlpB1 != null && mlpW2 != null && mlpB2 != null)
+                {
+                    int mn = mlpB2.Length;
+                    sb.Append("mshape=").Append(MlpFeats.ToString(CultureInfo.InvariantCulture))
+                        .Append(",").Append(MlpHidden.ToString(CultureInfo.InvariantCulture))
+                        .Append(",").Append(mn.ToString(CultureInfo.InvariantCulture)).Append("\n");
+                    StringBuilder w1 = new StringBuilder();
+                    for (int f = 0; f < MlpFeats; f++)
+                        for (int h = 0; h < MlpHidden; h++)
+                        {
+                            if (f != 0 || h != 0) w1.Append(",");
+                            w1.Append(Dbl(mlpW1[f, h]));
+                        }
+                    sb.Append("mw1=").Append(w1.ToString()).Append("\n");
+                    StringBuilder b1 = new StringBuilder();
                     for (int h = 0; h < MlpHidden; h++)
                     {
-                        if (f != 0 || h != 0) w1.Append(",");
-                        w1.Append(Dbl(mlpW1[f, h]));
+                        if (h != 0) b1.Append(",");
+                        b1.Append(Dbl(mlpB1[h]));
                     }
-                sb.Append("mw1=").Append(w1.ToString()).Append("\n");
-                StringBuilder b1 = new StringBuilder();
-                for (int h = 0; h < MlpHidden; h++)
-                {
-                    if (h != 0) b1.Append(",");
-                    b1.Append(Dbl(mlpB1[h]));
-                }
-                sb.Append("mb1=").Append(b1.ToString()).Append("\n");
-                StringBuilder w2 = new StringBuilder();
-                for (int h = 0; h < MlpHidden; h++)
+                    sb.Append("mb1=").Append(b1.ToString()).Append("\n");
+                    StringBuilder w2 = new StringBuilder();
+                    for (int h = 0; h < MlpHidden; h++)
+                        for (int a = 0; a < mn; a++)
+                        {
+                            if (h != 0 || a != 0) w2.Append(",");
+                            w2.Append(Dbl(mlpW2[h, a]));
+                        }
+                    sb.Append("mw2=").Append(w2.ToString()).Append("\n");
+                    StringBuilder b2 = new StringBuilder();
                     for (int a = 0; a < mn; a++)
                     {
-                        if (h != 0 || a != 0) w2.Append(",");
-                        w2.Append(Dbl(mlpW2[h, a]));
+                        if (a != 0) b2.Append(",");
+                        b2.Append(Dbl(mlpB2[a]));
                     }
-                sb.Append("mw2=").Append(w2.ToString()).Append("\n");
-                StringBuilder b2 = new StringBuilder();
-                for (int a = 0; a < mn; a++)
-                {
-                    if (a != 0) b2.Append(",");
-                    b2.Append(Dbl(mlpB2[a]));
+                    sb.Append("mb2=").Append(b2.ToString()).Append("\n");
                 }
-                sb.Append("mb2=").Append(b2.ToString()).Append("\n");
+                return sb.ToString();
             }
-            return sb.ToString();
         }
 
         /// <summary>How many learned tastes have moved from zero: a rough "how much it knows".</summary>

@@ -1410,8 +1410,10 @@ namespace IdleWalker.Domain
             height = 0;
             distance = double.MaxValue;
             double reach = 400 * sizeFactor;
-            foreach (int edge in world.MonitorEdges)
+            int[] edges = world.MonitorEdges;
+            for (int i = 0; i < edges.Length; i++)
             {
+                int edge = edges[i];
                 double d = (edge - cx) * facing;
                 if (d <= 0 || d > reach || d >= distance) continue;
                 double beyond = world.GroundAt(facing > 0 ? edge : edge - 1);

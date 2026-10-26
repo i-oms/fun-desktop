@@ -31,6 +31,7 @@ namespace IdleWalker.Platform
         readonly object gate = new object();
         int percent;
         int pending = -1;                    // the value waiting to be written, or -1
+        List<ManagementObject> wmiTargets;   // the panel's WMI methods, found on the first write (writer thread only)
         bool writing;
         bool disposed;
 
@@ -108,6 +109,7 @@ namespace IdleWalker.Platform
                 disposed = true;
             }
             if (ddc) DestroyPhysicalMonitor(physical);
+            ReleaseWmi();
         }
 
         // ---- Finding the displays ----
@@ -202,14 +204,39 @@ namespace IdleWalker.Platform
             return -1;
         }
 
-        static void WmiSet(int percent)
+        // A slider drag is a stream of writes: the WMI query that finds the
+        // panel's methods is the slow part, so it runs once and its objects
+        // are kept; if a write through them fails, they are looked up afresh.
+        void WmiSet(int percent)
         {
+            object[] args = { (uint)1, (byte)percent };
+            if (wmiTargets != null)
+            {
+                try
+                {
+                    foreach (ManagementObject o in wmiTargets) o.InvokeMethod("WmiSetBrightness", args);
+                    return;
+                }
+                catch (Exception)
+                {
+                    ReleaseWmi();
+                }
+            }
+            List<ManagementObject> found = new List<ManagementObject>();
             using (ManagementObjectSearcher searcher = new ManagementObjectSearcher("root\\WMI", "SELECT * FROM WmiMonitorBrightnessMethods WHERE Active=TRUE"))
             using (ManagementObjectCollection results = searcher.Get())
             {
-                foreach (ManagementObject o in results)
-                    using (o) o.InvokeMethod("WmiSetBrightness", new object[] { (uint)1, (byte)percent });
+                foreach (ManagementObject o in results) found.Add(o);
             }
+            wmiTargets = found;
+            foreach (ManagementObject o in found) o.InvokeMethod("WmiSetBrightness", args);
+        }
+
+        void ReleaseWmi()
+        {
+            if (wmiTargets == null) return;
+            foreach (ManagementObject o in wmiTargets) o.Dispose();
+            wmiTargets = null;
         }
 
         // ---- dxva2: the monitor configuration API (DDC/CI) ----

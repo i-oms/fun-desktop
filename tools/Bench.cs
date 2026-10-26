@@ -11,7 +11,8 @@ namespace IdleWalker.Tools
     {
         public int Left { get { return 0; } }
         public int Right { get { return 1920; } }
-        public IEnumerable<int> MonitorEdges { get { return new int[] { 0, 1920 }; } }
+        static readonly int[] edges = { 0, 1920 };
+        public int[] MonitorEdges { get { return edges; } }
         public Rectangle MonitorBoundsAt(Point point) { return new Rectangle(0, 0, 1920, 1040); }
         public double GroundAt(double x) { return 1000; }
         public int ScaleAt(double x) { return 3; }

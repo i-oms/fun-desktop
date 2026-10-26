@@ -295,10 +295,16 @@ namespace IdleWalker.App
 
         // ---- Helpers ----
 
+        // Letting go of a display waits for a write still in flight (a DDC/CI
+        // write can take a tenth of a second, a WMI one longer), so it is
+        // done on a pool thread: closing the panel never stalls the UI.
         static void Release(List<BrightnessDisplay> list)
         {
             if (list == null) return;
-            foreach (BrightnessDisplay d in list) d.Dispose();
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                foreach (BrightnessDisplay d in list) d.Dispose();
+            });
         }
 
         int Px(double at100)

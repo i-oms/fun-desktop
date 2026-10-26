@@ -75,7 +75,7 @@ namespace IdleWalker.Platform
 
         public int Left { get { return left; } }
         public int Right { get { return right; } }
-        public IEnumerable<int> MonitorEdges { get { return edges; } }
+        public int[] MonitorEdges { get { return edges; } }
 
         public Rectangle MonitorBoundsAt(Point point)
         {

@@ -21,6 +21,9 @@ namespace IdleWalker.Rendering
     /// </summary>
     sealed class PantherPainter : SolidPainter
     {
+        // One painter per thread, set up afresh for every frame.
+        [ThreadStatic] static PantherPainter cached;
+
         public const double Height = 26;
 
         // The DePatie-Freleng panther: all pink, nothing else - no lighter
@@ -63,20 +66,20 @@ namespace IdleWalker.Rendering
         const double NoseR = 0.08, NoseG = 0.06, NoseB = 0.08;
         const double IrisYR = 0.99, IrisYG = 0.86, IrisYB = 0.30;
 
-        readonly Pose pose;
-        readonly Expression face;
-        readonly double yaw, sinY, cosY;
-        readonly double headYaw, sinH, cosH;
-        readonly double lean, dip;
+        Pose pose;
+        Expression face;
+        double yaw, sinY, cosY;
+        double headYaw, sinH, cosH;
+        double lean, dip;
 
         readonly double[] eyeAlpha = new double[2], eyeU = new double[2], eyeK = new double[2], eyeVis = new double[2];
-        readonly int firstEye;
+        int firstEye;
 
         readonly double[] earU = new double[2], earZ = new double[2];
 
         readonly double[] hipU = new double[2], kneeU = new double[2], kneeV = new double[2],
                           ankleU = new double[2], ankleV = new double[2], legZ = new double[2];
-        readonly double pawLen, toeDir;
+        double pawLen, toeDir;
 
         readonly double[] shU = new double[2], shZ = new double[2],
                           elbU = new double[2], elbV = new double[2], elbZ = new double[2],
@@ -84,21 +87,37 @@ namespace IdleWalker.Rendering
                           handU = new double[2], handV = new double[2], handZ = new double[2],
                           armLo = new double[2], armHi = new double[2], armVlo = new double[2], armVhi = new double[2];
 
-        readonly bool decorated;
-        readonly double topV;
-        readonly double mouthU;
-        readonly double snoutU0, snoutV0, snoutU1, snoutV1;   // the snout's base on the face and its tip, on screen
-        readonly double tailSway;
+        bool decorated;
+        double topV;
+        double mouthU;
+        double snoutU0, snoutV0, snoutU1, snoutV1;   // the snout's base on the face and its tip, on screen
+        double tailSway;
 
         // Tail centreline resampled along a smooth spline: one flowing curve,
         // never straight rods. Filled in BuildTail once per pose.
         const int TailSpans = 5, TailPer = 4, TailSamples = TailSpans * TailPer;
         readonly double[] tailU = new double[TailSamples + 1], tailV = new double[TailSamples + 1];
         double tailLo, tailHi, tailVlo, tailVhi;
+        readonly double[] tailDu = new double[TailSamples], tailDv = new double[TailSamples], tailLen2 = new double[TailSamples];
+        readonly double[] knotU = new double[6], knotV = new double[6];   // the spline's control points
 
-        PantherPainter(Pose pose, bool faceLeft, double px)
-            : base(faceLeft, px, ArmRadius)
+        // Fixed for the frame: the eyes' cosines and sines, where each pupil
+        // sits, and the box the whiskers fit in.
+        readonly double[] eyeCos = new double[2], eyeSin = new double[2];
+        readonly double[] gazeU = new double[2], gazeV = new double[2];
+        double pupilR;
+        double whiskLo, whiskHi;
+
+        // The torso's cross-section depends on the row only: the last row's,
+        // and the cosines of the angles round the body where the darker back
+        // starts and ends (Torso only needs the exact angle in between).
+        const double BackArc = 2.2;
+        double rowV, rowTorsoR, rowDyEff, rowCosFront, rowCosBack;
+
+        void Init(Pose pose, bool faceLeft, double px)
         {
+            Setup(faceLeft, px, ArmRadius);
+            rowV = double.NaN;
             this.pose = pose;
             face = pose.Face;
             lean = pose.Lean;
@@ -122,6 +141,41 @@ namespace IdleWalker.Rendering
             PlaceEye(0, -EyeAngle * Deg);
             PlaceEye(1, EyeAngle * Deg);
             firstEye = Math.Cos(eyeAlpha[0]) < Math.Cos(eyeAlpha[1]) ? 0 : 1;
+            pupilR = IrisR * 0.62 * face.PupilSize + 0.04;
+            double reach = EyeRx - pupilR - 0.08;
+            for (int i = 0; i < 2; i++)
+            {
+                eyeCos[i] = Math.Cos(eyeAlpha[i]);
+                eyeSin[i] = Math.Sin(eyeAlpha[i]);
+                double ox = pose.GazeX * reach * 0.9 + face.PupilDx * 0.4;
+                double oy = pose.GazeY * (EyeRy - pupilR) * 0.8 + face.PupilDy * 0.3;
+                ox -= (i == 1 ? 1 : -1) * face.CrossEye * 0.3;
+                double om = Math.Sqrt(ox * ox + oy * oy);
+                if (om > reach) { ox *= reach / om; oy *= reach / om; }
+                gazeU[i] = ox;
+                gazeV[i] = oy;
+            }
+
+            // The whiskers' box: every root and tip, padded by their
+            // thickness and a pixel for the soft edge.
+            {
+                double rootU = (snoutU0 + snoutU1) / 2;
+                double k = cosH > 0.35 ? cosH : 0.35;
+                whiskLo = double.MaxValue;
+                whiskHi = double.MinValue;
+                for (int side = -1; side <= 1; side += 2)
+                {
+                    double ru = rootU + side * 0.75 * k;
+                    for (int w = -1; w <= 1; w++)
+                    {
+                        double tipU = ru + side * (2.0 + Math.Abs(w) * 0.2) * (0.4 + 0.6 * k) - 0.6 * sinH;
+                        whiskLo = Math.Min(whiskLo, Math.Min(ru, tipU));
+                        whiskHi = Math.Max(whiskHi, Math.Max(ru, tipU));
+                    }
+                }
+                whiskLo -= 0.03 + px;
+                whiskHi += 0.03 + px;
+            }
 
             for (int i = 0; i < 2; i++)
             {
@@ -198,7 +252,7 @@ namespace IdleWalker.Rendering
         /// </summary>
         void BuildTail()
         {
-            double[] cu = new double[6], cv = new double[6];
+            double[] cu = knotU, cv = knotV;
             double rootU = -2.0 * sinY;
             cu[0] = rootU;                        cv[0] = 11.5;
             cu[1] = rootU - 3.0 + tailSway * 0.4; cv[1] = 9.8;
@@ -223,6 +277,12 @@ namespace IdleWalker.Rendering
             }
             tailU[TailSamples] = cu[5];
             tailV[TailSamples] = cv[5];
+            for (int j = 0; j < TailSamples; j++)
+            {
+                tailDu[j] = tailU[j + 1] - tailU[j];
+                tailDv[j] = tailV[j + 1] - tailV[j];
+                tailLen2[j] = tailDu[j] * tailDu[j] + tailDv[j] * tailDv[j];
+            }
         }
 
         static double Catmull(double p0, double p1, double p2, double p3, double t)
@@ -276,7 +336,8 @@ namespace IdleWalker.Rendering
         {
             double sx = scale * pose.StretchX, sy = scale * pose.StretchY;
             double px = 1 / Math.Min(sx, sy);
-            PantherPainter painter = new PantherPainter(pose, faceLeft, px);
+            PantherPainter painter = cached ?? (cached = new PantherPainter());
+            painter.Init(pose, faceLeft, px);
 
             int left = Math.Max(0, (int)Math.Floor(centreX - 12.5 * sx));
             int right = Math.Min(surface.Width, (int)Math.Ceiling(centreX + 12.5 * sx));
@@ -284,39 +345,34 @@ namespace IdleWalker.Rendering
             int bottom = Math.Min(surface.Height, (int)Math.Ceiling(soleY + 0.5));
             if (left >= right || top >= bottom) return;
 
-            int[] layer = surface.Layer;
-            int width = surface.Width;
-            double flip = faceLeft ? -1 : 1;
-            for (int y = top; y < bottom; y++)
-            {
-                double v = (soleY - (y + 0.5)) / sy;
-                int row = y * width;
-                for (int x = left; x < right; x++)
-                {
-                    double u = ((x + 0.5) - centreX) / sx * flip;
-                    int argb = painter.Shade(u, v);
-                    if (argb != 0) layer[row + x] = argb;
-                }
-            }
-            surface.Touch(left, top, right, bottom);
+            painter.Raster(surface, left, top, right, bottom, centreX, soleY, sx, sy);
         }
 
-        int Shade(double u, double v)
+        protected override int Shade(double u, double v)
         {
             Begin();
 
             double vb = v + pose.BodyDy;
             double ub = u - lean * 0.14 * Math.Max(0, v - 10);
 
-            double axisV = vb < TorsoBottom ? TorsoBottom : vb > TorsoTop ? TorsoTop : vb;
-            double t = (axisV - TorsoBottom) / (TorsoTop - TorsoBottom);
-            double torsoR = HipR + (ChestR - HipR) * t;
-            // Narrow waist: pinch the middle in a little.
-            torsoR -= 0.35 * Math.Sin(t * Math.PI);
-            // Above the shoulders the dome is squashed to ShoulderCap so the
-            // neck stands clear of the chest instead of lying along it.
-            double tdy = vb - axisV;
-            double dyEff = vb > TorsoTop ? tdy * torsoR / ShoulderCap : tdy;
+            if (vb != rowV)
+            {
+                double axisV = vb < TorsoBottom ? TorsoBottom : vb > TorsoTop ? TorsoTop : vb;
+                double t = (axisV - TorsoBottom) / (TorsoTop - TorsoBottom);
+                double r = HipR + (ChestR - HipR) * t;
+                // Narrow waist: pinch the middle in a little.
+                r -= 0.35 * Math.Sin(t * Math.PI);
+                // Above the shoulders the dome is squashed to ShoulderCap so the
+                // neck stands clear of the chest instead of lying along it.
+                double tdy = vb - axisV;
+                rowDyEff = vb > TorsoTop ? tdy * r / ShoulderCap : tdy;
+                rowTorsoR = r;
+                rowCosFront = Math.Cos((BackArc - 0.5 * px) / r);
+                rowCosBack = Math.Cos((BackArc + 0.5 * px) / r);
+                rowV = vb;
+            }
+            double torsoR = rowTorsoR;
+            double dyEff = rowDyEff;
             double torsoDist = Math.Sqrt(ub * ub + dyEff * dyEff);
             double bulge = torsoR * torsoR - torsoDist * torsoDist;
             bodyZ = bulge > 0 ? Math.Sqrt(bulge) : 0;
@@ -418,16 +474,26 @@ namespace IdleWalker.Rendering
             double nx, ny, nz;
             Normal(u, dy, r, out nx, out ny, out nz);
 
-            double phi = Math.Atan2(nx, nz) - yaw;
-            if (phi > Math.PI) phi -= 2 * Math.PI; else if (phi < -Math.PI) phi += 2 * Math.PI;
-            double arc = r * phi;
-            double a = Math.Abs(arc);
-
             // Sleek pink coat, plain as the cartoon's: no chest patch, no
             // sheen; a slightly deeper pink down the back so the round reads.
+            // The back starts BackArc round from the front. The cosine of
+            // the angle round the body says at once whether a pixel is well
+            // in front of that (none of it) or well behind (all of it); only
+            // across the soft edge between is the angle itself worked out.
+            double back;
+            double n = Math.Sqrt(nx * nx + nz * nz);
+            double c = nx * sinY + nz * cosY;
+            if (c > n * rowCosFront + 1e-9) back = 0;
+            else if (c < n * rowCosBack - 1e-9) back = 1;
+            else
+            {
+                double phi = Math.Atan2(nx, nz) - yaw;
+                if (phi > Math.PI) phi -= 2 * Math.PI; else if (phi < -Math.PI) phi += 2 * Math.PI;
+                double arc = r * phi;
+                back = Cov(BackArc - Math.Abs(arc));
+            }
             double cr = FurR, cg = FurG, cb = FurB;
             double spec = 0.30, shine = 18;
-            double back = Cov(2.2 - a);
             Mix(ref cr, ref cg, ref cb, ref spec, ref shine, FurDarkR, FurDarkG, FurDarkB, 0.28, 16, back * 0.35 * cov);
 
             double lr, lg, lb;
@@ -496,7 +562,7 @@ namespace IdleWalker.Rendering
         {
             double vis = eyeVis[i];
             if (vis <= 0) return;
-            double k = eyeK[i], alpha = eyeAlpha[i];
+            double k = eyeK[i];
             bool near = i != firstEye;
 
             double fu = eyeU[i] + dip * 0.5 * sinH, fv = EyeV - dip * 0.8;
@@ -510,20 +576,13 @@ namespace IdleWalker.Rendering
 
             double nx, ny, nz;
             Normal(dx, dy, EyeRx * 1.6, out nx, out ny, out nz);
-            Turn(ref nx, ref nz, alpha);
+            Turn(ref nx, ref nz, eyeCos[i], eyeSin[i]);
             double r, g, b;
             // The cartoon's eye: the whole eye is yellow, with a round black
             // pupil, under a heavy half-closed lid - the cool look.
             Lit(IrisYR, IrisYG, IrisYB, nx, ny, nz, 0.4, 24, out r, out g, out b);
 
-            double pupilR = IrisR * 0.62 * face.PupilSize + 0.04;
-            double reach = EyeRx - pupilR - 0.08;
-            double ox = pose.GazeX * reach * 0.9 + face.PupilDx * 0.4;
-            double oy = pose.GazeY * (EyeRy - pupilR) * 0.8 + face.PupilDy * 0.3;
-            ox -= (i == 1 ? 1 : -1) * face.CrossEye * 0.3;
-            double om = Math.Sqrt(ox * ox + oy * oy);
-            if (om > reach) { ox *= reach / om; oy *= reach / om; }
-            double ix = dx - ox, iy = dy - oy;
+            double ix = dx - gazeU[i], iy = dy - gazeV[i];
             double covPupil = Cov(Squeezed(ix, iy, k, pupilR));
             if (covPupil > 0)
             {
@@ -570,16 +629,16 @@ namespace IdleWalker.Rendering
         {
             double baseV = BrowV - dip * 0.8 + face.BrowRaise * 0.35;
             if (Math.Abs(v - baseV) > 1.2) return;
-            Brow(u, v, eyeAlpha[0], -1, baseV, eyeVis[0]);
-            Brow(u, v, eyeAlpha[1], 1, baseV + face.BrowAsym * 0.3, eyeVis[1]);
+            Brow(u, v, 0, -1, baseV, eyeVis[0]);
+            Brow(u, v, 1, 1, baseV + face.BrowAsym * 0.3, eyeVis[1]);
         }
 
-        void Brow(double u, double v, double alpha, double outward, double cy, double show)
+        void Brow(double u, double v, int i, double outward, double cy, double show)
         {
             if (show <= 0) return;
-            double k = Math.Cos(alpha);
+            double k = eyeCos[i];
             if (k < 0.2) return;
-            double ex = (HeadRx + 0.1) * Math.Sin(alpha) + dip * 0.5 * sinH;
+            double ex = (HeadRx + 0.1) * eyeSin[i] + dip * 0.5 * sinH;
             double ax = ex - outward * 0.9 * k, ay = cy - face.BrowAngle * 0.4 - 0.06;
             double bx = ex + outward * 0.9 * k, by = cy + face.BrowAngle * 0.4 - 0.06;
             double qx, qy, tt;
@@ -694,7 +753,7 @@ namespace IdleWalker.Rendering
             // Three long thin whiskers a side, from the snout's cheeks; from
             // the side only the near ones show, sweeping back past the face.
             double rootV = (snoutV0 + snoutV1) / 2 - 0.1;
-            if (Math.Abs(v - rootV) > 1.8) return;
+            if (Math.Abs(v - rootV) > 1.8 || u < whiskLo || u > whiskHi) return;
             double qx, qy, tt;
             double rootU = (snoutU0 + snoutU1) / 2;
             double k = cosH > 0.35 ? cosH : 0.35;
@@ -749,14 +808,21 @@ namespace IdleWalker.Rendering
             // centreline, then a single lighting pass - so neither straight
             // joints nor caterpillar bands can show.
             if (u < tailLo - 1.2 || u > tailHi + 1.2 || v < tailVlo - 1.2 || v > tailVhi + 1.2) return;
+            // Squared distances to each link (the spans worked out per
+            // frame), one square root for the nearest.
             double best = double.MaxValue, qx = 0, qy = 0, qt = 0;
             int hit = 0;
             for (int i = 0; i < TailSamples; i++)
             {
-                double sx, sy, st;
-                double d = Seg(u, v, tailU[i], tailV[i], tailU[i + 1], tailV[i + 1], out sx, out sy, out st);
-                if (d < best) { best = d; qx = sx; qy = sy; qt = st; hit = i; }
+                double ax = tailU[i], ay = tailV[i], abx = tailDu[i], aby = tailDv[i], len2 = tailLen2[i];
+                double st = len2 > 0 ? ((u - ax) * abx + (v - ay) * aby) / len2 : 0;
+                if (st < 0) st = 0; else if (st > 1) st = 1;
+                double sx = ax + abx * st, sy = ay + aby * st;
+                double dx = u - sx, dy = v - sy;
+                double d2 = dx * dx + dy * dy;
+                if (d2 < best) { best = d2; qx = sx; qy = sy; qt = st; hit = i; }
             }
+            best = Math.Sqrt(best);
             double g = (hit + qt) / TailSamples;
             double radius = 0.42 - 0.22 * g;
             double cov = Cov(best - radius);

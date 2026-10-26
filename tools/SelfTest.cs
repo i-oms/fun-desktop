@@ -12,15 +12,9 @@ namespace IdleWalker.Tools
     {
         public int Left { get { return 0; } }
         public int Right { get { return 1920; } }
-        public IEnumerable<int> MonitorEdges
+        public int[] MonitorEdges
         {
-            get
-            {
-                List<int> edges = new List<int>();
-                edges.Add(0);
-                edges.Add(1920);
-                return edges;
-            }
+            get { return new int[] { 0, 1920 }; }
         }
         public Rectangle MonitorBoundsAt(Point point)
         {

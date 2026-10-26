@@ -48,6 +48,9 @@ namespace IdleWalker.Rendering
     /// </summary>
     sealed class BirdPainter : SolidPainter
     {
+        // One painter per thread, set up afresh for every frame.
+        [ThreadStatic] static BirdPainter cached;
+
         public const double Height = 14;
 
         enum Shape { Round, Triangle, Egg, Square }
@@ -60,51 +63,61 @@ namespace IdleWalker.Rendering
         const double BeakV = 7.6;
         const double CrestV = 11.1;
 
-        readonly Pose pose;
-        readonly Expression face;
-        readonly BirdKind kind;
-        readonly Shape shape;
-        readonly double yaw, sinY, cosY;
-        readonly double lean;
-        readonly double grow;             // 1, or more when blown up (Bubbles)
+        Pose pose;
+        Expression face;
+        BirdKind kind;
+        Shape shape;
+        double yaw, sinY, cosY;
+        double lean;
+        double grow;             // 1, or more when blown up (Bubbles)
 
         // The body for this kind.
-        readonly double bodyV, bodyRx, bodyRy;          // round, square and egg: an ellipse (egg: narrower at the top)
-        readonly double eggTaper;                       // egg: how much the top narrows, 0..1
-        readonly double triBase, triTop, triV0, triV1, triRound;   // triangle: half-widths and heights of the base and apex, corner rounding
-        readonly double faceLift;                       // the face sits this much higher than on Red
+        double bodyV, bodyRx, bodyRy;          // round, square and egg: an ellipse (egg: narrower at the top)
+        double eggTaper;                       // egg: how much the top narrows, 0..1
+        double triBase, triTop, triV0, triV1, triRound;   // triangle: half-widths and heights of the base and apex, corner rounding
+        double faceLift;                       // the face sits this much higher than on Red
 
         // Colours for this kind.
-        readonly double bodyR, bodyG, bodyB;
-        readonly double bellyR, bellyG, bellyB;
-        readonly double beakR, beakG, beakB;
-        readonly double beakR2, beakG2, beakB2;
-        readonly double tailR, tailG, tailB;
-        readonly double crestR, crestG, crestB;
-        readonly double browR, browG, browB;
-        readonly double irisR, irisG, irisB;
+        double bodyR, bodyG, bodyB;
+        double bellyR, bellyG, bellyB;
+        double beakR, beakG, beakB;
+        double beakR2, beakG2, beakB2;
+        double tailR, tailG, tailB;
+        double crestR, crestG, crestB;
+        double browR, browG, browB;
+        double irisR, irisG, irisB;
 
         // Shape numbers for this kind.
-        readonly bool hasBelly;
-        readonly double browWeight;       // thickness of the brows; 0 for none
-        readonly double eyeRx, eyeRy;
-        readonly double beakScale, beakLong;
-        readonly int tailCount;
-        readonly double tailLift;         // how far the tail feathers angle upwards
+        bool hasBelly;
+        double browWeight;       // thickness of the brows; 0 for none
+        double eyeRx, eyeRy;
+        double beakScale, beakLong;
+        int tailCount;
+        double tailLift;         // how far the tail feathers angle upwards
 
         // Worked out once per frame.
-        readonly double eyeV, browV, beakV, crestV;
-        readonly double bellyU, bellyRx;
+        double eyeV, browV, beakV, crestV;
+        double bellyU, bellyRx;
         readonly double[] eyeAlpha = new double[2], eyeU = new double[2], eyeK = new double[2], eyeVis = new double[2];
-        readonly int firstEye;
-        readonly bool decorated;
-        readonly double topV;
-        readonly double beakU, beakW;
-        readonly double crestU;
+        int firstEye;
+        bool decorated;
+        double topV;
+        double beakU, beakW;
+        double crestU;
 
-        BirdPainter(Pose pose, Look look, bool faceLeft, double px)
-            : base(faceLeft, px, 5.0)
+        // Fixed for the frame: the cosines and sines of the eyes' angles,
+        // where each iris sits, the tail's root, the sway of tail and crest.
+        readonly double[] eyeCos = new double[2], eyeSin = new double[2];
+        readonly double[] gazeU = new double[2], gazeV = new double[2];
+        double tailX, tailSway, crestSway;
+
+        // The body's width depends on the row only: the last row's answers.
+        double eggAt, eggRx, halfAt, half;
+
+        void Init(Pose pose, Look look, bool faceLeft, double px)
         {
+            Setup(faceLeft, px, 5.0);
+            eggAt = halfAt = double.NaN;
             this.pose = pose;
             face = pose.Face;
             kind = look.Kind;
@@ -268,6 +281,22 @@ namespace IdleWalker.Rendering
             PlaceEye(0, -EyeAngle * Deg, spread);
             PlaceEye(1, EyeAngle * Deg, spread);
             firstEye = Math.Cos(eyeAlpha[0]) < Math.Cos(eyeAlpha[1]) ? 0 : 1;
+            double reach = eyeRx - IrisR - 0.05;
+            for (int i = 0; i < 2; i++)
+            {
+                eyeCos[i] = Math.Cos(eyeAlpha[i]);
+                eyeSin[i] = Math.Sin(eyeAlpha[i]);
+                double ox = pose.GazeX * reach * 0.9 + face.PupilDx * 0.4;
+                double oy = pose.GazeY * (eyeRy - IrisR * 0.6) * 0.8 + face.PupilDy * 0.3;
+                ox -= (i == 1 ? 1 : -1) * face.CrossEye * 0.3;
+                double om = Math.Sqrt(ox * ox + oy * oy);
+                if (om > reach) { ox *= reach / om; oy *= reach / om; }
+                gazeU[i] = ox;
+                gazeV[i] = oy;
+            }
+            tailX = -HalfWidthAt(7.2) * 0.85;
+            tailSway = pose.Walking ? Math.Sin(pose.WalkPhase * 2 * Math.PI) * 0.25 : 0;
+            crestSway = pose.Walking ? Math.Sin(pose.WalkPhase * 2 * Math.PI + 1) * 0.15 : 0;
 
             double beakHalf = HalfWidthAt(beakV);
             beakU = (beakHalf + 0.4) * sinY + 0.5 * (beakScale * beakLong - 1) * sinY;
@@ -324,13 +353,24 @@ namespace IdleWalker.Rendering
         /// <summary>The egg's half-width scale at height v: 1 at the middle, narrower towards the top.</summary>
         double EggRx(double v)
         {
+            if (v == eggAt) return eggRx;
             double t = (v - bodyV) / (bodyRy * grow);
             if (t < -1) t = -1; else if (t > 1) t = 1;
-            return bodyRx * grow * (1 - eggTaper * (t + 1) / 2 * 0.9 + eggTaper * 0.25);
+            eggAt = v;
+            eggRx = bodyRx * grow * (1 - eggTaper * (t + 1) / 2 * 0.9 + eggTaper * 0.25);
+            return eggRx;
         }
 
         // Half the body width at height v, puffed up.
         double HalfWidthAt(double v)
+        {
+            if (v == halfAt) return half;
+            half = HalfWidth(v);
+            halfAt = v;
+            return half;
+        }
+
+        double HalfWidth(double v)
         {
             if (shape == Shape.Triangle)
             {
@@ -423,7 +463,8 @@ namespace IdleWalker.Rendering
             double size = SizeOf(look.Kind);
             double sx = scale * size * pose.StretchX, sy = scale * size * pose.StretchY;
             double px = 1 / Math.Min(sx, sy);
-            BirdPainter painter = new BirdPainter(pose, look, faceLeft, px);
+            BirdPainter painter = cached ?? (cached = new BirdPainter());
+            painter.Init(pose, look, faceLeft, px);
 
             int left = Math.Max(0, (int)Math.Floor(centreX - 9.5 * sx));
             int right = Math.Min(surface.Width, (int)Math.Ceiling(centreX + 9.5 * sx));
@@ -431,24 +472,10 @@ namespace IdleWalker.Rendering
             int bottom = Math.Min(surface.Height, (int)Math.Ceiling(soleY + 0.5));
             if (left >= right || top >= bottom) return;
 
-            int[] layer = surface.Layer;
-            int width = surface.Width;
-            double flip = faceLeft ? -1 : 1;
-            for (int y = top; y < bottom; y++)
-            {
-                double v = (soleY - (y + 0.5)) / sy;
-                int row = y * width;
-                for (int x = left; x < right; x++)
-                {
-                    double u = ((x + 0.5) - centreX) / sx * flip;
-                    int argb = painter.Shade(u, v);
-                    if (argb != 0) layer[row + x] = argb;
-                }
-            }
-            surface.Touch(left, top, right, bottom);
+            painter.Raster(surface, left, top, right, bottom, centreX, soleY, sx, sy);
         }
 
-        int Shade(double u, double v)
+        protected override int Shade(double u, double v)
         {
             Begin();
 
@@ -533,9 +560,9 @@ namespace IdleWalker.Rendering
 
         void Tail(double u, double v)
         {
-            double bx = -HalfWidthAt(7.2) * 0.85;
+            double bx = tailX;
             if (Math.Abs(u - bx + 1.2) > 3.6 || v < 4.0 || v > 11.2) return;
-            double sway = pose.Walking ? Math.Sin(pose.WalkPhase * 2 * Math.PI) * 0.25 : 0;
+            double sway = tailSway;
             double lift = tailLift;
             if (tailCount == 2)
             {
@@ -562,7 +589,7 @@ namespace IdleWalker.Rendering
             double cy0 = crestV;
             double cx0 = crestU;
             if (Math.Abs(u - cx0 + 0.4) > 2.6 || v < cy0 - 0.6 || v > cy0 + 3.0) return;
-            double sway = pose.Walking ? Math.Sin(pose.WalkPhase * 2 * Math.PI + 1) * 0.15 : 0;
+            double sway = crestSway;
             switch (kind)
             {
                 case BirdKind.Bomb:
@@ -674,7 +701,7 @@ namespace IdleWalker.Rendering
         {
             double vis = eyeVis[i];
             if (vis <= 0) return;
-            double k = eyeK[i], alpha = eyeAlpha[i];
+            double k = eyeK[i];
             bool near = i != firstEye;
 
             double fu = eyeU[i], fv = eyeV;
@@ -688,17 +715,11 @@ namespace IdleWalker.Rendering
             {
                 double nx, ny, nz;
                 Normal(dx, dy, eyeRx * 1.6, out nx, out ny, out nz);
-                Turn(ref nx, ref nz, alpha);
+                Turn(ref nx, ref nz, eyeCos[i], eyeSin[i]);
                 double r, g, b;
                 Lit(1, 1, 1, nx, ny, nz, 0.35, 22, out r, out g, out b);
 
-                double reach = eyeRx - IrisR - 0.05;
-                double ox = pose.GazeX * reach * 0.9 + face.PupilDx * 0.4;
-                double oy = pose.GazeY * (eyeRy - IrisR * 0.6) * 0.8 + face.PupilDy * 0.3;
-                ox -= (i == 1 ? 1 : -1) * face.CrossEye * 0.3;
-                double om = Math.Sqrt(ox * ox + oy * oy);
-                if (om > reach) { ox *= reach / om; oy *= reach / om; }
-                double ix = dx - ox, iy = dy - oy;
+                double ix = dx - gazeU[i], iy = dy - gazeV[i];
                 double covIris = Cov(Squeezed(ix, iy, k, IrisR));
                 if (covIris > 0)
                 {
@@ -762,14 +783,14 @@ namespace IdleWalker.Rendering
             double lift = face.BrowRaise * 0.4 - 0.1;
             double slant = 0.55 + face.BrowAngle * 0.35;
             if (Math.Abs(v - (browV + lift)) > 1.4) return;
-            Brow(u, v, eyeAlpha[0], -1, browV + lift, slant, eyeVis[0]);
-            Brow(u, v, eyeAlpha[1], 1, browV + lift + face.BrowAsym * 0.3, slant, eyeVis[1]);
+            Brow(u, v, 0, -1, browV + lift, slant, eyeVis[0]);
+            Brow(u, v, 1, 1, browV + lift + face.BrowAsym * 0.3, slant, eyeVis[1]);
         }
 
-        void Brow(double u, double v, double alpha, double outward, double cy, double slant, double show)
+        void Brow(double u, double v, int i, double outward, double cy, double slant, double show)
         {
             if (show <= 0) return;
-            double k = Math.Cos(alpha);
+            double k = eyeCos[i];
             if (k < 0.2) return;
             double ex = eyeU[0] + (eyeU[1] - eyeU[0]) * (outward > 0 ? 1 : 0);
             // Inner end low (angry), outer end high.
