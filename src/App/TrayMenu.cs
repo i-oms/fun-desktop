@@ -46,7 +46,7 @@ namespace IdleWalker.App
 
         readonly ToolStripMenuItem keepAwakeItem = new ToolStripMenuItem("Keep system awake");
         readonly ToolStripMenuItem startupItem = new ToolStripMenuItem("Start with Windows");
-        IntPtr iconHandle;
+        Icon logo;
         int minionMask;
         int birdMask;
         int idleSeconds;
@@ -325,8 +325,8 @@ namespace IdleWalker.App
             menu.Closed += delegate { closeAllowed = false; };
             KeepOpen(menu.Items);
 
-            iconHandle = RenderIcon();
-            icon.Icon = Icon.FromHandle(iconHandle);
+            logo = AppIcon.Load(SystemInformation.SmallIconSize);
+            icon.Icon = logo;
             icon.Text = "Idle Walker";
             icon.ContextMenuStrip = menu;
             // A left-click opens the brightness panel; the right-click menu is unchanged.
@@ -335,24 +335,6 @@ namespace IdleWalker.App
                 if (e.Button == MouseButtons.Left) Raise(BrightnessRequested);
             };
             icon.Visible = true;
-        }
-
-        // The first Minion, standing, makes the icon.
-        static IntPtr RenderIcon()
-        {
-            const int size = 40;
-            Surface surface = new Surface();
-            surface.Reset(size, size);
-            Personality first = Personality.Roster[0];
-            FrameRenderer.DrawPose(surface, Pose.Standing(), first.Look, Settings.DressColors[0], false, size / 2.0, size - 2, 1.85);
-
-            using (Bitmap bitmap = new Bitmap(size, size))
-            {
-                for (int y = 0; y < size; y++)
-                    for (int x = 0; x < size; x++)
-                        bitmap.SetPixel(x, y, Color.FromArgb(surface.Pixels[y * size + x]));
-                return bitmap.GetHicon();
-            }
         }
 
         // A feature's settings are greyed out while it is off: everything
@@ -686,10 +668,10 @@ namespace IdleWalker.App
             icon.Visible = false;
             icon.Dispose();
             menu.Dispose();
-            if (iconHandle != IntPtr.Zero)
+            if (logo != null)
             {
-                Native.DestroyIcon(iconHandle);
-                iconHandle = IntPtr.Zero;
+                logo.Dispose();
+                logo = null;
             }
         }
     }

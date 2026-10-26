@@ -40,6 +40,7 @@ namespace IdleWalker.App
             MaximizeBox = false;
             MinimizeBox = false;
             ShowInTaskbar = false;
+            Icon = AppIcon.Load(SystemInformation.SmallIconSize);
             StartPosition = FormStartPosition.CenterScreen;
             ClientSize = new Size(760, 470);
 

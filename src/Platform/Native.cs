@@ -279,8 +279,6 @@ namespace IdleWalker.Platform
         [DllImport("user32.dll")]
         public static extern IntPtr MonitorFromPoint(POINT point, uint flags);
 
-        [DllImport("user32.dll")]
-        public static extern bool DestroyIcon(IntPtr hicon);
 
         // Screenshot / screen-capture exclusion. WDA_EXCLUDEFROMCAPTURE needs
         // Windows 10 2004+; on older builds it fails and we fall back to

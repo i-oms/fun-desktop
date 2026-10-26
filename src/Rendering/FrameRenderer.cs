@@ -158,7 +158,7 @@ namespace IdleWalker.Rendering
         /// <summary>
         /// Draws a pose with its soles resting on soleY, centred on centreX,
         /// and commits it to the canvas, with the painter the look calls
-        /// for. Also used for the tray icon.
+        /// for. Also used for the About card.
         /// </summary>
         public static void DrawPose(Surface surface, Pose pose, Look look, int dress, bool faceLeft,
                                     double centreX, double soleY, double scale)
