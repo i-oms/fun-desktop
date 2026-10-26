@@ -62,12 +62,14 @@ fun/
     │   ├── FramePump.cs      vsync-paced tick thread (capped near 100 Hz, half rate on battery)
     │   ├── StartupRegistration.cs   the "Start with Windows" registry entry
     │   ├── UserSettings.cs   remembers every menu choice
+    │   ├── Brightness.cs     display brightness: DDC/CI for external monitors, WMI for the built-in panel
     │   └── BrainStore.cs     remembers what the walkers learned, on disk
     └── App/                  wiring
         ├── WalkerApp.cs      the per-frame loop, one window per walker, paint via the render thread
         ├── CursorWatcher.cs  idle detection
         ├── TrayMenu.cs       notification-area icon and menu
         ├── BrainDialog.cs    the brains dashboard
+        ├── BrightnessPanel.cs the brightness sliders (left-click the tray icon)
         └── AboutToast.cs     the About card
 ```
 
@@ -121,6 +123,7 @@ It runs this single command:
 | `/optimize+`                  | Release-style code generation.                                               |
 | `/r:System.Windows.Forms.dll` | `NativeWindow`, `Screen`, `NotifyIcon`, the message loop.                    |
 | `/r:System.Drawing.dll`       | `Bitmap`/`Icon` for the tray icon, `Rectangle`, `Point`.                     |
+| `/r:System.Management.dll`    | WMI, to set the brightness of a laptop's built-in panel.                     |
 | `/recurse:src\*.cs`           | Compiles every source file under `src\`, so new files need no build changes. |
 
 The result is one ~32 KB `IdleWalker.exe` next to `build.cmd`. Build takes a
@@ -164,6 +167,16 @@ Start `IdleWalker.exe`. Nothing visible happens except a small icon in the
 notification area (near the clock; it may be hidden under the `^` overflow
 arrow). Leave the mouse alone for two seconds (adjustable, see below) and a
 Minion appears.
+
+**Brightness panel** (left-click the tray icon): a small panel above the tray
+with an **All displays** slider that sets every display at once, then one
+slider per display (main and external) to set each separately; the shared
+slider follows their average. External monitors are driven over DDC/CI - the
+monitor's own backlight, as its buttons would set it - so DDC/CI must be on in
+the monitor's on-screen menu (most have it on by default); a laptop's built-in
+panel goes through the display driver (WMI). A display that answers neither is
+listed greyed. Click elsewhere, press Esc or click the icon again to close it.
+The same panel is under **Brightness...** in the menu.
 
 **Tray icon menu** (right-click):
 

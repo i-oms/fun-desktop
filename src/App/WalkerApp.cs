@@ -52,6 +52,8 @@ namespace IdleWalker.App
         bool summoned;              // a hot corner called the Minions out; cleared when the cursor moves
         AboutToast about;           // the card while it is showing
         BrainDialog brains;         // the brains card while it is open
+        BrightnessPanel brightness; // the brightness panel while it is open
+        DateTime brightnessClosed;  // when it last closed, so a click on the tray icon toggles it
 
         public WalkerApp()
         {
@@ -135,6 +137,7 @@ namespace IdleWalker.App
             };
             tray.AboutRequested += delegate { ShowAbout(); };
             tray.BrainsRequested += delegate { ShowBrains(); };
+            tray.BrightnessRequested += delegate { ToggleBrightness(); };
             StartupRegistration.RefreshPath();
 
             // Arm the stored keep-awake choice now, from the UI thread that
@@ -405,6 +408,27 @@ namespace IdleWalker.App
             about.Present();
         }
 
+        /// <summary>Opens the brightness panel, or closes it when it is up. A
+        /// click on the tray icon first takes focus from the panel, closing
+        /// it, so a click that lands just after that counts as "close".</summary>
+        void ToggleBrightness()
+        {
+            if (brightness != null)
+            {
+                brightness.Close();
+                return;
+            }
+            if ((DateTime.UtcNow - brightnessClosed).TotalMilliseconds < 300) return;
+            brightness = new BrightnessPanel(cursor.Position);
+            brightness.FormClosed += delegate
+            {
+                brightnessClosed = DateTime.UtcNow;
+                brightness.Dispose();
+                brightness = null;
+            };
+            brightness.Present();
+        }
+
         /// <summary>Shows the brains card, modally: rendering continues on its
         /// own thread while it is open, so the card and the cast share
         /// nothing dear. A second click while it is up brings it forward.</summary>
@@ -474,6 +498,7 @@ namespace IdleWalker.App
                 {
                 }
                 if (about != null) about.Dispose();
+                if (brightness != null) brightness.Dispose();
                 tray.Dispose();
                 ripple.Dispose();
                 foreach (View view in views) view.Window.Dispose();

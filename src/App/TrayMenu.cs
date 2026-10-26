@@ -12,6 +12,7 @@ namespace IdleWalker.App
     /// Walkers (the master switch plus the shared "Appear after" delay), then
     /// Minions / Mr. Bean / Angry Birds (each a group with its own Enabled
     /// switch and settings), then Hot corners (its own group), then the program.
+    /// A left-click on the icon opens the brightness panel instead.
     /// </summary>
     sealed class TrayMenu : IDisposable
     {
@@ -71,6 +72,7 @@ namespace IdleWalker.App
         public event EventHandler DelayChanged;
         public event EventHandler AboutRequested;
         public event EventHandler BrainsRequested;
+        public event EventHandler BrightnessRequested;
 
         /// <summary>True while the master switch is on: nobody comes out while it is off.</summary>
         public bool WalkersEnabled
@@ -309,6 +311,7 @@ namespace IdleWalker.App
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(hotCornersMenu);
             menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add("Brightness...", null, OnBrightnessClick);
             menu.Items.Add(keepAwakeItem);
             menu.Items.Add(startupItem);
             menu.Items.Add("Brains...", null, OnBrainsClick);
@@ -326,6 +329,11 @@ namespace IdleWalker.App
             icon.Icon = Icon.FromHandle(iconHandle);
             icon.Text = "Idle Walker";
             icon.ContextMenuStrip = menu;
+            // A left-click opens the brightness panel; the right-click menu is unchanged.
+            icon.MouseClick += delegate(object sender, MouseEventArgs e)
+            {
+                if (e.Button == MouseButtons.Left) Raise(BrightnessRequested);
+            };
             icon.Visible = true;
         }
 
@@ -605,6 +613,12 @@ namespace IdleWalker.App
         {
             AllowCloseAndHide();
             Raise(AboutRequested);
+        }
+
+        void OnBrightnessClick(object sender, EventArgs e)
+        {
+            AllowCloseAndHide();
+            Raise(BrightnessRequested);
         }
 
         void OnBrainsClick(object sender, EventArgs e)

@@ -198,7 +198,7 @@ namespace IdleWalker.App
             return (int)Math.Round(at100 * scale);
         }
 
-        static double DpiScale(Screen screen)
+        internal static double DpiScale(Screen screen)
         {
             Rectangle b = screen.Bounds;
             Native.POINT centre = new Native.POINT(b.Left + b.Width / 2, b.Top + b.Height / 2);

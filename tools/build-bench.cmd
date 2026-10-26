@@ -7,11 +7,11 @@ rem   Hash.exe prints a pixel hash per pose for all four figures; run it before 
 rem     after a painter change and diff the outputs (empty diff = pixel-identical).
 set CSC=%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe
 "%CSC%" /nologo /target:exe /optimize+ /main:IdleWalker.Tools.Bench ^
-  /out:"%~dp0Bench.exe" /r:System.Windows.Forms.dll /r:System.Drawing.dll ^
+  /out:"%~dp0Bench.exe" /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Management.dll ^
   /recurse:"%~dp0..\src\*.cs" "%~dp0Bench.cs"
 @if errorlevel 1 exit /b 1
 "%CSC%" /nologo /target:exe /optimize+ /main:IdleWalker.Tools.Hash ^
-  /out:"%~dp0Hash.exe" /r:System.Windows.Forms.dll /r:System.Drawing.dll ^
+  /out:"%~dp0Hash.exe" /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Management.dll ^
   /recurse:"%~dp0..\src\*.cs" "%~dp0Hash.cs"
 @if errorlevel 1 exit /b 1
 "%~dp0Bench.exe" %*
