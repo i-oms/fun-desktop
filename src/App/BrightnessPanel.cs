@@ -13,8 +13,9 @@ namespace IdleWalker.App
     /// small dark panel above the notification area with one slider that
     /// moves every display together, then one slider per display. Displays
     /// that cannot be dimmed (no DDC/CI, no driver support) are listed greyed
-    /// so it is clear why they do not move. Clicking anywhere else, or Esc,
-    /// closes it.
+    /// so it is clear why they do not move. While it is open every monitor
+    /// shows its number (<see cref="DisplayBadges"/>), and the one whose
+    /// slider is in use is lit. Clicking anywhere else, or Esc, closes it.
     /// </summary>
     sealed class BrightnessPanel : Form
     {
@@ -27,6 +28,7 @@ namespace IdleWalker.App
         readonly double scale;       // 1 at 100% display scaling
         readonly Font titleFont, textFont;
         readonly Label status;
+        readonly DisplayBadges badges = new DisplayBadges();
         List<BrightnessDisplay> displays;
         readonly List<TrackBar> sliders = new List<TrackBar>();     // one per display, null where unsupported
         readonly List<Label> values = new List<Label>();
@@ -70,6 +72,7 @@ namespace IdleWalker.App
         {
             Show();
             Activate();
+            badges.Show();
             ThreadPool.QueueUserWorkItem(delegate
             {
                 List<BrightnessDisplay> found;
@@ -122,6 +125,7 @@ namespace IdleWalker.App
                 allValue = AddRow("All displays", true, left, width, ref y);
                 allSlider = AddSlider(left, width, ref y, sum / count);
                 allSlider.ValueChanged += OnAllChanged;
+                LightsUp(allSlider, -1);
                 ShowValue(allValue, allSlider.Value);
                 y += Px(6);
             }
@@ -137,6 +141,7 @@ namespace IdleWalker.App
                     TrackBar slider = AddSlider(left, width, ref y, d.Percent);
                     slider.Tag = i;
                     slider.ValueChanged += OnDisplayChanged;
+                    LightsUp(slider, i);
                     sliders.Add(slider);
                     ShowValue(value, d.Percent);
                 }
@@ -189,6 +194,15 @@ namespace IdleWalker.App
             Controls.Add(slider);
             y += Px(34);
             return slider;
+        }
+
+        // Pointing at or focusing a slider lights its display's badge
+        // (index -1: the slider that moves them all).
+        void LightsUp(TrackBar slider, int index)
+        {
+            EventHandler light = delegate { badges.Highlight(index); };
+            slider.Enter += light;
+            slider.MouseEnter += light;
         }
 
         Label MakeLabel(string text, Font font, Color color, int left, int top, int width)
@@ -287,6 +301,7 @@ namespace IdleWalker.App
             {
                 Release(displays);
                 displays = null;
+                badges.Dispose();
                 titleFont.Dispose();
                 textFont.Dispose();
             }
