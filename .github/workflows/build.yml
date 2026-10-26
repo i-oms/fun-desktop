@@ -5,9 +5,17 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to build (e.g. v1.2.3). Created on the selected commit if it does not exist.'
+        required: true
 
 permissions:
   contents: write
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -15,45 +23,79 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Determine version
         id: version
         shell: pwsh
+        env:
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
-          $tag = "${{ github.ref_name }}"
+          $tag = $env:TAG
+          if ($tag -notmatch '^v(\d+)\.(\d+)\.(\d+)(\.(\d+))?(-[A-Za-z0-9.-]+)?(\+[A-Za-z0-9.-]+)?$') {
+            Write-Error "Tag '$tag' is not vMAJOR.MINOR.PATCH[.BUILD][-pre][+meta]"
+            exit 1
+          }
+          $parts = @($Matches[1], $Matches[2], $Matches[3], $(if ($Matches[5]) { $Matches[5] } else { '0' }))
+          foreach ($p in $parts) {
+            if ([int64]$p -gt 65534) { Write-Error "Version part '$p' exceeds 65534 (AssemblyVersion limit)"; exit 1 }
+          }
           $version = $tag -replace '^v', ''
-          $m = [regex]::Match($version, '^\d+(\.\d+)*')
-          $base = if ($m.Success) { $m.Value } else { $version }
-          $parts = $base.Split('.')
-          while ($parts.Count -lt 4) { $parts += '0' }
-          $assemblyVersion = ($parts[0..3]) -join '.'
+          $prerelease = if ($Matches[6]) { 'true' } else { 'false' }
+          "tag=$tag" >> $env:GITHUB_OUTPUT
           "version=$version" >> $env:GITHUB_OUTPUT
-          "assembly_version=$assemblyVersion" >> $env:GITHUB_OUTPUT
+          "assembly_version=$($parts -join '.')" >> $env:GITHUB_OUTPUT
+          "prerelease=$prerelease" >> $env:GITHUB_OUTPUT
+
+      - name: Ensure commit is on main
+        shell: pwsh
+        run: |
+          git merge-base --is-ancestor HEAD origin/main
+          if ($LASTEXITCODE -ne 0) { Write-Error "Commit $(git rev-parse HEAD) is not on origin/main - refusing to release"; exit 1 }
+
+      - name: Run self-test
+        shell: cmd
+        run: tools\build-test.cmd
 
       - name: Update application version
         shell: pwsh
         run: |
           $v = "${{ steps.version.outputs.assembly_version }}"
           $p = 'src/AssemblyInfo.cs'
-          $c = Get-Content $p
-          $c = $c -replace 'AssemblyVersion\(".*"\)', ('AssemblyVersion("' + $v + '")')
-          $c = $c -replace 'AssemblyFileVersion\(".*"\)', ('AssemblyFileVersion("' + $v + '")')
-          Set-Content $p $c
+          $c = Get-Content $p -Raw
+          $c = $c -replace 'AssemblyVersion\("[^"]*"\)', ('AssemblyVersion("' + $v + '")')
+          $c = $c -replace 'AssemblyFileVersion\("[^"]*"\)', ('AssemblyFileVersion("' + $v + '")')
+          Set-Content $p $c -NoNewline
+          if ((Select-String -Path $p -SimpleMatch "Version(""$v"")").Count -ne 2) { Write-Error "Failed to stamp version $v into $p"; exit 1 }
 
       - name: Build exe
         shell: cmd
         run: build.cmd nosign
 
-      - name: Rename exe with version
+      - name: Verify and package exe
         shell: pwsh
         run: |
           $v = "${{ steps.version.outputs.version }}"
-          Rename-Item IdleWalker.exe "IdleWalker-$v.exe"
+          $expected = "${{ steps.version.outputs.assembly_version }}"
+          $actual = (Get-Item IdleWalker.exe).VersionInfo.FileVersion
+          if ($actual -ne $expected) { Write-Error "exe FileVersion '$actual' != expected '$expected'"; exit 1 }
+          $name = "IdleWalker-$v.exe"
+          Rename-Item IdleWalker.exe $name
+          $hash = (Get-FileHash $name -Algorithm SHA256).Hash.ToLower()
+          "$hash  $name" | Set-Content "$name.sha256" -NoNewline
+          Write-Host "Built $name ($actual) sha256=$hash"
 
       - name: Upload release asset
         uses: softprops/action-gh-release@v2
         with:
-          files: IdleWalker-${{ steps.version.outputs.version }}.exe
+          tag_name: ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          prerelease: ${{ steps.version.outputs.prerelease }}
+          fail_on_unmatched_files: true
+          files: |
+            IdleWalker-${{ steps.version.outputs.version }}.exe
+            IdleWalker-${{ steps.version.outputs.version }}.exe.sha256
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

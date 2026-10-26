@@ -79,15 +79,16 @@ fun/
 
 1. [Requirements](#requirements)
 2. [Building](#building)
-3. [Running](#running)
-4. [What it does, step by step](#what-it-does-step-by-step)
-5. [Tuning](#tuning)
-6. [Editing the character](#editing-the-character)
-7. [How it works (technical)](#how-it-works-technical)
-8. [Multiple monitors](#multiple-monitors)
-9. [Performance](#performance)
-10. [Troubleshooting](#troubleshooting)
-11. [Known limitations](#known-limitations)
+3. [Releasing](#releasing)
+4. [Running](#running)
+5. [What it does, step by step](#what-it-does-step-by-step)
+6. [Tuning](#tuning)
+7. [Editing the character](#editing-the-character)
+8. [How it works (technical)](#how-it-works-technical)
+9. [Multiple monitors](#multiple-monitors)
+10. [Performance](#performance)
+11. [Troubleshooting](#troubleshooting)
+12. [Known limitations](#known-limitations)
 
 ---
 
@@ -160,6 +161,76 @@ is a convenience and is not checked in.)
   file"_ because the `.exe` is in use. Exit it from the tray icon first.
 - On a 32-bit Windows install use `Framework` instead of `Framework64` in
   `build.cmd`.
+
+## Releasing
+
+Releases are built by GitHub Actions (`.github/workflows/build.yml`) whenever
+a `v*` tag is pushed. The workflow stamps the tag's version into
+`src/AssemblyInfo.cs`, runs the self-test, builds the exe and attaches
+`IdleWalker-<version>.exe` plus a `.sha256` checksum to a GitHub release with
+generated release notes. You never edit the version by hand; the tag is the
+version.
+
+**One-time setup** (per clone) - turn on the repository's git hooks and the
+`git tag-version` shortcut:
+
+```
+tools\install-hooks.cmd
+```
+
+(or `sh tools/install-hooks.sh` from Git Bash). Check with
+`git config core.hooksPath`, which should print `.githooks`.
+
+**Cutting a release**
+
+```
+git checkout main
+git pull
+git push                    # everything you want released must be on origin/main
+tools\build-test.cmd        # optional: run the self-test locally first
+git tag-version v1.2.3      # validates, then creates the tag
+git push origin v1.2.3      # triggers the release build
+```
+
+Then watch the run under the repository's **Actions** tab; the release
+appears under **Releases** when it finishes.
+
+**Tag format**: `vMAJOR.MINOR.PATCH`, optionally with a fourth build number
+and a pre-release or build suffix.
+
+| Tag              | AssemblyVersion | Published as                  |
+|------------------|-----------------|-------------------------------|
+| `v1.2.3`         | `1.2.3.0`       | release                       |
+| `v1.2.3.4`       | `1.2.3.4`       | release                       |
+| `v1.2.3-beta.1`  | `1.2.3.0`       | pre-release                   |
+| `1.2.3`          | -               | rejected (the `v` is required) |
+
+Each number must be 65534 or less (a .NET assembly version limit).
+
+**What stops a bad release**
+
+| Check                                           | Where                       |
+|-------------------------------------------------|-----------------------------|
+| Branch is not behind its upstream               | pre-commit, pre-push, `git tag-version` |
+| `AssemblyVersion` is `MAJOR.MINOR.PATCH.BUILD`  | pre-commit                  |
+| Tag name follows the format above               | pre-push, `git tag-version`, workflow |
+| Working tree is clean, no unpushed commits      | `git tag-version`           |
+| Tag does not already exist                      | `git tag-version`           |
+| Tagged commit is on `origin/main`               | workflow                    |
+| Self-test passes                                | workflow                    |
+| Built exe carries the tagged version            | workflow                    |
+
+**Re-running or releasing without a tag push**: on the **Actions** tab pick
+*Build and Release*, choose *Run workflow*, and enter the tag (e.g.
+`v1.2.3`). If the tag does not exist yet it is created on the selected
+commit, which must still be on `main`.
+
+**Fixing a bad release**: delete the release on GitHub, then the tag
+(`git tag -d v1.2.3` and `git push origin :refs/tags/v1.2.3`), fix, and tag
+again - or simply release the next patch version, which is usually cleaner.
+
+Release builds are unsigned (`build.cmd nosign`); see [Building](#building)
+for signing locally.
 
 ## Running
 

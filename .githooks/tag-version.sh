@@ -4,7 +4,7 @@ set -e
 
 TAG="$1"
 if [ -z "$TAG" ]; then
-    echo "Usage: bash ~/.git-hooks/tag-version.sh <tag>  (e.g. v1.2.3)"
+    echo "Usage: git tag-version <tag>  (e.g. v1.2.3)"
     exit 1
 fi
 
@@ -27,6 +27,19 @@ if [ -n "$current_branch" ]; then
             echo "[ERROR] Branch '$current_branch' is behind '$upstream' by ${behind} commit(s). Pull before tagging."
             exit 1
         fi
+    fi
+fi
+
+if [ -n "$(git status --porcelain)" ]; then
+    echo "[ERROR] Working tree has uncommitted changes. Commit or stash before tagging."
+    exit 1
+fi
+
+if [ -n "$upstream" ]; then
+    ahead=$(git rev-list --count "$upstream"..HEAD 2>/dev/null)
+    if [ "${ahead:-0}" -gt 0 ]; then
+        echo "[ERROR] Branch '$current_branch' has ${ahead} unpushed commit(s). Push before tagging (CI only releases commits on main)."
+        exit 1
     fi
 fi
 
