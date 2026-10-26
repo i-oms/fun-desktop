@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/logo.png" width="160" alt="IdleWalker logo"></p>
+
 # IdleWalker
 
 A tiny Windows desktop companion. When your mouse cursor has not moved for a
@@ -26,6 +28,8 @@ fun/
 ├── IdleWalker.exe            the built program (ignored by git, see .gitignore)
 ├── README.md                 this file
 ├── .gitignore
+├── assets/                   logo.svg (the logo), logo-small.svg (its 16-32 px cut), and
+│                             IdleWalker.ico / logo.png rendered from them by tools/make-logo.py
 └── src/
     ├── Program.cs            entry point: single instance, DPI, message loop
     ├── Settings.cs           the tunable constants
