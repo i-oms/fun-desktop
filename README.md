@@ -1,3 +1,10 @@
+> [!IMPORTANT]
+> **This repository has been archived and moved.**
+>
+> `fun-desktop` was the old Windows-only C# version. It has been completely rebuilt from scratch in Rust with full cross-platform support for Windows, macOS and Linux.
+>
+> 👉 **Please use the new repository: [i-oms/IdleWalker](https://github.com/i-oms/IdleWalker)**
+
 <p align="center"><img src="assets/logo.png" width="160" alt="IdleWalker logo"></p>
 
 # IdleWalker
